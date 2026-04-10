@@ -1,4 +1,8 @@
+using System.Diagnostics;
 using System.IO.Compression;
+using System.Runtime.InteropServices;
+using System.Text;
+using System.Text.Json;
 using Amazon;
 using Amazon.Lambda;
 using Amazon.Lambda.Model;
@@ -909,5 +913,494 @@ public sealed class LambdaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
         });
 
         Assert.NotEqual("changed-after-publish", versionConfig.Description);
+    }
+
+    // -- Worker Pool Invocation Tests ------------------------------------------
+
+    private static bool IsPythonAvailable()
+    {
+        try
+        {
+            var fileName = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "python" : "python3";
+            using var process = Process.Start(new ProcessStartInfo
+            {
+                FileName = fileName,
+                Arguments = "--version",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+            });
+            process?.WaitForExit(5000);
+            return process?.ExitCode == 0;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static bool IsNodeAvailable()
+    {
+        try
+        {
+            using var process = Process.Start(new ProcessStartInfo
+            {
+                FileName = "node",
+                Arguments = "--version",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+            });
+            process?.WaitForExit(5000);
+            return process?.ExitCode == 0;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private async Task<CreateFunctionResponse> CreatePythonFunction(string name, string code)
+    {
+        using var zip = MakeZip("index.py", code);
+        return await _lambda.CreateFunctionAsync(new CreateFunctionRequest
+        {
+            FunctionName = name,
+            Runtime = Runtime.Python39,
+            Role = LambdaRole,
+            Handler = "index.handler",
+            Code = new FunctionCode { ZipFile = zip },
+        });
+    }
+
+    private async Task<CreateFunctionResponse> CreatePythonFunctionWithEnv(string name, string code, Dictionary<string, string> envVars)
+    {
+        using var zip = MakeZip("index.py", code);
+        return await _lambda.CreateFunctionAsync(new CreateFunctionRequest
+        {
+            FunctionName = name,
+            Runtime = Runtime.Python39,
+            Role = LambdaRole,
+            Handler = "index.handler",
+            Code = new FunctionCode { ZipFile = zip },
+            Environment = new Amazon.Lambda.Model.Environment { Variables = envVars },
+        });
+    }
+
+    private async Task<CreateFunctionResponse> CreateNodeFunction(string name, string code)
+    {
+        using var zip = MakeZip("index.js", code);
+        return await _lambda.CreateFunctionAsync(new CreateFunctionRequest
+        {
+            FunctionName = name,
+            Runtime = Runtime.Nodejs18X,
+            Role = LambdaRole,
+            Handler = "index.handler",
+            Code = new FunctionCode { ZipFile = zip },
+        });
+    }
+
+    [Fact]
+    public async Task InvokePythonRequestResponse()
+    {
+        if (!IsPythonAvailable())
+        {
+            return;
+        }
+
+        const string code = """
+            def handler(event, context):
+                return {"statusCode": 200, "body": "hello " + event.get("name", "world")}
+            """;
+
+        await CreatePythonFunction("invoke-py-func", code);
+
+        var result = await _lambda.InvokeAsync(new InvokeRequest
+        {
+            FunctionName = "invoke-py-func",
+            Payload = """{"name": "Lambda"}""",
+        });
+
+        Assert.Equal(200, result.StatusCode);
+        Assert.Null(result.FunctionError);
+
+        var payload = Encoding.UTF8.GetString(result.Payload.ToArray());
+        using var doc = JsonDocument.Parse(payload);
+        Assert.Equal(200, doc.RootElement.GetProperty("statusCode").GetInt32());
+        Assert.Equal("hello Lambda", doc.RootElement.GetProperty("body").GetString());
+    }
+
+    [Fact]
+    public async Task InvokePythonReturnsPayload()
+    {
+        if (!IsPythonAvailable())
+        {
+            return;
+        }
+
+        const string code = """
+            def handler(event, context):
+                items = event.get("items", [])
+                return {"count": len(items), "sum": sum(items)}
+            """;
+
+        await CreatePythonFunction("invoke-py-payload", code);
+
+        var result = await _lambda.InvokeAsync(new InvokeRequest
+        {
+            FunctionName = "invoke-py-payload",
+            Payload = """{"items": [1, 2, 3, 4, 5]}""",
+        });
+
+        Assert.Equal(200, result.StatusCode);
+        Assert.Null(result.FunctionError);
+
+        var payload = Encoding.UTF8.GetString(result.Payload.ToArray());
+        using var doc = JsonDocument.Parse(payload);
+        Assert.Equal(5, doc.RootElement.GetProperty("count").GetInt32());
+        Assert.Equal(15, doc.RootElement.GetProperty("sum").GetInt32());
+    }
+
+    [Fact]
+    public async Task InvokePythonWithEnvironmentVariables()
+    {
+        if (!IsPythonAvailable())
+        {
+            return;
+        }
+
+        const string code = """
+            import os
+            def handler(event, context):
+                return {"myvar": os.environ.get("MY_VAR", "not-set"), "region": os.environ.get("MY_REGION", "not-set")}
+            """;
+
+        var envVars = new Dictionary<string, string>
+        {
+            ["MY_VAR"] = "hello-env",
+            ["MY_REGION"] = "us-west-2",
+        };
+
+        await CreatePythonFunctionWithEnv("invoke-py-env", code, envVars);
+
+        var result = await _lambda.InvokeAsync(new InvokeRequest
+        {
+            FunctionName = "invoke-py-env",
+            Payload = "{}",
+        });
+
+        Assert.Equal(200, result.StatusCode);
+        Assert.Null(result.FunctionError);
+
+        var payload = Encoding.UTF8.GetString(result.Payload.ToArray());
+        using var doc = JsonDocument.Parse(payload);
+        Assert.Equal("hello-env", doc.RootElement.GetProperty("myvar").GetString());
+        Assert.Equal("us-west-2", doc.RootElement.GetProperty("region").GetString());
+    }
+
+    [Fact]
+    public async Task InvokePythonWarmStart()
+    {
+        if (!IsPythonAvailable())
+        {
+            return;
+        }
+
+        const string code = """
+            import time
+            _boot_time = time.time()
+            def handler(event, context):
+                return {"boot": _boot_time}
+            """;
+
+        await CreatePythonFunction("invoke-py-warm", code);
+
+        // First invocation (cold start)
+        var result1 = await _lambda.InvokeAsync(new InvokeRequest
+        {
+            FunctionName = "invoke-py-warm",
+            Payload = "{}",
+        });
+
+        Assert.Equal(200, result1.StatusCode);
+        var payload1 = Encoding.UTF8.GetString(result1.Payload.ToArray());
+        using var doc1 = JsonDocument.Parse(payload1);
+        var bootTime1 = doc1.RootElement.GetProperty("boot").GetDouble();
+
+        // Second invocation (warm start — same process)
+        var result2 = await _lambda.InvokeAsync(new InvokeRequest
+        {
+            FunctionName = "invoke-py-warm",
+            Payload = "{}",
+        });
+
+        Assert.Equal(200, result2.StatusCode);
+        var payload2 = Encoding.UTF8.GetString(result2.Payload.ToArray());
+        using var doc2 = JsonDocument.Parse(payload2);
+        var bootTime2 = doc2.RootElement.GetProperty("boot").GetDouble();
+
+        // Boot time should be the same (module loaded once, process reused)
+        Assert.Equal(bootTime1, bootTime2);
+    }
+
+    [Fact]
+    public async Task InvokeNodeJsRequestResponse()
+    {
+        if (!IsNodeAvailable())
+        {
+            return;
+        }
+
+        const string code = """
+            exports.handler = async (event, context) => {
+                return { statusCode: 200, body: JSON.stringify({ hello: event.name || 'world' }) };
+            };
+            """;
+
+        await CreateNodeFunction("invoke-node-func", code);
+
+        var result = await _lambda.InvokeAsync(new InvokeRequest
+        {
+            FunctionName = "invoke-node-func",
+            Payload = """{"name": "Node"}""",
+        });
+
+        Assert.Equal(200, result.StatusCode);
+        Assert.Null(result.FunctionError);
+
+        var payload = Encoding.UTF8.GetString(result.Payload.ToArray());
+        using var doc = JsonDocument.Parse(payload);
+        Assert.Equal(200, doc.RootElement.GetProperty("statusCode").GetInt32());
+
+        var bodyStr = doc.RootElement.GetProperty("body").GetString()!;
+        using var bodyDoc = JsonDocument.Parse(bodyStr);
+        Assert.Equal("Node", bodyDoc.RootElement.GetProperty("hello").GetString());
+    }
+
+    [Fact]
+    public async Task InvokePythonErrorReturnsUnhandled()
+    {
+        if (!IsPythonAvailable())
+        {
+            return;
+        }
+
+        const string code = """
+            def handler(event, context):
+                raise ValueError("something went wrong")
+            """;
+
+        await CreatePythonFunction("invoke-py-error", code);
+
+        var result = await _lambda.InvokeAsync(new InvokeRequest
+        {
+            FunctionName = "invoke-py-error",
+            Payload = "{}",
+        });
+
+        Assert.Equal(200, result.StatusCode);
+        Assert.Equal("Unhandled", result.FunctionError);
+
+        var payload = Encoding.UTF8.GetString(result.Payload.ToArray());
+        using var doc = JsonDocument.Parse(payload);
+        Assert.Contains("something went wrong", doc.RootElement.GetProperty("errorMessage").GetString());
+    }
+
+    [Fact]
+    public async Task UpdateCodeInvalidatesWorker()
+    {
+        if (!IsPythonAvailable())
+        {
+            return;
+        }
+
+        const string codeV1 = """
+            def handler(event, context):
+                return {"version": 1}
+            """;
+
+        await CreatePythonFunction("invoke-py-update", codeV1);
+
+        // First invocation returns version 1
+        var result1 = await _lambda.InvokeAsync(new InvokeRequest
+        {
+            FunctionName = "invoke-py-update",
+            Payload = "{}",
+        });
+
+        Assert.Equal(200, result1.StatusCode);
+        var payload1 = Encoding.UTF8.GetString(result1.Payload.ToArray());
+        using var doc1 = JsonDocument.Parse(payload1);
+        Assert.Equal(1, doc1.RootElement.GetProperty("version").GetInt32());
+
+        // Update the code
+        const string codeV2 = """
+            def handler(event, context):
+                return {"version": 2}
+            """;
+        using var newZip = MakeZip("index.py", codeV2);
+        await _lambda.UpdateFunctionCodeAsync(new UpdateFunctionCodeRequest
+        {
+            FunctionName = "invoke-py-update",
+            ZipFile = newZip,
+        });
+
+        // Second invocation should use new code
+        var result2 = await _lambda.InvokeAsync(new InvokeRequest
+        {
+            FunctionName = "invoke-py-update",
+            Payload = "{}",
+        });
+
+        Assert.Equal(200, result2.StatusCode);
+        var payload2 = Encoding.UTF8.GetString(result2.Payload.ToArray());
+        using var doc2 = JsonDocument.Parse(payload2);
+        Assert.Equal(2, doc2.RootElement.GetProperty("version").GetInt32());
+    }
+
+    [Fact]
+    public async Task InvokeEventTypeStillReturns202WithWorkerPool()
+    {
+        if (!IsPythonAvailable())
+        {
+            return;
+        }
+
+        const string code = """
+            def handler(event, context):
+                return {"statusCode": 200}
+            """;
+
+        await CreatePythonFunction("invoke-py-event", code);
+
+        var result = await _lambda.InvokeAsync(new InvokeRequest
+        {
+            FunctionName = "invoke-py-event",
+            InvocationType = InvocationType.Event,
+        });
+
+        Assert.Equal(202, result.StatusCode);
+    }
+
+    [Fact]
+    public async Task ResetTerminatesWorkersAndAllowsNewColdStart()
+    {
+        if (!IsPythonAvailable())
+        {
+            return;
+        }
+
+        const string code = """
+            import time
+            _boot_time = time.time()
+            def handler(event, context):
+                return {"boot": _boot_time}
+            """;
+
+        await CreatePythonFunction("invoke-py-reset", code);
+
+        // First invocation — cold start
+        var result1 = await _lambda.InvokeAsync(new InvokeRequest
+        {
+            FunctionName = "invoke-py-reset",
+            Payload = "{}",
+        });
+
+        Assert.Equal(200, result1.StatusCode);
+        var payload1 = Encoding.UTF8.GetString(result1.Payload.ToArray());
+        using var doc1 = JsonDocument.Parse(payload1);
+        var bootTime1 = doc1.RootElement.GetProperty("boot").GetDouble();
+
+        // Reset kills all workers
+        await _fixture.HttpClient.PostAsync("/_ministack/reset", null);
+
+        // Re-create the function (reset cleared the store)
+        await CreatePythonFunction("invoke-py-reset", code);
+
+        // Small delay to ensure different boot time
+        await Task.Delay(50);
+
+        // Second invocation — new cold start
+        var result2 = await _lambda.InvokeAsync(new InvokeRequest
+        {
+            FunctionName = "invoke-py-reset",
+            Payload = "{}",
+        });
+
+        Assert.Equal(200, result2.StatusCode);
+        var payload2 = Encoding.UTF8.GetString(result2.Payload.ToArray());
+        using var doc2 = JsonDocument.Parse(payload2);
+        var bootTime2 = doc2.RootElement.GetProperty("boot").GetDouble();
+
+        // Boot time should be different (new worker process)
+        Assert.NotEqual(bootTime1, bootTime2);
+    }
+
+    [Fact]
+    public async Task InvokePythonWithContext()
+    {
+        if (!IsPythonAvailable())
+        {
+            return;
+        }
+
+        const string code = """
+            def handler(event, context):
+                return {
+                    "function_name": context.function_name,
+                    "memory_limit": context.memory_limit_in_mb,
+                    "has_request_id": len(context.aws_request_id) > 0,
+                }
+            """;
+
+        await CreatePythonFunction("invoke-py-context", code);
+
+        var result = await _lambda.InvokeAsync(new InvokeRequest
+        {
+            FunctionName = "invoke-py-context",
+            Payload = "{}",
+        });
+
+        Assert.Equal(200, result.StatusCode);
+        Assert.Null(result.FunctionError);
+
+        var payload = Encoding.UTF8.GetString(result.Payload.ToArray());
+        using var doc = JsonDocument.Parse(payload);
+        Assert.Equal("invoke-py-context", doc.RootElement.GetProperty("function_name").GetString());
+        Assert.Equal(128, doc.RootElement.GetProperty("memory_limit").GetInt32());
+        Assert.True(doc.RootElement.GetProperty("has_request_id").GetBoolean());
+    }
+
+    [Fact]
+    public async Task InvokeNodeJsCallbackStyle()
+    {
+        if (!IsNodeAvailable())
+        {
+            return;
+        }
+
+        const string code = """
+            exports.handler = (event, context, callback) => {
+                callback(null, { statusCode: 200, body: 'callback-' + (event.name || 'world') });
+            };
+            """;
+
+        await CreateNodeFunction("invoke-node-cb", code);
+
+        var result = await _lambda.InvokeAsync(new InvokeRequest
+        {
+            FunctionName = "invoke-node-cb",
+            Payload = """{"name": "CB"}""",
+        });
+
+        Assert.Equal(200, result.StatusCode);
+        Assert.Null(result.FunctionError);
+
+        var payload = Encoding.UTF8.GetString(result.Payload.ToArray());
+        using var doc = JsonDocument.Parse(payload);
+        Assert.Equal(200, doc.RootElement.GetProperty("statusCode").GetInt32());
+        Assert.Equal("callback-CB", doc.RootElement.GetProperty("body").GetString());
     }
 }

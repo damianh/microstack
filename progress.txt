@@ -156,3 +156,165 @@
 
 **Build status:** 0 warnings, 0 errors (Debug + Release)
 **Test status:** All 265 tests pass (16 SSM + 48 SecretsManager + 63 S3 + 138 existing)
+
+### 2026-04-11 — KMS (Key Management Service) Handler Implementation
+
+**What was done:**
+- Created `src/MicroStack/Services/Kms/KmsServiceHandler.cs` — complete port of `ministack/services/kms.py` (869 lines Python → ~850 lines C#)
+- Registered KmsServiceHandler in `Program.cs`
+- Added `AWSSDK.KeyManagementService` NuGet reference to test project
+- Created `tests/MicroStack.Tests/KmsTests.cs` with 33 integration tests
+
+**All 27 actions ported:**
+- CreateKey (SYMMETRIC_DEFAULT, RSA_2048, RSA_4096 with SIGN_VERIFY or ENCRYPT_DECRYPT)
+- ListKeys, DescribeKey, GetPublicKey
+- Sign, Verify (RSASSA_PKCS1_V1_5_SHA_256/384/512, RSASSA_PSS_SHA_256/384/512)
+- Encrypt, Decrypt (symmetric XOR-based fake encryption + RSA OAEP-SHA256)
+- GenerateDataKey, GenerateDataKeyWithoutPlaintext (AES_128, AES_256)
+- CreateAlias, DeleteAlias, ListAliases, UpdateAlias
+- EnableKeyRotation, DisableKeyRotation, GetKeyRotationStatus (with RotationPeriodInDays)
+- GetKeyPolicy, PutKeyPolicy, ListKeyPolicies
+- EnableKey, DisableKey
+- ScheduleKeyDeletion, CancelKeyDeletion
+- TagResource, UntagResource, ListResourceTags (TagKey/TagValue format)
+
+**Key implementation details:**
+- Symmetric encryption: XOR with SHA-256 key derivation + EncryptionContext mixing
+- Ciphertext format: keyId(36 bytes UTF-8) + contextHash(32 bytes SHA-256) + xorEncryptedData
+- RSA keys: System.Security.Cryptography.RSA for real RSA sign/verify/encrypt/decrypt
+- Key resolution: by key ID, ARN, or alias name (including ARN-style alias references)
+- Tags use TagKey/TagValue (not Key/Value like other services)
+- State in AccountScopedDictionary: _keys (keyed by KeyId), _aliases (alias_name -> key_id)
+- Lock _lock = new() for all mutations
+
+**Test coverage (33 tests):**
+- CreateKey: CreateSymmetricKey, CreateRsa2048SignKey, CreateRsa4096EncryptKey
+- ListKeys, DescribeKey, DescribeKeyByArn, DescribeNonexistentKey
+- Sign/Verify: SignAndVerifyPkcs1, SignAndVerifyPss, VerifyWrongMessage, JwtSigningFlow
+- Encrypt/Decrypt: EncryptDecryptRoundtrip, EncryptDecryptWithExplicitKey
+- GenerateDataKey: GenerateDataKeyAes256, GenerateDataKeyAes128, GenerateDataKeyDecryptRoundtrip, GenerateDataKeyWithoutPlaintext
+- GetPublicKey
+- EncryptionContext: EncryptDecryptWithEncryptionContext, DecryptWrongContextFails
+- Aliases: CreateAndListAlias, UseAliasForEncrypt, DescribeKeyByAlias, UpdateAlias, DeleteAlias
+- Key Rotation: EnableDisableKeyRotation, KeyRotationWithPeriod
+- Key Policy: GetPutKeyPolicy, ListKeyPolicies
+- Tags: TagUntagList
+- Enable/Disable: EnableDisableKey
+- Deletion: ScheduleCancelDeletion
+- Full flow: TerraformFullFlow
+
+**Build status:** 0 warnings, 0 errors (Debug + Release)
+**Test status:** All 298 tests pass (33 KMS + 16 SSM + 48 SecretsManager + 63 S3 + 138 existing)
+
+**SDK v4 quirks discovered:**
+1. KMS SDK sends Message/Signature/Plaintext/CiphertextBlob as MemoryStream — handler returns base64 in JSON, SDK auto-decodes
+2. Sign/Verify use MemoryStream for Message and Signature parameters
+3. KeyState, KeySpec, KeyUsage etc. are strongly-typed enums in SDK v4
+4. GenerateDataKeyWithoutPlaintext response correctly has no Plaintext field (SDK doesn't expose it)
+
+### 2026-04-11 — Lambda Service Handler Implementation (Task 22)
+
+**What was done:**
+- Created `src/MicroStack/Services/Lambda/LambdaServiceHandler.cs` (~2600 lines C#) — complete port of Lambda REST API control plane
+- Registered LambdaServiceHandler in `Program.cs`
+- Added path-based routing rules in `AwsServiceRouter.cs` for all Lambda API version prefixes
+- Added `AWSSDK.Lambda` NuGet reference to test project
+- Created `tests/MicroStack.Tests/LambdaTests.cs` with 31 integration tests
+
+**All control plane operations ported:**
+- Function CRUD: CreateFunction, GetFunction, ListFunctions, DeleteFunction, UpdateFunctionCode, UpdateFunctionConfiguration
+- Versioning: PublishVersion, ListVersionsByFunction (with snapshot isolation)
+- Aliases: CreateAlias, GetAlias, UpdateAlias, DeleteAlias, ListAliases
+- Layers: PublishLayerVersion, GetLayerVersion, ListLayerVersions, ListLayers, DeleteLayerVersion
+- Tags: TagResource, UntagResource, ListTags
+- Permissions: AddPermission, RemovePermission, GetPolicy
+- Concurrency: PutFunctionConcurrency, GetFunctionConcurrency, DeleteFunctionConcurrency
+- Function URLs: CreateFunctionUrlConfig, GetFunctionUrlConfig, UpdateFunctionUrlConfig, DeleteFunctionUrlConfig
+- Event Source Mappings: CreateEventSourceMapping, GetEventSourceMapping, UpdateEventSourceMapping, DeleteEventSourceMapping, ListEventSourceMappings
+- Invoke stubs: Invoke (Event type → 202, DryRun → 204, RequestResponse → 200 with empty payload)
+- Event Invoke Config: PutFunctionEventInvokeConfig, GetFunctionEventInvokeConfig, DeleteFunctionEventInvokeConfig
+- Provisioned Concurrency: PutProvisionedConcurrencyConfig, GetProvisionedConcurrencyConfig, DeleteProvisionedConcurrencyConfig
+- Code Signing Config stub: GetFunctionCodeSigningConfig
+
+**Key implementation details:**
+- REST path routing (HTTP method + URL path), NOT X-Amz-Target — different from JSON-protocol services
+- Multiple API version prefixes: 2015-03-31, 2017-03-31, 2017-10-31, 2018-10-31, 2019-09-25, 2019-09-30, 2020-04-22, 2021-10-31
+- State in AccountScopedDictionary: _functions, _layers, _eventSourceMappings
+- Private sealed data classes: FunctionRecord, VersionedSnapshot, AliasRecord, PolicyDocument, LayerRecord, LayerVersionRecord, ProvisionedConcurrencyRecord, EventInvokeConfig
+- Layers in CreateFunction response must be serialized as objects with `Arn`/`CodeSize` fields (not plain strings) — SDK hangs on plain string deserialization
+- GetFunctionConcurrency returns `ReservedConcurrentExecutions: 0` when no concurrency is set (not null)
+- EventInvokeConfigNotFoundException returned as `ResourceNotFoundException` for SDK compatibility
+- Lock _lock = new() for all mutations
+
+**Test coverage (31 tests):**
+- CreateFunction, CreateFunctionDuplicateNameFails, GetFunction, GetFunctionNotFound
+- ListFunctions, ListFunctionsPagination, DeleteFunction
+- UpdateFunctionCode, UpdateFunctionConfiguration
+- Tags (add, get, remove)
+- AddPermission, AddRemovePermission
+- ListVersionsByFunction, PublishVersion, PublishVersionWithCreate, PublishVersionSnapshot
+- InvokeEventTypeReturns202, InvokeDryRunReturns204
+- AliasCrud (create, get, update, list, delete)
+- FunctionConcurrency (put, get, delete, verify 0 after delete)
+- LayerPublish, LayerGetVersion, LayerListVersions, LayerListLayers, LayerDeleteVersion
+- FunctionUrlConfigCrud (create, get, update, delete)
+- EsmCrud (create, get, update, list, delete)
+- EventInvokeConfigCrud (put, get, delete, get-after-delete 404)
+- ProvisionedConcurrencyCrud (put, get, delete, get-after-delete 404)
+- FunctionWithLayer (create function referencing a layer ARN)
+- UnknownPathReturns404
+
+**Build status:** 0 warnings, 0 errors
+**Test status:** All 31 Lambda tests pass
+
+**SDK v4 quirks discovered:**
+1. AWS SDK v4 uses DIFFERENT API version prefixes than expected — Tags: /2017-03-31/, Layers: /2018-10-31/, various concurrency/config endpoints use /2019-09-25/, /2019-09-30/, /2021-10-31/
+2. PutFunctionConcurrency: /2017-10-31/, GetFunctionConcurrency: /2019-09-30/, DeleteFunctionConcurrency: /2017-10-31/
+3. Layers response `Arn` field is required for SDK deserialization — plain strings cause client-side hang
+4. EventInvokeConfigNotFoundException must be returned as ResourceNotFoundException for SDK to properly deserialize
+5. ProvisionedConcurrencyConfigNotFoundException is a real SDK exception type that works correctly
+6. GetFunctionConcurrency must always return ReservedConcurrentExecutions (even as 0) — null causes assertion failure
+
+### 2026-04-11 — Lambda Worker Pool (Runtime) Implementation (Task 23)
+
+**What was done:**
+- Created `src/MicroStack/Services/Lambda/LambdaWorkerPool.cs` — singleton worker pool that manages Lambda worker processes per function name
+- Created `src/MicroStack/Services/Lambda/LambdaWorker.cs` — individual worker process management (spawn/invoke/kill) with embedded Python and Node.js worker scripts
+- Modified `src/MicroStack/Services/Lambda/LambdaServiceHandler.cs` — wired worker pool into HandleInvoke (for RequestResponse), HandleUpdateFunctionCode (invalidate on code update), HandleDeleteFunction (invalidate on delete), Reset (kill all workers)
+- Added 11 new integration tests to `tests/MicroStack.Tests/LambdaTests.cs`
+
+**Architecture:**
+- JSON-line protocol over stdin/stdout between C# process and Python/Node.js worker subprocesses
+- Worker scripts embedded as string constants in LambdaWorker.cs
+- Worker process reuse (warm starts) — module loaded once, multiple events processed
+- Stderr captured in background thread for function log output
+- Init handshake: C# sends init JSON, worker responds with `{"status": "ready"}`
+- Event invocation: C# writes event JSON to stdin, reads result JSON from stdout
+- Thread-safe: Lock on worker pool for get/create/invalidate, Lock on individual worker for invoke serialization
+- Temp directories created per function for code extraction, cleaned up on kill/dispose
+
+**Key implementation details:**
+- HandleInvoke releases the main `_lock` before calling worker.Invoke() to avoid blocking other control plane operations during long invocations
+- Python worker: redirects stdout to stderr (for logs), keeps original stdout for JSON protocol, uses `input()` for init and `for line in sys.stdin:` for event loop
+- Node.js worker: redirects console.log/error/warn to stderr, uses readline async iterator for event loop, supports both async/await and callback-style handlers
+- Runtime detection: `python`/`python3` based on OS platform, `node` for Node.js
+- Unsupported runtimes (dotnet, java, etc.) fall through to stub `{}` response
+- Code zip extracted to temp directory via System.IO.Compression.ZipArchive
+- Process timeout: 15s for init, 30s for invoke — worker killed on timeout
+- Error responses include `X-Amz-Function-Error: Unhandled` header + error payload
+
+**New tests (11 tests):**
+- InvokePythonRequestResponse — basic Python function invoke with payload verification
+- InvokePythonReturnsPayload — full roundtrip with list/sum computation
+- InvokePythonWithEnvironmentVariables — env vars passed to worker process
+- InvokePythonWarmStart — two invocations verify same boot_time (process reuse)
+- InvokeNodeJsRequestResponse — basic Node.js async handler invoke
+- InvokeNodeJsCallbackStyle — Node.js callback-style (3-arg) handler
+- InvokePythonErrorReturnsUnhandled — ValueError raises FunctionError: Unhandled
+- UpdateCodeInvalidatesWorker — code update kills old worker, new code runs
+- InvokeEventTypeStillReturns202WithWorkerPool — Event invocation type still 202
+- ResetTerminatesWorkersAndAllowsNewColdStart — reset kills workers, new invocation has different boot_time
+- InvokePythonWithContext — context object fields (function_name, memory_limit, request_id)
+
+**Build status:** 0 warnings, 0 errors (Debug + Release)
+**Test status:** All 42 Lambda tests pass (31 existing + 11 new)

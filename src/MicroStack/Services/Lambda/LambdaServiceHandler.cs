@@ -19,6 +19,7 @@ internal sealed class LambdaServiceHandler : IServiceHandler
     private readonly AccountScopedDictionary<string, FunctionRecord> _functions = new();
     private readonly AccountScopedDictionary<string, LayerRecord> _layers = new();
     private readonly AccountScopedDictionary<string, Dictionary<string, object?>> _esms = new();
+    private readonly LambdaWorkerPool _workerPool = new();
     private readonly Lock _lock = new();
 
     private static readonly string Region =
@@ -53,6 +54,7 @@ internal sealed class LambdaServiceHandler : IServiceHandler
 
     public void Reset()
     {
+        _workerPool.Reset();
         lock (_lock)
         {
             _functions.Clear();
@@ -883,6 +885,7 @@ internal sealed class LambdaServiceHandler : IServiceHandler
             else
             {
                 _functions.TryRemove(name, out _);
+                _workerPool.Invalidate(name);
             }
 
             return new ServiceResponse(204, EmptyHeaders, []);
@@ -921,6 +924,9 @@ internal sealed class LambdaServiceHandler : IServiceHandler
 
             record.Config["LastModified"] = FormatLastModified(DateTime.UtcNow);
             record.Config["RevisionId"] = HashHelpers.NewUuid();
+
+            // Invalidate any warm worker since code changed
+            _workerPool.Invalidate(name);
 
             var publish = GetBool(data, "Publish", false);
             if (publish)
@@ -1962,9 +1968,19 @@ internal sealed class LambdaServiceHandler : IServiceHandler
 
     private ServiceResponse HandleInvoke(string funcName, ServiceRequest request)
     {
+        // Resolve the function record and qualifier inside the lock,
+        // but run the actual worker invocation outside it to avoid holding
+        // the lock during a potentially long subprocess call.
+        string name;
+        string executedVersion;
+        Dictionary<string, object?> config;
+        byte[]? codeZip;
+        string runtime;
+
         lock (_lock)
         {
-            var (name, qualifier) = ParseFunctionReference(funcName);
+            string? qualifier;
+            (name, qualifier) = ParseFunctionReference(funcName);
             if (qualifier is null)
             {
                 qualifier = request.GetQueryParam("Qualifier");
@@ -1976,7 +1992,10 @@ internal sealed class LambdaServiceHandler : IServiceHandler
                     $"Function not found: arn:aws:lambda:{Region}:{AccountContext.GetAccountId()}:function:{name}", 404);
             }
 
-            var executedVersion = "$LATEST";
+            executedVersion = "$LATEST";
+            config = record.Config;
+            codeZip = record.CodeZip;
+
             if (qualifier is not null && qualifier != "$LATEST")
             {
                 if (record.Aliases.TryGetValue(qualifier, out var alias))
@@ -1992,6 +2011,13 @@ internal sealed class LambdaServiceHandler : IServiceHandler
                     return ErrorResponse("ResourceNotFoundException",
                         $"Function not found: arn:aws:lambda:{Region}:{AccountContext.GetAccountId()}:function:{name}:{qualifier}", 404);
                 }
+            }
+
+            // Resolve config + code for the specific version
+            if (executedVersion != "$LATEST" && record.Versions.TryGetValue(executedVersion, out var snapshot))
+            {
+                config = snapshot.Config;
+                codeZip = snapshot.CodeZip;
             }
 
             var invocationType = request.GetHeader("x-amz-invocation-type") ?? "RequestResponse";
@@ -2016,14 +2042,85 @@ internal sealed class LambdaServiceHandler : IServiceHandler
                 return new ServiceResponse(202, eventHeaders, []);
             }
 
-            // RequestResponse — stub returning empty JSON
+            runtime = config.TryGetValue("Runtime", out var rtVal) ? rtVal?.ToString() ?? "" : "";
+        }
+
+        // RequestResponse — attempt actual execution for supported runtimes
+        if (codeZip is not null && codeZip.Length > 0 && IsSupportedRuntime(runtime))
+        {
+            var requestId = HashHelpers.NewUuid();
+            WorkerResult workerResult;
+
+            try
+            {
+                var worker = _workerPool.GetOrCreate(name, config, codeZip);
+                workerResult = worker.Invoke(request.Body, requestId);
+            }
+            catch (InvalidOperationException ex)
+            {
+                // Worker failed to start (e.g. python/node not available)
+                var errorHeaders = new Dictionary<string, string>
+                {
+                    ["X-Amz-Executed-Version"] = executedVersion,
+                    ["X-Amz-Function-Error"] = "Unhandled",
+                    ["Content-Type"] = "application/json",
+                    ["X-Amz-Log-Result"] = "",
+                };
+                var errorPayload = JsonSerializer.SerializeToUtf8Bytes(new Dictionary<string, object?>
+                {
+                    ["errorMessage"] = ex.Message,
+                    ["errorType"] = "Runtime.InitError",
+                });
+                return new ServiceResponse(200, errorHeaders, errorPayload);
+            }
+
             var invokeHeaders = new Dictionary<string, string>
             {
                 ["X-Amz-Executed-Version"] = executedVersion,
                 ["Content-Type"] = "application/json",
             };
-            return new ServiceResponse(200, invokeHeaders, Encoding.UTF8.GetBytes("{}"));
+
+            if (!string.IsNullOrEmpty(workerResult.Log))
+            {
+                // Encode log as base64 for X-Amz-Log-Result header
+                var logBytes = Encoding.UTF8.GetBytes(workerResult.Log);
+                invokeHeaders["X-Amz-Log-Result"] = Convert.ToBase64String(logBytes);
+            }
+
+            if (workerResult.Success)
+            {
+                var resultBytes = workerResult.ResultJson is not null
+                    ? Encoding.UTF8.GetBytes(workerResult.ResultJson)
+                    : Encoding.UTF8.GetBytes("null");
+                return new ServiceResponse(200, invokeHeaders, resultBytes);
+            }
+
+            // Error response
+            invokeHeaders["X-Amz-Function-Error"] = "Unhandled";
+            var errorBody = JsonSerializer.SerializeToUtf8Bytes(new Dictionary<string, object?>
+            {
+                ["errorMessage"] = workerResult.Error,
+                ["errorType"] = "Error",
+                ["stackTrace"] = workerResult.Trace is not null
+                    ? workerResult.Trace.Split('\n', StringSplitOptions.RemoveEmptyEntries).ToList()
+                    : new List<string>(),
+            });
+            return new ServiceResponse(200, invokeHeaders, errorBody);
         }
+
+        // Unsupported runtime or no code — stub returning empty JSON
+        var stubHeaders = new Dictionary<string, string>
+        {
+            ["X-Amz-Executed-Version"] = executedVersion,
+            ["Content-Type"] = "application/json",
+        };
+        return new ServiceResponse(200, stubHeaders, Encoding.UTF8.GetBytes("{}"));
+    }
+
+    private static bool IsSupportedRuntime(string runtime)
+    {
+        return runtime.StartsWith("python", StringComparison.OrdinalIgnoreCase)
+            || runtime.StartsWith("nodejs", StringComparison.OrdinalIgnoreCase);
     }
 
     // -- Event Source Mappings -------------------------------------------------
