@@ -1,0 +1,913 @@
+using System.IO.Compression;
+using Amazon;
+using Amazon.Lambda;
+using Amazon.Lambda.Model;
+using Amazon.Runtime;
+
+namespace MicroStack.Tests;
+
+/// <summary>
+/// Integration tests for the Lambda service handler.
+/// Uses the AWS SDK for .NET pointed at the in-process MicroStack server.
+///
+/// Covers control plane operations: Function CRUD, Versioning, Aliases, Layers,
+/// Tags, Permissions, Concurrency, Function URLs, ESM CRUD, Invoke stubs,
+/// Event Invoke Config, Provisioned Concurrency.
+/// </summary>
+public sealed class LambdaTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
+{
+    private readonly MicroStackFixture _fixture;
+    private readonly AmazonLambdaClient _lambda;
+
+    private const string LambdaRole = "arn:aws:iam::000000000000:role/lambda-role";
+    private const string PythonCode = "def handler(event, context):\n    return {\"statusCode\": 200, \"body\": \"ok\"}\n";
+
+    public LambdaTests(MicroStackFixture fixture)
+    {
+        _fixture = fixture;
+        _lambda = CreateClient(fixture);
+    }
+
+    private static AmazonLambdaClient CreateClient(MicroStackFixture fixture)
+    {
+        var innerHandler = fixture.Factory.Server.CreateHandler();
+        var httpClient = new HttpClient(new CanonicalizeUriHandler(innerHandler))
+        {
+            BaseAddress = new Uri("http://localhost/"),
+        };
+
+        var config = new AmazonLambdaConfig
+        {
+            RegionEndpoint = RegionEndpoint.USEast1,
+            ServiceURL = "http://localhost/",
+            HttpClientFactory = new FixedHttpClientFactory(httpClient),
+        };
+
+        return new AmazonLambdaClient(
+            new BasicAWSCredentials("test", "test"), config);
+    }
+
+    public async Task InitializeAsync()
+    {
+        await _fixture.HttpClient.PostAsync("/_ministack/reset", null);
+    }
+
+    public Task DisposeAsync()
+    {
+        _lambda.Dispose();
+        return Task.CompletedTask;
+    }
+
+    private static MemoryStream MakeZip(string filename, string content)
+    {
+        var ms = new MemoryStream();
+        using (var archive = new ZipArchive(ms, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            var entry = archive.CreateEntry(filename);
+            using var writer = new StreamWriter(entry.Open());
+            writer.Write(content);
+        }
+
+        ms.Position = 0;
+        return ms;
+    }
+
+    private async Task<CreateFunctionResponse> CreateTestFunction(string name)
+    {
+        using var zip = MakeZip("index.py", PythonCode);
+        return await _lambda.CreateFunctionAsync(new CreateFunctionRequest
+        {
+            FunctionName = name,
+            Runtime = Runtime.Python39,
+            Role = LambdaRole,
+            Handler = "index.handler",
+            Code = new FunctionCode { ZipFile = zip },
+        });
+    }
+
+    // -- CreateFunction --------------------------------------------------------
+
+    [Fact]
+    public async Task CreateFunction()
+    {
+        using var zip = MakeZip("index.py", PythonCode);
+        var result = await _lambda.CreateFunctionAsync(new CreateFunctionRequest
+        {
+            FunctionName = "test-func",
+            Runtime = Runtime.Python39,
+            Role = LambdaRole,
+            Handler = "index.handler",
+            Code = new FunctionCode { ZipFile = zip },
+        });
+
+        Assert.Equal("test-func", result.FunctionName);
+        Assert.Contains("test-func", result.FunctionArn);
+        Assert.Equal("python3.9", result.Runtime?.Value);
+        Assert.Equal("index.handler", result.Handler);
+        Assert.True(result.CodeSize > 0);
+        Assert.NotEmpty(result.CodeSha256);
+        Assert.Equal("$LATEST", result.Version);
+        Assert.Equal(State.Active, result.State);
+    }
+
+    [Fact]
+    public async Task CreateFunctionDuplicateNameFails()
+    {
+        await CreateTestFunction("dup-func");
+
+        var ex = await Assert.ThrowsAsync<ResourceConflictException>(() =>
+            CreateTestFunction("dup-func"));
+
+        Assert.Contains("already exist", ex.Message);
+    }
+
+    // -- GetFunction -----------------------------------------------------------
+
+    [Fact]
+    public async Task GetFunction()
+    {
+        await CreateTestFunction("get-func");
+
+        var result = await _lambda.GetFunctionAsync(new GetFunctionRequest
+        {
+            FunctionName = "get-func",
+        });
+
+        Assert.Equal("get-func", result.Configuration.FunctionName);
+        Assert.NotNull(result.Code);
+        Assert.NotNull(result.Tags);
+    }
+
+    [Fact]
+    public async Task GetFunctionNotFound()
+    {
+        await Assert.ThrowsAsync<ResourceNotFoundException>(() =>
+            _lambda.GetFunctionAsync(new GetFunctionRequest
+            {
+                FunctionName = "nonexistent-func",
+            }));
+    }
+
+    // -- ListFunctions ---------------------------------------------------------
+
+    [Fact]
+    public async Task ListFunctions()
+    {
+        await CreateTestFunction("list-func-a");
+        await CreateTestFunction("list-func-b");
+
+        var result = await _lambda.ListFunctionsAsync(new ListFunctionsRequest());
+
+        Assert.True(result.Functions.Count >= 2);
+        Assert.Contains(result.Functions, f => f.FunctionName == "list-func-a");
+        Assert.Contains(result.Functions, f => f.FunctionName == "list-func-b");
+    }
+
+    // -- DeleteFunction --------------------------------------------------------
+
+    [Fact]
+    public async Task DeleteFunction()
+    {
+        await CreateTestFunction("del-func");
+
+        await _lambda.DeleteFunctionAsync(new DeleteFunctionRequest
+        {
+            FunctionName = "del-func",
+        });
+
+        await Assert.ThrowsAsync<ResourceNotFoundException>(() =>
+            _lambda.GetFunctionAsync(new GetFunctionRequest
+            {
+                FunctionName = "del-func",
+            }));
+    }
+
+    // -- UpdateFunctionCode ----------------------------------------------------
+
+    [Fact]
+    public async Task UpdateFunctionCode()
+    {
+        var create = await CreateTestFunction("update-code-func");
+        var originalCodeSize = create.CodeSize;
+        var originalSha = create.CodeSha256;
+
+        using var newZip = MakeZip("index.py", PythonCode + "\n# more code\n");
+        var result = await _lambda.UpdateFunctionCodeAsync(new UpdateFunctionCodeRequest
+        {
+            FunctionName = "update-code-func",
+            ZipFile = newZip,
+        });
+
+        Assert.NotEqual(originalCodeSize, result.CodeSize);
+        Assert.NotEqual(originalSha, result.CodeSha256);
+        Assert.Equal("update-code-func", result.FunctionName);
+    }
+
+    // -- UpdateFunctionConfiguration -------------------------------------------
+
+    [Fact]
+    public async Task UpdateFunctionConfiguration()
+    {
+        await CreateTestFunction("update-config-func");
+
+        var result = await _lambda.UpdateFunctionConfigurationAsync(new UpdateFunctionConfigurationRequest
+        {
+            FunctionName = "update-config-func",
+            Handler = "new_handler.handler",
+            Description = "Updated description",
+            Timeout = 30,
+            MemorySize = 256,
+            Environment = new Amazon.Lambda.Model.Environment
+            {
+                Variables = new Dictionary<string, string> { ["KEY"] = "value" },
+            },
+        });
+
+        Assert.Equal("new_handler.handler", result.Handler);
+        Assert.Equal("Updated description", result.Description);
+        Assert.Equal(30, result.Timeout);
+        Assert.Equal(256, result.MemorySize);
+    }
+
+    // -- Tags ------------------------------------------------------------------
+
+    [Fact]
+    public async Task Tags()
+    {
+        var create = await CreateTestFunction("tag-func");
+
+        await _lambda.TagResourceAsync(new TagResourceRequest
+        {
+            Resource = create.FunctionArn,
+            Tags = new Dictionary<string, string>
+            {
+                ["env"] = "prod",
+                ["team"] = "platform",
+            },
+        });
+
+        var tags = await _lambda.ListTagsAsync(new ListTagsRequest
+        {
+            Resource = create.FunctionArn,
+        });
+
+        Assert.True(tags.Tags.Count >= 2);
+        Assert.Equal("prod", tags.Tags["env"]);
+        Assert.Equal("platform", tags.Tags["team"]);
+
+        await _lambda.UntagResourceAsync(new UntagResourceRequest
+        {
+            Resource = create.FunctionArn,
+            TagKeys = ["team"],
+        });
+
+        var tags2 = await _lambda.ListTagsAsync(new ListTagsRequest
+        {
+            Resource = create.FunctionArn,
+        });
+
+        Assert.DoesNotContain("team", tags2.Tags.Keys);
+        Assert.Equal("prod", tags2.Tags["env"]);
+    }
+
+    // -- AddPermission / GetPolicy / RemovePermission --------------------------
+
+    [Fact]
+    public async Task AddPermission()
+    {
+        await CreateTestFunction("perm-func");
+
+        var result = await _lambda.AddPermissionAsync(new AddPermissionRequest
+        {
+            FunctionName = "perm-func",
+            StatementId = "stmt1",
+            Action = "lambda:InvokeFunction",
+            Principal = "s3.amazonaws.com",
+        });
+
+        Assert.NotNull(result.Statement);
+        Assert.Contains("stmt1", result.Statement);
+    }
+
+    [Fact]
+    public async Task AddRemovePermission()
+    {
+        await CreateTestFunction("perm-crud-func");
+
+        await _lambda.AddPermissionAsync(new AddPermissionRequest
+        {
+            FunctionName = "perm-crud-func",
+            StatementId = "stmt-crud",
+            Action = "lambda:InvokeFunction",
+            Principal = "s3.amazonaws.com",
+        });
+
+        var policy = await _lambda.GetPolicyAsync(new GetPolicyRequest
+        {
+            FunctionName = "perm-crud-func",
+        });
+
+        Assert.NotNull(policy.Policy);
+        Assert.Contains("stmt-crud", policy.Policy);
+
+        await _lambda.RemovePermissionAsync(new RemovePermissionRequest
+        {
+            FunctionName = "perm-crud-func",
+            StatementId = "stmt-crud",
+        });
+
+        // After removal, there should be no statements → ResourceNotFound
+        await Assert.ThrowsAsync<ResourceNotFoundException>(() =>
+            _lambda.GetPolicyAsync(new GetPolicyRequest
+            {
+                FunctionName = "perm-crud-func",
+            }));
+    }
+
+    // -- ListVersionsByFunction ------------------------------------------------
+
+    [Fact]
+    public async Task ListVersionsByFunction()
+    {
+        await CreateTestFunction("versions-func");
+
+        var result = await _lambda.ListVersionsByFunctionAsync(new ListVersionsByFunctionRequest
+        {
+            FunctionName = "versions-func",
+        });
+
+        Assert.Single(result.Versions); // Only $LATEST
+        Assert.Equal("$LATEST", result.Versions[0].Version);
+    }
+
+    // -- PublishVersion --------------------------------------------------------
+
+    [Fact]
+    public async Task PublishVersion()
+    {
+        await CreateTestFunction("publish-func");
+
+        var published = await _lambda.PublishVersionAsync(new PublishVersionRequest
+        {
+            FunctionName = "publish-func",
+        });
+
+        Assert.Equal("1", published.Version);
+        Assert.Contains("publish-func", published.FunctionArn);
+
+        var versions = await _lambda.ListVersionsByFunctionAsync(new ListVersionsByFunctionRequest
+        {
+            FunctionName = "publish-func",
+        });
+
+        Assert.Equal(2, versions.Versions.Count); // $LATEST + version 1
+    }
+
+    [Fact]
+    public async Task PublishVersionWithCreate()
+    {
+        using var zip = MakeZip("index.py", PythonCode);
+        var result = await _lambda.CreateFunctionAsync(new CreateFunctionRequest
+        {
+            FunctionName = "publish-at-create",
+            Runtime = Runtime.Python39,
+            Role = LambdaRole,
+            Handler = "index.handler",
+            Code = new FunctionCode { ZipFile = zip },
+            Publish = true,
+        });
+
+        Assert.Equal("1", result.Version);
+    }
+
+    // -- Invoke stubs ----------------------------------------------------------
+
+    [Fact]
+    public async Task InvokeEventTypeReturns202()
+    {
+        await CreateTestFunction("invoke-event-func");
+
+        var result = await _lambda.InvokeAsync(new InvokeRequest
+        {
+            FunctionName = "invoke-event-func",
+            InvocationType = InvocationType.Event,
+        });
+
+        Assert.Equal(202, result.StatusCode);
+    }
+
+    [Fact]
+    public async Task InvokeDryRunReturns204()
+    {
+        await CreateTestFunction("invoke-dry-func");
+
+        var result = await _lambda.InvokeAsync(new InvokeRequest
+        {
+            FunctionName = "invoke-dry-func",
+            InvocationType = InvocationType.DryRun,
+        });
+
+        Assert.Equal(204, result.StatusCode);
+    }
+
+    // -- Alias CRUD ------------------------------------------------------------
+
+    [Fact]
+    public async Task AliasCrud()
+    {
+        await CreateTestFunction("alias-func");
+
+        // Publish a version first
+        var published = await _lambda.PublishVersionAsync(new PublishVersionRequest
+        {
+            FunctionName = "alias-func",
+        });
+
+        // Create alias
+        var created = await _lambda.CreateAliasAsync(new CreateAliasRequest
+        {
+            FunctionName = "alias-func",
+            Name = "prod",
+            FunctionVersion = published.Version,
+            Description = "Production alias",
+        });
+
+        Assert.Equal("prod", created.Name);
+        Assert.Equal(published.Version, created.FunctionVersion);
+
+        // Get alias
+        var alias = await _lambda.GetAliasAsync(new GetAliasRequest
+        {
+            FunctionName = "alias-func",
+            Name = "prod",
+        });
+
+        Assert.Equal("prod", alias.Name);
+        Assert.Equal(published.Version, alias.FunctionVersion);
+
+        // Update alias
+        var updated = await _lambda.UpdateAliasAsync(new UpdateAliasRequest
+        {
+            FunctionName = "alias-func",
+            Name = "prod",
+            Description = "Updated prod alias",
+        });
+
+        Assert.Equal("Updated prod alias", updated.Description);
+
+        // List aliases
+        var list = await _lambda.ListAliasesAsync(new ListAliasesRequest
+        {
+            FunctionName = "alias-func",
+        });
+
+        Assert.Single(list.Aliases);
+        Assert.Equal("prod", list.Aliases[0].Name);
+
+        // Delete alias
+        await _lambda.DeleteAliasAsync(new DeleteAliasRequest
+        {
+            FunctionName = "alias-func",
+            Name = "prod",
+        });
+
+        var listAfter = await _lambda.ListAliasesAsync(new ListAliasesRequest
+        {
+            FunctionName = "alias-func",
+        });
+
+        Assert.Empty(listAfter.Aliases);
+    }
+
+    // -- Function Concurrency --------------------------------------------------
+
+    [Fact]
+    public async Task FunctionConcurrency()
+    {
+        await CreateTestFunction("concurrency-func");
+
+        // Put concurrency
+        var put = await _lambda.PutFunctionConcurrencyAsync(new PutFunctionConcurrencyRequest
+        {
+            FunctionName = "concurrency-func",
+            ReservedConcurrentExecutions = 10,
+        });
+
+        Assert.Equal(10, put.ReservedConcurrentExecutions);
+
+        // Get concurrency
+        var get = await _lambda.GetFunctionConcurrencyAsync(new GetFunctionConcurrencyRequest
+        {
+            FunctionName = "concurrency-func",
+        });
+
+        Assert.Equal(10, get.ReservedConcurrentExecutions);
+
+        // Delete concurrency
+        await _lambda.DeleteFunctionConcurrencyAsync(new DeleteFunctionConcurrencyRequest
+        {
+            FunctionName = "concurrency-func",
+        });
+
+        var getAfter = await _lambda.GetFunctionConcurrencyAsync(new GetFunctionConcurrencyRequest
+        {
+            FunctionName = "concurrency-func",
+        });
+
+        Assert.Equal(0, getAfter.ReservedConcurrentExecutions);
+    }
+
+    // -- ListFunctions Pagination ----------------------------------------------
+
+    [Fact]
+    public async Task ListFunctionsPagination()
+    {
+        for (var i = 0; i < 5; i++)
+        {
+            await CreateTestFunction($"page-func-{i:D2}");
+        }
+
+        var page1 = await _lambda.ListFunctionsAsync(new ListFunctionsRequest
+        {
+            MaxItems = 2,
+        });
+
+        Assert.Equal(2, page1.Functions.Count);
+        Assert.NotNull(page1.NextMarker);
+
+        var page2 = await _lambda.ListFunctionsAsync(new ListFunctionsRequest
+        {
+            MaxItems = 2,
+            Marker = page1.NextMarker,
+        });
+
+        Assert.Equal(2, page2.Functions.Count);
+
+        // Pages should have different functions
+        Assert.DoesNotContain(page1.Functions[0].FunctionName, page2.Functions.ConvertAll(f => f.FunctionName));
+    }
+
+    // -- Layer tests -----------------------------------------------------------
+
+    [Fact]
+    public async Task LayerPublish()
+    {
+        using var zip = MakeZip("python/mylib.py", "# layer code");
+        var result = await _lambda.PublishLayerVersionAsync(new PublishLayerVersionRequest
+        {
+            LayerName = "test-layer",
+            Description = "A test layer",
+            Content = new LayerVersionContentInput { ZipFile = zip },
+            CompatibleRuntimes = [Runtime.Python39],
+        });
+
+        Assert.Equal(1, result.Version);
+        Assert.Contains("test-layer", result.LayerArn);
+        Assert.Contains("test-layer", result.LayerVersionArn);
+        Assert.Equal("A test layer", result.Description);
+    }
+
+    [Fact]
+    public async Task LayerGetVersion()
+    {
+        using var zip = MakeZip("python/mylib.py", "# layer code");
+        var publish = await _lambda.PublishLayerVersionAsync(new PublishLayerVersionRequest
+        {
+            LayerName = "get-layer",
+            Content = new LayerVersionContentInput { ZipFile = zip },
+        });
+
+        var result = await _lambda.GetLayerVersionAsync(new GetLayerVersionRequest
+        {
+            LayerName = "get-layer",
+            VersionNumber = publish.Version,
+        });
+
+        Assert.Equal(publish.Version, result.Version);
+        Assert.NotNull(result.Content);
+        Assert.True(result.Content.CodeSize > 0);
+    }
+
+    [Fact]
+    public async Task LayerListVersions()
+    {
+        using var zip1 = MakeZip("python/mylib.py", "# v1");
+        await _lambda.PublishLayerVersionAsync(new PublishLayerVersionRequest
+        {
+            LayerName = "list-ver-layer",
+            Content = new LayerVersionContentInput { ZipFile = zip1 },
+        });
+
+        using var zip2 = MakeZip("python/mylib.py", "# v2");
+        await _lambda.PublishLayerVersionAsync(new PublishLayerVersionRequest
+        {
+            LayerName = "list-ver-layer",
+            Content = new LayerVersionContentInput { ZipFile = zip2 },
+        });
+
+        var result = await _lambda.ListLayerVersionsAsync(new ListLayerVersionsRequest
+        {
+            LayerName = "list-ver-layer",
+        });
+
+        Assert.Equal(2, result.LayerVersions.Count);
+    }
+
+    [Fact]
+    public async Task LayerListLayers()
+    {
+        using var zip = MakeZip("python/mylib.py", "# code");
+        await _lambda.PublishLayerVersionAsync(new PublishLayerVersionRequest
+        {
+            LayerName = "listed-layer",
+            Content = new LayerVersionContentInput { ZipFile = zip },
+        });
+
+        var result = await _lambda.ListLayersAsync(new ListLayersRequest());
+
+        Assert.True(result.Layers.Count >= 1);
+        Assert.Contains(result.Layers, l => l.LayerName == "listed-layer");
+    }
+
+    [Fact]
+    public async Task LayerDeleteVersion()
+    {
+        using var zip = MakeZip("python/mylib.py", "# code");
+        var publish = await _lambda.PublishLayerVersionAsync(new PublishLayerVersionRequest
+        {
+            LayerName = "del-layer",
+            Content = new LayerVersionContentInput { ZipFile = zip },
+        });
+
+        await _lambda.DeleteLayerVersionAsync(new DeleteLayerVersionRequest
+        {
+            LayerName = "del-layer",
+            VersionNumber = publish.Version,
+        });
+
+        var versions = await _lambda.ListLayerVersionsAsync(new ListLayerVersionsRequest
+        {
+            LayerName = "del-layer",
+        });
+
+        Assert.Empty(versions.LayerVersions);
+    }
+
+    // -- Function URL Config ---------------------------------------------------
+
+    [Fact]
+    public async Task FunctionUrlConfigCrud()
+    {
+        await CreateTestFunction("url-func");
+
+        // Create
+        var created = await _lambda.CreateFunctionUrlConfigAsync(new CreateFunctionUrlConfigRequest
+        {
+            FunctionName = "url-func",
+            AuthType = FunctionUrlAuthType.NONE,
+        });
+
+        Assert.NotEmpty(created.FunctionUrl);
+        Assert.Equal(FunctionUrlAuthType.NONE, created.AuthType);
+        Assert.Contains("url-func", created.FunctionArn);
+
+        // Get
+        var got = await _lambda.GetFunctionUrlConfigAsync(new GetFunctionUrlConfigRequest
+        {
+            FunctionName = "url-func",
+        });
+
+        Assert.Equal(created.FunctionUrl, got.FunctionUrl);
+
+        // Update
+        var updated = await _lambda.UpdateFunctionUrlConfigAsync(new UpdateFunctionUrlConfigRequest
+        {
+            FunctionName = "url-func",
+            AuthType = FunctionUrlAuthType.AWS_IAM,
+        });
+
+        Assert.Equal(FunctionUrlAuthType.AWS_IAM, updated.AuthType);
+
+        // Delete
+        await _lambda.DeleteFunctionUrlConfigAsync(new DeleteFunctionUrlConfigRequest
+        {
+            FunctionName = "url-func",
+        });
+
+        await Assert.ThrowsAsync<ResourceNotFoundException>(() =>
+            _lambda.GetFunctionUrlConfigAsync(new GetFunctionUrlConfigRequest
+            {
+                FunctionName = "url-func",
+            }));
+    }
+
+    // -- ESM CRUD --------------------------------------------------------------
+
+    [Fact]
+    public async Task EsmCrud()
+    {
+        await CreateTestFunction("esm-func");
+
+        // Create
+        var created = await _lambda.CreateEventSourceMappingAsync(new CreateEventSourceMappingRequest
+        {
+            FunctionName = "esm-func",
+            EventSourceArn = "arn:aws:sqs:us-east-1:000000000000:my-queue",
+            BatchSize = 5,
+        });
+
+        Assert.NotEmpty(created.UUID);
+        Assert.Equal(5, created.BatchSize);
+
+        // Get
+        var got = await _lambda.GetEventSourceMappingAsync(new GetEventSourceMappingRequest
+        {
+            UUID = created.UUID,
+        });
+
+        Assert.Equal(created.UUID, got.UUID);
+
+        // List
+        var list = await _lambda.ListEventSourceMappingsAsync(new ListEventSourceMappingsRequest
+        {
+            FunctionName = "esm-func",
+        });
+
+        Assert.True(list.EventSourceMappings.Count >= 1);
+
+        // Update
+        var updated = await _lambda.UpdateEventSourceMappingAsync(new UpdateEventSourceMappingRequest
+        {
+            UUID = created.UUID,
+            BatchSize = 20,
+        });
+
+        Assert.Equal(20, updated.BatchSize);
+
+        // Delete
+        var deleted = await _lambda.DeleteEventSourceMappingAsync(new DeleteEventSourceMappingRequest
+        {
+            UUID = created.UUID,
+        });
+
+        Assert.NotNull(deleted.UUID);
+    }
+
+    // -- Unknown Path ----------------------------------------------------------
+
+    [Fact]
+    public async Task UnknownPathReturns404()
+    {
+        // Send a request to an unknown Lambda path that goes through the Lambda handler
+        var response = await _fixture.HttpClient.GetAsync("/2015-03-31/functions/nonexistent-func-12345");
+
+        Assert.Equal(System.Net.HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    // -- Event Invoke Config ---------------------------------------------------
+
+    [Fact]
+    public async Task EventInvokeConfigCrud()
+    {
+        await CreateTestFunction("eic-func");
+
+        // Put
+        var put = await _lambda.PutFunctionEventInvokeConfigAsync(new PutFunctionEventInvokeConfigRequest
+        {
+            FunctionName = "eic-func",
+            MaximumRetryAttempts = 1,
+            MaximumEventAgeInSeconds = 3600,
+        });
+
+        Assert.Equal(1, put.MaximumRetryAttempts);
+        Assert.Equal(3600, put.MaximumEventAgeInSeconds);
+
+        // Get
+        var get = await _lambda.GetFunctionEventInvokeConfigAsync(new GetFunctionEventInvokeConfigRequest
+        {
+            FunctionName = "eic-func",
+        });
+
+        Assert.Equal(1, get.MaximumRetryAttempts);
+        Assert.Equal(3600, get.MaximumEventAgeInSeconds);
+
+        // Delete
+        await _lambda.DeleteFunctionEventInvokeConfigAsync(new DeleteFunctionEventInvokeConfigRequest
+        {
+            FunctionName = "eic-func",
+        });
+
+        // After delete, get should throw
+        await Assert.ThrowsAsync<Amazon.Lambda.Model.ResourceNotFoundException>(() =>
+            _lambda.GetFunctionEventInvokeConfigAsync(new GetFunctionEventInvokeConfigRequest
+            {
+                FunctionName = "eic-func",
+            }));
+    }
+
+    // -- Provisioned Concurrency -----------------------------------------------
+
+    [Fact]
+    public async Task ProvisionedConcurrencyCrud()
+    {
+        await CreateTestFunction("pc-func");
+
+        // Publish a version (provisioned concurrency needs a qualifier)
+        var published = await _lambda.PublishVersionAsync(new PublishVersionRequest
+        {
+            FunctionName = "pc-func",
+        });
+
+        // Put
+        var put = await _lambda.PutProvisionedConcurrencyConfigAsync(new PutProvisionedConcurrencyConfigRequest
+        {
+            FunctionName = "pc-func",
+            Qualifier = published.Version,
+            ProvisionedConcurrentExecutions = 5,
+        });
+
+        Assert.Equal(5, put.RequestedProvisionedConcurrentExecutions);
+
+        // Get
+        var get = await _lambda.GetProvisionedConcurrencyConfigAsync(new GetProvisionedConcurrencyConfigRequest
+        {
+            FunctionName = "pc-func",
+            Qualifier = published.Version,
+        });
+
+        Assert.Equal(5, get.RequestedProvisionedConcurrentExecutions);
+        Assert.Equal("READY", get.Status?.Value);
+
+        // Delete
+        await _lambda.DeleteProvisionedConcurrencyConfigAsync(new DeleteProvisionedConcurrencyConfigRequest
+        {
+            FunctionName = "pc-func",
+            Qualifier = published.Version,
+        });
+
+        // After delete, get should throw
+        await Assert.ThrowsAsync<Amazon.Lambda.Model.ProvisionedConcurrencyConfigNotFoundException>(() =>
+            _lambda.GetProvisionedConcurrencyConfigAsync(new GetProvisionedConcurrencyConfigRequest
+            {
+                FunctionName = "pc-func",
+                Qualifier = published.Version,
+            }));
+    }
+
+    // -- Function with Layer ---------------------------------------------------
+
+    [Fact]
+    public async Task FunctionWithLayer()
+    {
+        using var layerZip = MakeZip("python/mylib.py", "# layer code");
+        var layerPublish = await _lambda.PublishLayerVersionAsync(new PublishLayerVersionRequest
+        {
+            LayerName = "func-layer",
+            Content = new LayerVersionContentInput { ZipFile = layerZip },
+        });
+
+        using var funcZip = MakeZip("index.py", PythonCode);
+        var result = await _lambda.CreateFunctionAsync(new CreateFunctionRequest
+        {
+            FunctionName = "func-with-layer",
+            Runtime = Runtime.Python39,
+            Role = LambdaRole,
+            Handler = "index.handler",
+            Code = new FunctionCode { ZipFile = funcZip },
+            Layers = [layerPublish.LayerVersionArn],
+        });
+
+        Assert.Equal("func-with-layer", result.FunctionName);
+        Assert.NotNull(result.Layers);
+        Assert.Single(result.Layers);
+    }
+
+    // -- PublishVersion Snapshot -----------------------------------------------
+
+    [Fact]
+    public async Task PublishVersionSnapshot()
+    {
+        await CreateTestFunction("snapshot-func");
+
+        var published = await _lambda.PublishVersionAsync(new PublishVersionRequest
+        {
+            FunctionName = "snapshot-func",
+        });
+
+        // Update the $LATEST config
+        await _lambda.UpdateFunctionConfigurationAsync(new UpdateFunctionConfigurationRequest
+        {
+            FunctionName = "snapshot-func",
+            Description = "changed-after-publish",
+        });
+
+        // The published version should still have the original description
+        var versionConfig = await _lambda.GetFunctionConfigurationAsync(new GetFunctionConfigurationRequest
+        {
+            FunctionName = "snapshot-func",
+            Qualifier = published.Version,
+        });
+
+        Assert.NotEqual("changed-after-publish", versionConfig.Description);
+    }
+}

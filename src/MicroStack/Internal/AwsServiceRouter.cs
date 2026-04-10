@@ -423,7 +423,17 @@ internal sealed partial class AwsServiceRouter
             || pathLower.StartsWith("/usageplans", StringComparison.Ordinal)
             || pathLower.StartsWith("/domainnames", StringComparison.Ordinal))
             return "apigateway";
-        if (pathLower.StartsWith("/2015-03-31/functions", StringComparison.Ordinal))
+        if (pathLower.StartsWith("/2015-03-31/functions", StringComparison.Ordinal)
+            || pathLower.StartsWith("/2015-03-31/layers", StringComparison.Ordinal)
+            || pathLower.StartsWith("/2015-03-31/event-source-mappings", StringComparison.Ordinal)
+            || pathLower.StartsWith("/2015-03-31/tags", StringComparison.Ordinal)
+            || pathLower.StartsWith("/2017-03-31/tags", StringComparison.Ordinal)
+            || pathLower.StartsWith("/2017-10-31/functions", StringComparison.Ordinal)
+            || pathLower.StartsWith("/2018-10-31/layers", StringComparison.Ordinal)
+            || pathLower.StartsWith("/2019-09-25/functions", StringComparison.Ordinal)
+            || pathLower.StartsWith("/2019-09-30/functions", StringComparison.Ordinal)
+            || pathLower.StartsWith("/2021-10-31/functions", StringComparison.Ordinal)
+            || pathLower.StartsWith("/2020-04-22/code-signing-configs", StringComparison.Ordinal))
             return "lambda";
         if (pathLower.StartsWith("/oauth2/token", StringComparison.Ordinal))
             return "cognito-idp";
