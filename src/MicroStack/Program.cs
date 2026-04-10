@@ -5,6 +5,7 @@ using MicroStack.Services.S3;
 using MicroStack.Services.Sns;
 using MicroStack.Services.Sqs;
 using MicroStack.Services.SecretsManager;
+using MicroStack.Services.Ssm;
 using MicroStack.Services.Sts;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -44,6 +45,7 @@ var iamHandler = new IamServiceHandler();
 registry.Register(iamHandler);
 registry.Register(new StsServiceHandler(iamHandler));
 registry.Register(new SecretsManagerServiceHandler());
+registry.Register(new SsmServiceHandler());
 
 // Health endpoint (multiple aliases for LocalStack compatibility)
 foreach (var healthPath in new[] { "/_ministack/health", "/health", "/_localstack/health" })
