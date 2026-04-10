@@ -1,5 +1,6 @@
 using MicroStack.Internal;
 using MicroStack.Services.DynamoDb;
+using MicroStack.Services.S3;
 using MicroStack.Services.Sqs;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -32,6 +33,7 @@ var registry = app.Services.GetRequiredService<ServiceRegistry>();
 // Register service handlers
 registry.Register(new SqsServiceHandler());
 registry.Register(new DynamoDbServiceHandler());
+registry.Register(new S3ServiceHandler());
 
 // Health endpoint (multiple aliases for LocalStack compatibility)
 foreach (var healthPath in new[] { "/_ministack/health", "/health", "/_localstack/health" })
