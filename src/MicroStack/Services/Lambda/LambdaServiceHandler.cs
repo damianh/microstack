@@ -2,6 +2,8 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using MicroStack.Internal;
+using MicroStack.Services.DynamoDb;
+using MicroStack.Services.Sqs;
 
 namespace MicroStack.Services.Lambda;
 
@@ -22,8 +24,20 @@ internal sealed class LambdaServiceHandler : IServiceHandler
     private readonly LambdaWorkerPool _workerPool = new();
     private readonly Lock _lock = new();
 
+    private readonly SqsServiceHandler? _sqsHandler;
+    private readonly DynamoDbServiceHandler? _ddbHandler;
+    private EventSourceMappingPoller? _poller;
+
     private static readonly string Region =
         Environment.GetEnvironmentVariable("MINISTACK_REGION") ?? "us-east-1";
+
+    internal LambdaServiceHandler() { }
+
+    internal LambdaServiceHandler(SqsServiceHandler sqsHandler, DynamoDbServiceHandler ddbHandler)
+    {
+        _sqsHandler = sqsHandler;
+        _ddbHandler = ddbHandler;
+    }
 
     // -- IServiceHandler -------------------------------------------------------
 
@@ -54,6 +68,8 @@ internal sealed class LambdaServiceHandler : IServiceHandler
 
     public void Reset()
     {
+        _poller?.Stop();
+        _poller = null;
         _workerPool.Reset();
         lock (_lock)
         {
@@ -2164,6 +2180,13 @@ internal sealed class LambdaServiceHandler : IServiceHandler
 
             _esms[uuid] = esm;
 
+            // Start the ESM background poller if SQS and DynamoDB handlers are available
+            if (_sqsHandler is not null && _ddbHandler is not null)
+            {
+                _poller ??= new EventSourceMappingPoller(this, _sqsHandler, _ddbHandler);
+                _poller.EnsureStarted();
+            }
+
             return JsonResponse(esm, 202);
         }
     }
@@ -2272,6 +2295,92 @@ internal sealed class LambdaServiceHandler : IServiceHandler
             _esms.TryRemove(uuid, out _);
 
             return JsonResponse(esm, 202);
+        }
+    }
+
+    // -- ESM Poller Helpers (internal — used by EventSourceMappingPoller) ------
+
+    /// <summary>
+    /// Returns all enabled ESMs grouped by account ID.
+    /// Uses <see cref="AccountScopedDictionary{TKey,TValue}.ToRaw"/> to iterate
+    /// across all accounts without requiring an account context.
+    /// </summary>
+    internal Dictionary<string, List<Dictionary<string, object?>>> GetEnabledEsmsByAccount()
+    {
+        lock (_lock)
+        {
+            var result = new Dictionary<string, List<Dictionary<string, object?>>>(StringComparer.Ordinal);
+            foreach (var kv in _esms.ToRaw())
+            {
+                var accountId = kv.Key.AccountId;
+                var esm = kv.Value;
+                if (!esm.TryGetValue("State", out var s)
+                    || !string.Equals(s?.ToString(), "Enabled", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                if (!result.TryGetValue(accountId, out var list))
+                {
+                    list = [];
+                    result[accountId] = list;
+                }
+
+                list.Add(esm);
+            }
+
+            return result;
+        }
+    }
+
+    /// <summary>
+    /// Invokes a Lambda function for an ESM event. Called by the background poller.
+    /// Returns true if the invocation succeeded, false otherwise.
+    /// </summary>
+    internal bool InvokeForEsm(string functionArnOrName, Dictionary<string, object?> eventPayload)
+    {
+        // Resolve function name from ARN (e.g., "arn:aws:lambda:us-east-1:000000000000:function:my-func")
+        var funcName = functionArnOrName;
+        if (funcName.Contains(':'))
+        {
+            var parts = funcName.Split(':');
+            funcName = parts[^1]; // last segment is function name
+        }
+
+        string name;
+        Dictionary<string, object?> config;
+        byte[]? codeZip;
+        string runtime;
+
+        lock (_lock)
+        {
+            (name, _) = ParseFunctionReference(funcName);
+            if (!_functions.TryGetValue(name, out var record))
+            {
+                return false;
+            }
+
+            config = record.Config;
+            codeZip = record.CodeZip;
+            runtime = config.TryGetValue("Runtime", out var rtVal) ? rtVal?.ToString() ?? "" : "";
+        }
+
+        if (codeZip is null || codeZip.Length == 0 || !IsSupportedRuntime(runtime))
+        {
+            return false;
+        }
+
+        try
+        {
+            var requestId = HashHelpers.NewUuid();
+            var eventJson = JsonSerializer.SerializeToUtf8Bytes(eventPayload);
+            var worker = _workerPool.GetOrCreate(name, config, codeZip);
+            var workerResult = worker.Invoke(eventJson, requestId);
+            return workerResult.Success;
+        }
+        catch (Exception)
+        {
+            return false;
         }
     }
 

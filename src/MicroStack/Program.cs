@@ -40,7 +40,8 @@ var registry = app.Services.GetRequiredService<ServiceRegistry>();
 // Register service handlers
 var sqsHandler = new SqsServiceHandler();
 registry.Register(sqsHandler);
-registry.Register(new DynamoDbServiceHandler());
+var ddbHandler = new DynamoDbServiceHandler();
+registry.Register(ddbHandler);
 registry.Register(new S3ServiceHandler());
 registry.Register(new SnsServiceHandler(sqsHandler));
 var iamHandler = new IamServiceHandler();
@@ -49,7 +50,7 @@ registry.Register(new StsServiceHandler(iamHandler));
 registry.Register(new SecretsManagerServiceHandler());
 registry.Register(new SsmServiceHandler());
 registry.Register(new KmsServiceHandler());
-registry.Register(new LambdaServiceHandler());
+registry.Register(new LambdaServiceHandler(sqsHandler, ddbHandler));
 
 // Health endpoint (multiple aliases for LocalStack compatibility)
 foreach (var healthPath in new[] { "/_ministack/health", "/health", "/_localstack/health" })

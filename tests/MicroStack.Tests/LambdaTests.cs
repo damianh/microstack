@@ -7,6 +7,7 @@ using Amazon;
 using Amazon.Lambda;
 using Amazon.Lambda.Model;
 using Amazon.Runtime;
+using Amazon.SQS;
 
 namespace MicroStack.Tests;
 
@@ -1402,5 +1403,244 @@ public sealed class LambdaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
         using var doc = JsonDocument.Parse(payload);
         Assert.Equal(200, doc.RootElement.GetProperty("statusCode").GetInt32());
         Assert.Equal("callback-CB", doc.RootElement.GetProperty("body").GetString());
+    }
+
+    // -- ESM Poller Integration Tests ------------------------------------------
+
+    private static AmazonSQSClient CreateSqsClient(MicroStackFixture fixture)
+    {
+        var innerHandler = fixture.Factory.Server.CreateHandler();
+        var httpClient = new HttpClient(new CanonicalizeUriHandler(innerHandler))
+        {
+            BaseAddress = new Uri("http://localhost/"),
+        };
+
+        var config = new AmazonSQSConfig
+        {
+            RegionEndpoint = RegionEndpoint.USEast1,
+            ServiceURL = "http://localhost/",
+            HttpClientFactory = new FixedHttpClientFactory(httpClient),
+        };
+
+        return new AmazonSQSClient(new BasicAWSCredentials("test", "test"), config);
+    }
+
+    [Fact]
+    public async Task EsmSqsConsumesMessage()
+    {
+        if (!IsPythonAvailable())
+        {
+            return;
+        }
+
+        using var sqsClient = CreateSqsClient(_fixture);
+
+        // Create SQS queue
+        var createQueue = await sqsClient.CreateQueueAsync(new Amazon.SQS.Model.CreateQueueRequest
+        {
+            QueueName = "esm-source-queue",
+        });
+        var queueUrl = createQueue.QueueUrl;
+
+        // Get queue ARN
+        var attrs = await sqsClient.GetQueueAttributesAsync(new Amazon.SQS.Model.GetQueueAttributesRequest
+        {
+            QueueUrl = queueUrl,
+            AttributeNames = ["QueueArn"],
+        });
+        var queueArn = attrs.Attributes["QueueArn"];
+
+        // Create Lambda function that simply returns the number of records consumed
+        const string code = "def handler(event, context):\n    return {\"consumed\": len(event.get(\"Records\", []))}\n";
+        await CreatePythonFunction("esm-handler", code);
+
+        // Create ESM linking the SQS queue to the Lambda function
+        await _lambda.CreateEventSourceMappingAsync(new CreateEventSourceMappingRequest
+        {
+            FunctionName = "esm-handler",
+            EventSourceArn = queueArn,
+            BatchSize = 1,
+            Enabled = true,
+        });
+
+        // Send a message to the source queue
+        await sqsClient.SendMessageAsync(new Amazon.SQS.Model.SendMessageRequest
+        {
+            QueueUrl = queueUrl,
+            MessageBody = "{\"test\": true}",
+        });
+
+        // Wait for message to be consumed (poll for up to 15 seconds)
+        var consumed = false;
+        for (var i = 0; i < 15; i++)
+        {
+            await Task.Delay(1000);
+            var receive = await sqsClient.ReceiveMessageAsync(new Amazon.SQS.Model.ReceiveMessageRequest
+            {
+                QueueUrl = queueUrl,
+                MaxNumberOfMessages = 1,
+                WaitTimeSeconds = 0,
+            });
+            if (receive.Messages is null || receive.Messages.Count == 0)
+            {
+                consumed = true;
+                break;
+            }
+        }
+
+        Assert.True(consumed, "Message should have been consumed by Lambda ESM");
+    }
+
+    [Fact]
+    public async Task EsmCrudWorksAfterPollerStarts()
+    {
+        if (!IsPythonAvailable())
+        {
+            return;
+        }
+
+        using var sqsClient = CreateSqsClient(_fixture);
+
+        // Create SQS queue
+        var createQueue = await sqsClient.CreateQueueAsync(new Amazon.SQS.Model.CreateQueueRequest
+        {
+            QueueName = "esm-crud-queue",
+        });
+        var queueUrl = createQueue.QueueUrl;
+
+        // Get queue ARN
+        var attrs = await sqsClient.GetQueueAttributesAsync(new Amazon.SQS.Model.GetQueueAttributesRequest
+        {
+            QueueUrl = queueUrl,
+            AttributeNames = ["QueueArn"],
+        });
+        var queueArn = attrs.Attributes["QueueArn"];
+
+        // Create Lambda function
+        const string code = "def handler(event, context):\n    return {\"ok\": True}\n";
+        await CreatePythonFunction("esm-crud-func", code);
+
+        // Create ESM (this starts the poller)
+        var created = await _lambda.CreateEventSourceMappingAsync(new CreateEventSourceMappingRequest
+        {
+            FunctionName = "esm-crud-func",
+            EventSourceArn = queueArn,
+            BatchSize = 5,
+            Enabled = true,
+        });
+
+        Assert.NotNull(created.UUID);
+        Assert.Equal("Enabled", created.State);
+        Assert.Equal(5, created.BatchSize);
+
+        // Get ESM
+        var fetched = await _lambda.GetEventSourceMappingAsync(new GetEventSourceMappingRequest
+        {
+            UUID = created.UUID,
+        });
+
+        Assert.Equal(created.UUID, fetched.UUID);
+
+        // Update ESM (disable it)
+        var updated = await _lambda.UpdateEventSourceMappingAsync(new UpdateEventSourceMappingRequest
+        {
+            UUID = created.UUID,
+            Enabled = false,
+        });
+
+        Assert.Equal("Disabled", updated.State);
+
+        // List ESMs
+        var listed = await _lambda.ListEventSourceMappingsAsync(new ListEventSourceMappingsRequest
+        {
+            FunctionName = "esm-crud-func",
+        });
+
+        Assert.Single(listed.EventSourceMappings);
+
+        // Delete ESM
+        var deleted = await _lambda.DeleteEventSourceMappingAsync(new DeleteEventSourceMappingRequest
+        {
+            UUID = created.UUID,
+        });
+
+        Assert.NotNull(deleted.UUID);
+
+        // Verify deletion
+        var listedAfterDelete = await _lambda.ListEventSourceMappingsAsync(new ListEventSourceMappingsRequest
+        {
+            FunctionName = "esm-crud-func",
+        });
+
+        Assert.Empty(listedAfterDelete.EventSourceMappings);
+    }
+
+    [Fact]
+    public async Task EsmSqsConsumesMultipleMessages()
+    {
+        if (!IsPythonAvailable())
+        {
+            return;
+        }
+
+        using var sqsClient = CreateSqsClient(_fixture);
+
+        // Create SQS queue
+        var createQueue = await sqsClient.CreateQueueAsync(new Amazon.SQS.Model.CreateQueueRequest
+        {
+            QueueName = "esm-batch-queue",
+        });
+        var queueUrl = createQueue.QueueUrl;
+
+        // Get queue ARN
+        var attrs = await sqsClient.GetQueueAttributesAsync(new Amazon.SQS.Model.GetQueueAttributesRequest
+        {
+            QueueUrl = queueUrl,
+            AttributeNames = ["QueueArn"],
+        });
+        var queueArn = attrs.Attributes["QueueArn"];
+
+        // Create Lambda function
+        const string code = "def handler(event, context):\n    return {\"consumed\": len(event.get(\"Records\", []))}\n";
+        await CreatePythonFunction("esm-batch-handler", code);
+
+        // Create ESM with batch size of 5
+        await _lambda.CreateEventSourceMappingAsync(new CreateEventSourceMappingRequest
+        {
+            FunctionName = "esm-batch-handler",
+            EventSourceArn = queueArn,
+            BatchSize = 5,
+            Enabled = true,
+        });
+
+        // Send 3 messages
+        for (var i = 0; i < 3; i++)
+        {
+            await sqsClient.SendMessageAsync(new Amazon.SQS.Model.SendMessageRequest
+            {
+                QueueUrl = queueUrl,
+                MessageBody = $"{{\"index\": {i}}}",
+            });
+        }
+
+        // Wait for all messages to be consumed
+        var consumed = false;
+        for (var i = 0; i < 15; i++)
+        {
+            await Task.Delay(1000);
+            var receive = await sqsClient.ReceiveMessageAsync(new Amazon.SQS.Model.ReceiveMessageRequest
+            {
+                QueueUrl = queueUrl,
+                MaxNumberOfMessages = 10,
+                WaitTimeSeconds = 0,
+            });
+            if (receive.Messages is null || receive.Messages.Count == 0)
+            {
+                consumed = true;
+                break;
+            }
+        }
+
+        Assert.True(consumed, "All messages should have been consumed by Lambda ESM");
     }
 }
