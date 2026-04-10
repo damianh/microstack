@@ -1,7 +1,11 @@
 using MicroStack.Internal;
 using MicroStack.Services.DynamoDb;
+using MicroStack.Services.Iam;
 using MicroStack.Services.S3;
+using MicroStack.Services.Sns;
 using MicroStack.Services.Sqs;
+using MicroStack.Services.SecretsManager;
+using MicroStack.Services.Sts;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -31,9 +35,15 @@ persistence.RestoreAll();
 var registry = app.Services.GetRequiredService<ServiceRegistry>();
 
 // Register service handlers
-registry.Register(new SqsServiceHandler());
+var sqsHandler = new SqsServiceHandler();
+registry.Register(sqsHandler);
 registry.Register(new DynamoDbServiceHandler());
 registry.Register(new S3ServiceHandler());
+registry.Register(new SnsServiceHandler(sqsHandler));
+var iamHandler = new IamServiceHandler();
+registry.Register(iamHandler);
+registry.Register(new StsServiceHandler(iamHandler));
+registry.Register(new SecretsManagerServiceHandler());
 
 // Health endpoint (multiple aliases for LocalStack compatibility)
 foreach (var healthPath in new[] { "/_ministack/health", "/health", "/_localstack/health" })
