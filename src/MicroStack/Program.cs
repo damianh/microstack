@@ -1,5 +1,6 @@
 using MicroStack.Internal;
 using MicroStack.Services.DynamoDb;
+using MicroStack.Services.Ec2;
 using MicroStack.Services.Iam;
 using MicroStack.Services.S3;
 using MicroStack.Services.Sns;
@@ -57,6 +58,7 @@ registry.Register(lambdaHandler);
 registry.Register(new ApiGatewayV2ServiceHandler(lambdaHandler));
 var sfnHandler = new StepFunctionsServiceHandler(lambdaHandler, registry);
 registry.Register(sfnHandler);
+registry.Register(new Ec2ServiceHandler());
 
 // Health endpoint (multiple aliases for LocalStack compatibility)
 foreach (var healthPath in new[] { "/_ministack/health", "/health", "/_localstack/health" })

@@ -8,6 +8,7 @@
     <PackageReference Include="AWSSDK.APIGateway" Version="4.*" />
     <PackageReference Include="AWSSDK.ApiGatewayV2" Version="4.*" />
     <PackageReference Include="AWSSDK.DynamoDBv2" Version="4.*" />
+    <PackageReference Include="AWSSDK.EC2" Version="4.*" />
     <PackageReference Include="AWSSDK.KeyManagementService" Version="4.*" />
     <PackageReference Include="AWSSDK.Lambda" Version="4.*" />
     <PackageReference Include="AWSSDK.S3" Version="4.*" />
