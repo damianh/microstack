@@ -471,3 +471,60 @@
 
 **Build status:** 0 warnings, 0 errors (Release)
 **Test status:** All 478 tests pass (51 StepFunctions + 427 existing), 1 skip (IntegrationSnsPublish)
+
+### 2026-04-11 — EC2 Service Handler with 78 Integration Tests
+
+**What was done:**
+- Created `src/MicroStack/Services/Ec2/Ec2ServiceHandler.cs` (~3131 lines C#) — complete port of EC2 handler
+- Registered Ec2ServiceHandler in `Program.cs`
+- Added `AWSSDK.EC2` NuGet reference to test project
+- Created `tests/MicroStack.Tests/Ec2Tests.cs` with 78 integration tests porting all tests from Python `test_ec2.py` (1175 lines) and `test_ebs.py` (131 lines)
+
+**Handler bugs found and fixed:**
+1. `RunInstances` stored instance state as flat keys (`StateCode`/`StateName`) but `InstanceXml()` expected nested `Dictionary<string, object>` keys (`State`, `Placement`, `Monitoring`, `Architecture`, `RootDeviceType`, `RootDeviceName`, `Virtualization`, `Hypervisor`, `AmiLaunchIndex`) — would cause `KeyNotFoundException` at runtime
+2. `TerminateInstances`, `StopInstances`, `StartInstances` updated to access `inst["State"]` as a Dictionary instead of flat `StateCode`/`StateName`
+3. `RtbXml` cast Routes as `List<Dictionary<string, object>>` but CreateRouteTable/CreateVpc stored as `List<Dictionary<string, string>>` — `InvalidCastException` at runtime
+4. `CreateVpc` ACL `Associations` stored as `List<Dictionary<string, string>>` but `DescribeNetworkAcls` cast as `List<Dictionary<string, object>>` — type mismatch fixed
+
+**Test coverage (78 tests):**
+- VPC: DescribeVpcsDefault, CreateAndDeleteVpc, DescribeVpcAttribute, ModifyVpcAttribute, VpcCidrBlock, DescribeAvailabilityZones, CreateVpcDefaultResources
+- Subnet: DescribeSubnetsDefault, CreateAndDeleteSubnet, SubnetAvailableIpCount
+- Security Groups: CreateSecurityGroup, CreateSecurityGroupDuplicate, SecurityGroupAuthorizeRevokeIngress
+- Key Pairs: KeyPairCrud, KeyPairDuplicate, ImportKeyPair
+- Internet Gateway: InternetGatewayCrud
+- Route Tables: RouteTableCrud, RouteTableAssociateDisassociate, RouteCreateReplaceDelete, DescribeRouteTablesDefault, RouteTableAssociationFilter, ReplaceRouteTableAssociation
+- Instances: RunInstancesAndDescribe, RunMultipleInstances, TerminateInstances, StopStartInstances, DescribeInstanceStatus, DescribeInstanceAttribute, ModifyInstanceAttribute
+- Tags: TagsCrud, DescribeTagsFilters
+- Network Interfaces: NetworkInterfaceCrud, NetworkInterfaceAttachDetach, ModifyNetworkInterfaceSourceDestCheck
+- VPC Endpoints: VpcEndpointCrud, ModifyVpcEndpoint
+- EBS Volumes: CreateAndDescribeVolume, AttachDetachVolume, DeleteVolume, ModifyVolume, DescribeVolumeStatus, DescribeVolumeAttribute, DescribeVolumesModifications
+- EBS Snapshots: CreateAndDescribeSnapshot, DeleteSnapshot, CopySnapshot, SnapshotAttribute
+- Instance Types: DescribeInstanceTypesDefaults, DescribeInstanceTypesFilter
+- Credits/Stubs: DescribeInstanceCreditSpecifications, DescribeSpotInstanceRequests, DescribeCapacityReservations
+- Prefix Lists: DescribePrefixLists, DescribePrefixListsFilter
+- Full Integration: FullTerraformVpcFlow (VPC + subnet + IGW + route table + NAT gateway + SG + route)
+- NAT Gateways: NatGatewayCrud, NatGatewayFilterByVpc
+- Network ACLs: NetworkAclCrud
+- Flow Logs: FlowLogsCrud
+- Elastic IPs: AllocateDescribeReleaseAddress
+- VPC Peering: VpcPeeringCrud
+- DHCP: DhcpOptionsCrud
+- Egress-Only IGW: EgressOnlyIgwCrud
+- VPN: VpnGatewayCrud, VgwRoutePropagation
+- Customer Gateway: CustomerGatewayCrud
+- Account Attributes: DescribeAccountAttributes
+- Create Route NAT: CreateRouteNatGateway
+- Images: DescribeImages
+- Managed Prefix Lists: ManagedPrefixListCrud
+- Launch Templates: LaunchTemplateCrud
+
+**AWS SDK v4 quirks discovered and handled:**
+1. `CreateVolumeResponse` properties (VolumeId, State, Size, VolumeType) are on `.Volume` sub-property, not directly on the response
+2. `CreateSnapshotResponse` properties (SnapshotId, State) are on `.Snapshot` sub-property
+3. `DescribeNatGatewaysRequest` uses `Filter` property, not `Filters`
+4. `DhcpConfiguration.Values` contains strings directly, not objects with `.Value` property
+5. SDK v4 EC2 `ConstantClass` types (like `State`) normalize case — handler "available" becomes SDK "Available"
+6. SDK v4 collection properties (KeyPairs, Volumes, Snapshots, Attachments, Associations, etc.) remain null when XML response has empty sets (no auto-initialization) — all test assertions use `?? []` null-coalescing pattern
+
+**Build status:** 0 warnings, 0 errors (Release)
+**Test status:** All 556 tests pass (78 EC2 + 478 existing), 1 skip (IntegrationSnsPublish)
