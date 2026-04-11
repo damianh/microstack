@@ -422,7 +422,8 @@ internal sealed partial class AwsServiceRouter
         if (pathLower.StartsWith("/restapis", StringComparison.Ordinal)
             || pathLower.StartsWith("/apikeys", StringComparison.Ordinal)
             || pathLower.StartsWith("/usageplans", StringComparison.Ordinal)
-            || pathLower.StartsWith("/domainnames", StringComparison.Ordinal))
+            || pathLower.StartsWith("/domainnames", StringComparison.Ordinal)
+            || pathLower.StartsWith("/tags/arn:aws:apigateway:", StringComparison.Ordinal))
             return "apigateway";
         if (pathLower.StartsWith("/2015-03-31/functions", StringComparison.Ordinal)
             || pathLower.StartsWith("/2015-03-31/layers", StringComparison.Ordinal)

@@ -9,6 +9,7 @@ using MicroStack.Services.Ssm;
 using MicroStack.Services.Kms;
 using MicroStack.Services.ApiGateway;
 using MicroStack.Services.Lambda;
+using MicroStack.Services.StepFunctions;
 using MicroStack.Services.Sts;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -54,6 +55,8 @@ registry.Register(new KmsServiceHandler());
 var lambdaHandler = new LambdaServiceHandler(sqsHandler, ddbHandler);
 registry.Register(lambdaHandler);
 registry.Register(new ApiGatewayV2ServiceHandler(lambdaHandler));
+var sfnHandler = new StepFunctionsServiceHandler(lambdaHandler, registry);
+registry.Register(sfnHandler);
 
 // Health endpoint (multiple aliases for LocalStack compatibility)
 foreach (var healthPath in new[] { "/_ministack/health", "/health", "/_localstack/health" })
@@ -82,9 +85,60 @@ app.MapPost("/_ministack/reset", () =>
 app.MapPost("/_ministack/config", async (HttpContext ctx) =>
 {
     using var reader = new StreamReader(ctx.Request.Body);
-    var _ = await reader.ReadToEndAsync();
-    return Results.Ok(new { applied = new Dictionary<string, object>() });
+    var bodyText = await reader.ReadToEndAsync();
+    var applied = new Dictionary<string, object>();
+    if (!string.IsNullOrEmpty(bodyText))
+    {
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(bodyText);
+            if (doc.RootElement.TryGetProperty("stepfunctions", out var sfnEl)
+                && sfnEl.ValueKind == System.Text.Json.JsonValueKind.Object
+                && sfnEl.TryGetProperty("_sfn_mock_config", out var mockEl))
+            {
+                var mockConfig = JsonElementToDict(mockEl);
+                sfnHandler.SetMockConfig(mockConfig);
+                applied["stepfunctions._sfn_mock_config"] = "applied";
+            }
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            // Ignore invalid JSON
+        }
+    }
+
+    return Results.Ok(new { applied });
 });
+
+static Dictionary<string, object?> JsonElementToDict(System.Text.Json.JsonElement element)
+{
+    var dict = new Dictionary<string, object?>(StringComparer.Ordinal);
+    if (element.ValueKind != System.Text.Json.JsonValueKind.Object)
+    {
+        return dict;
+    }
+
+    foreach (var prop in element.EnumerateObject())
+    {
+        dict[prop.Name] = JsonElementToObject(prop.Value);
+    }
+
+    return dict;
+}
+
+static object? JsonElementToObject(System.Text.Json.JsonElement element)
+{
+    return element.ValueKind switch
+    {
+        System.Text.Json.JsonValueKind.Object => JsonElementToDict(element),
+        System.Text.Json.JsonValueKind.Array => element.EnumerateArray().Select(JsonElementToObject).ToList(),
+        System.Text.Json.JsonValueKind.String => element.GetString(),
+        System.Text.Json.JsonValueKind.Number => element.TryGetInt64(out var l) ? l : element.GetDouble(),
+        System.Text.Json.JsonValueKind.True => true,
+        System.Text.Json.JsonValueKind.False => false,
+        _ => null,
+    };
+}
 
 // Enable routing so endpoint matching runs before our AWS middleware.
 // This ensures admin endpoints (health, reset, config) take priority.

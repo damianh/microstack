@@ -192,7 +192,27 @@ internal sealed class AwsRequestMiddleware
         }
 
         // ── Main service routing ───────────────────────────────────────────
-        var serviceName = _router.DetectService(serviceRequest);
+        // For unsigned form-encoded requests (e.g. STS AssumeRoleWithWebIdentity),
+        // Action is in the body not the query string — merge it in for routing only.
+        var routingRequest = serviceRequest;
+        if (!queryParams.ContainsKey("Action")
+            && (headers.GetValueOrDefault("content-type", "")
+                .StartsWith("application/x-www-form-urlencoded", StringComparison.OrdinalIgnoreCase))
+            && body.Length > 0)
+        {
+            var bodyStr = System.Text.Encoding.UTF8.GetString(body);
+            var bodyAction = HttpUtility.ParseQueryString(bodyStr)["Action"];
+            if (!string.IsNullOrEmpty(bodyAction))
+            {
+                var routingParams = new Dictionary<string, string[]>(queryParams, StringComparer.OrdinalIgnoreCase)
+                {
+                    ["Action"] = [bodyAction],
+                };
+                routingRequest = new ServiceRequest(method, path, headers, body, routingParams);
+            }
+        }
+
+        var serviceName = _router.DetectService(routingRequest);
         await DispatchToService(context, serviceRequest, serviceName);
     }
 

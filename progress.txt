@@ -318,3 +318,156 @@
 
 **Build status:** 0 warnings, 0 errors (Debug + Release)
 **Test status:** All 42 Lambda tests pass (31 existing + 11 new)
+
+### 2026-04-11 — Lambda ESM Background Poller Implementation (Task 24)
+
+**What was done:**
+- Created `src/MicroStack/Services/Lambda/EventSourceMappingPoller.cs` — background polling loop for Lambda Event Source Mappings
+- Modified `src/MicroStack/Services/Lambda/LambdaServiceHandler.cs` — added constructor accepting SQS and DynamoDB handler references, added `GetEnabledEsmsByAccount()` and `InvokeForEsm()` internal methods, wired poller lifecycle into ESM creation and Reset
+- Modified `src/MicroStack/Program.cs` — extracted DynamoDbServiceHandler into variable, passed both SQS and DynamoDB handlers to LambdaServiceHandler constructor
+- Added 3 new integration tests to `tests/MicroStack.Tests/LambdaTests.cs`
+
+**Architecture:**
+- Background `Timer`-based polling loop (1 second interval) that iterates all enabled ESMs across all accounts
+- Uses `AccountScopedDictionary.ToRaw()` to get all ESMs without requiring an account context, then groups by account ID
+- Sets `AccountContext.SetFromAccessKey(accountId)` before accessing account-scoped SQS/DynamoDB data
+- Per-ESM error isolation: catches exceptions per ESM and continues with others
+- Thread safety: `Interlocked.CompareExchange` prevents concurrent poll executions
+- Poller started lazily on first ESM creation; stopped on Reset
+
+**SQS ESM Polling:**
+1. Extracts queue name and region from SQS ARN
+2. Reconstructs queue URL in SqsServiceHandler format: `http://localhost:4566/{accountId}/{queueName}`
+3. Calls `SqsServiceHandler.ReceiveMessagesForEsm()` for message retrieval
+4. Builds SQS event payload with Records array (messageId, receiptHandle, body, attributes, etc.)
+5. Invokes Lambda via `InvokeForEsm()` (uses worker pool)
+6. On success: calls `DeleteMessagesForEsm()` to remove consumed messages
+
+**DynamoDB Streams ESM Polling:**
+1. Extracts table name from stream ARN
+2. Calls `DynamoDbServiceHandler.DrainStreamRecords()` for stream record retrieval
+3. Builds DynamoDB Streams event payload
+4. Invokes Lambda via `InvokeForEsm()`
+
+**Key implementation details:**
+- `InvokeForEsm()` resolves function name from ARN, looks up function record, gets worker from pool, invokes with JSON event, returns bool success
+- `GetEnabledEsmsByAccount()` uses `_esms.ToRaw()` to iterate across ALL accounts (ConcurrentDictionary-backed), groups by account ID, filters enabled ESMs
+- Constructor overload: `LambdaServiceHandler()` (no-arg, backwards compatible) and `LambdaServiceHandler(SqsServiceHandler, DynamoDbServiceHandler)` for wiring
+- Poller disposed in `Reset()` to prevent stale pollers across test runs
+
+**New tests (3 tests):**
+- EsmSqsConsumesMessage — creates SQS queue, Lambda function, ESM; sends message; waits up to 15s for poller to consume message and delete it from queue
+- EsmCrudWorksAfterPollerStarts — verifies ESM CRUD (create/get/update/list/delete) still works correctly after poller starts (regression test)
+- EsmSqsConsumesMultipleMessages — sends 3 messages to queue with batch size 5; verifies all are consumed
+
+**Build status:** 0 warnings, 0 errors (Debug + Release)
+**Test status:** All 343 tests pass (340 existing + 3 new Lambda ESM tests)
+
+### 2026-04-11 — API Gateway v2 Service Handler Implementation (Task 25)
+
+**What was done:**
+- Created `src/MicroStack/Services/ApiGateway/ApiGatewayV2ServiceHandler.cs` (~1194 lines C#) — complete port of `ministack/services/apigateway.py` (740 lines Python)
+- Added `InvokeForApiGateway()` method to `LambdaServiceHandler.cs` for Lambda proxy integration
+- Updated `Program.cs` to register ApiGatewayV2ServiceHandler with Lambda handler dependency
+- Added `/v2/tags` path routing in `AwsServiceRouter.cs`
+- Added `AWSSDK.ApiGatewayV2` NuGet reference to test project
+- Created `tests/MicroStack.Tests/ApiGatewayV2Tests.cs` with 45 integration tests
+
+**Control plane operations ported:**
+- API CRUD: CreateApi, GetApi, GetApis, UpdateApi, DeleteApi
+- Routes CRUD: CreateRoute, GetRoute, GetRoutes, UpdateRoute, DeleteRoute
+- Integrations CRUD: CreateIntegration, GetIntegration, GetIntegrations, UpdateIntegration, DeleteIntegration
+- Stages CRUD: CreateStage, GetStage, GetStages, UpdateStage, DeleteStage (with timestamps and stageVariables)
+- Deployments CRUD: CreateDeployment, GetDeployment, GetDeployments, DeleteDeployment
+- Authorizers CRUD: CreateAuthorizer, GetAuthorizer, GetAuthorizers, UpdateAuthorizer, DeleteAuthorizer
+- Tags: TagResource, UntagResource, GetTags
+
+**Data plane ported:**
+- Execute-API host header detection via regex: `{apiId}.execute-api.localhost`
+- Stage/path parsing from `/{stage}/{remaining-path}`
+- Route matching: specific method+path first pass, then $default catch-all
+- Path parameter extraction: `{param}` for single segment, `{proxy+}` for greedy match
+- Lambda AWS_PROXY integration with v2.0 payload format event construction
+- Lambda response parsing (statusCode, headers, body)
+- Query parameter handling: multi-value comma-joined per AWS spec
+- URL-decoded path parameters
+
+**Key implementation details:**
+- Handler ServiceName: "apigateway" — matches middleware and router aliases
+- State uses AccountScopedDictionary for all collections
+- API IDs: first 8 chars of UUID (HashHelpers.NewUuid()[..8])
+- API Endpoint format: `http://{apiId}.execute-api.{host}:{port}`
+- ARN format: `arn:aws:apigateway:{region}::/apis/{apiId}`
+- Response content type: `application/json` (NOT `application/x-amz-json-1.0`)
+- Added `InvokeForApiGateway` to LambdaServiceHandler: resolves function, invokes via worker pool, returns raw response bytes
+- `partial class` with `[GeneratedRegex]` for execute-api host pattern matching
+
+**Test coverage (45 tests):**
+- Control plane (27 tests): CreateApi, GetApi, GetApis, UpdateApi, DeleteApi, CreateRoute, GetRoutes, GetRoute, UpdateRoute, DeleteRoute, CreateIntegration, GetIntegrations, GetIntegration, DeleteIntegration, CreateStage, GetStages, GetStage, UpdateStage, DeleteStage, CreateDeployment, GetDeployments, GetDeployment, DeleteDeployment, TagResource, UntagResource, ApiNotFound, RouteOnDeletedApi, HttpProtocolType, AuthorizerCrud, UpdateIntegration, DeleteRouteV2, StageVariables, V2StageTimestamps
+- Data plane (13 tests): ExecuteNoRoute, ExecuteLambdaProxy, ExecuteDefaultRoute, PathParamRoute, PathParametersInEvent, GreedyPathParametersInEvent, QueryParamsAndHeadersInEvent, MultiplePathParameters, NoPathParametersReturnsNull, UrlEncodedPathParameter, GreedyPathParam, RouteKeyInLambdaEvent
+
+**Build status:** 0 warnings, 0 errors (Debug + Release)
+**Test status:** All 388 tests pass (343 existing + 45 new API Gateway v2 tests)
+
+**SDK v4 quirks discovered:**
+1. `NotFoundException` is a specific exception subclass of `AmazonApiGatewayV2Exception` — must catch the specific type
+2. `TagResourceRequest` and `UntagResourceRequest` are ambiguous between ApiGatewayV2 and Lambda SDKs — must fully qualify
+3. `CreateAuthorizerRequest.IdentitySource` is `List<string>` (not a single string)
+
+### 2026-04-11 — SNS, IAM, STS, API Gateway v1 Service Handlers
+
+**What was done (in batch):**
+- Created `src/MicroStack/Services/Sns/SnsServiceHandler.cs` — SNS topics, subscriptions, publish
+- Created `src/MicroStack/Services/Iam/IamServiceHandler.cs` — IAM users, roles, policies
+- Created `src/MicroStack/Services/Sts/StsServiceHandler.cs` — STS GetCallerIdentity, AssumeRole
+- Created `src/MicroStack/Services/ApiGateway/ApiGatewayV1ServiceHandler.cs` — API Gateway v1 REST APIs
+- Updated middleware/router for new service registrations
+- Tests for all four services
+
+### 2026-04-11 — Step Functions Service Handler (Task 27) + Tests (Task 28)
+
+**What was done:**
+- Created `src/MicroStack/Services/StepFunctions/StepFunctionsServiceHandler.cs` (~3461 lines C#) — complete port of `ministack/services/stepfunctions.py` (2492 lines Python)
+- Registered StepFunctionsServiceHandler in `Program.cs` with mock config endpoint
+- Added `AWSSDK.StepFunctions` NuGet reference to test project
+- Created `tests/MicroStack.Tests/StepFunctionsTests.cs` with 52 integration tests (51 pass, 1 skip)
+
+**All operations ported:**
+- State Machine CRUD: CreateStateMachine, DeleteStateMachine, DescribeStateMachine, ListStateMachines, UpdateStateMachine, TagResource, UntagResource, ListTagsForResource
+- Execution lifecycle: StartExecution, StartSyncExecution, DescribeExecution, GetExecutionHistory, ListExecutions, StopExecution
+- ASL Execution Engine (background Thread per async execution):
+  - All state handlers: Pass, Succeed, Fail, Choice, Wait, Task, Parallel, Map
+  - Path processing: InputPath, OutputPath, ResultPath, Parameters, ResultSelector
+  - Intrinsic functions: States.StringToJson, JsonToString, JsonMerge, Format, ArrayGetItem, Array, ArrayLength
+  - Service integrations: Lambda invoke, SQS sendMessage, SNS publish, DynamoDB (putItem/getItem/deleteItem/updateItem), aws-sdk generic, nested step function execution
+  - Activities: CreateActivity, DescribeActivity, ListActivities, DeleteActivity, GetActivityTask, SendTaskSuccess, SendTaskFailure, SendTaskHeartbeat
+  - waitForTaskToken callback pattern
+  - Mock Config (TestCases + MockedResponses with Return/Throw and attempt ranges)
+  - TestState API (execute single state with inspection data)
+- Retry/Catch error handling with backoff and jitter
+
+**Key implementation details:**
+- Internal `__scalar__` and `__list__` wrapper conventions for representing non-dict results in the `Dictionary<string, object?>` internal model
+- `SerializeOutput` + `UnwrapForSerialization` recursively unwrap these wrappers at serialization boundaries
+- Mock config endpoint at `/_ministack/config` accepts `{"stepfunctions": {"_sfn_mock_config": {...}}}` with PascalCase keys (StateMachines, TestCases, MockedResponses)
+- Background execution thread with `Thread.IsBackground = true` for async StartExecution
+- Service dispatch via `DispatchToService` calling handler's `HandleAsync` directly (in-process)
+- SNS integration skipped in tests (SNS uses query/XML protocol, SFN sends JSON — protocol mismatch)
+
+**Test coverage (52 tests, 51 pass, 1 skip):**
+- State Machine CRUD: CreateStateMachine, CreateDuplicateStateMachine, DeleteStateMachine, DeleteStateMachineNotFound, DescribeStateMachine, ListStateMachines, UpdateStateMachine, ListStateMachinesPagination
+- Tags: TagResource, UntagResource, ListTagsForResource
+- Execution lifecycle: StartExecution, StartSyncExecution, DescribeExecution, GetExecutionHistory, ListExecutions, StopExecution, ExecutionNotFound, StartExecutionDuplicateName, StartSyncCustomName
+- State types: PassState, SucceedState, FailState, ChoiceState, WaitState, WaitTimestamp, ParallelState, MapState
+- Choice operators: ChoiceStringEquals, ChoiceNumericComparisons, ChoiceBooleanEquals, ChoiceIsPresent, ChoiceNot, ChoiceAnd, ChoiceDefault, ChoiceStringLessThanEquals, ChoiceStringGreaterThan
+- Path features: ResultPathMergesWithInput, OutputPathFilters, ResultSelectorPick, ParametersTemplate, InputPathFilters, ResultPathNull
+- Intrinsic functions: IntrinsicFormat, IntrinsicStringToJson, IntrinsicJsonToString, IntrinsicJsonMerge, IntrinsicArrayGetItem, IntrinsicArray, IntrinsicArrayLength
+- Retry/Catch: RetryStateOnError
+- Pass chaining: MultiPassStateChain, ChoiceStateRoutesCorrectly
+- Service integrations: IntegrationSqsSend, IntegrationSnsPublish (SKIPPED), IntegrationDynamoDbPutGet, IntegrationDynamoDbErrorCatch, IntegrationLambdaInvoke
+- Multi-service: MultiServicePipeline (DynamoDB + SQS pipeline)
+- Mock config: MockConfigReturn, MockConfigThrow
+- Activities: ActivityCrud, ActivityTaskFlow
+
+**Build status:** 0 warnings, 0 errors (Release)
+**Test status:** All 478 tests pass (51 StepFunctions + 427 existing), 1 skip (IntegrationSnsPublish)

@@ -1427,6 +1427,45 @@ internal sealed class SqsServiceHandler : IServiceHandler
             .Replace("\"", "&quot;")
             .Replace("'", "&apos;");
 
+    // ── SNS fanout helper (internal — used by SNS handler for SNS→SQS delivery) ──
+
+    /// <summary>
+    /// Inject a message into an SQS queue by name (used for SNS→SQS fanout).
+    /// Returns false if the queue does not exist.
+    /// </summary>
+    internal bool InjectMessage(string queueName, string body, string? groupId, string? dedupId)
+    {
+        var url = QueueUrl(queueName);
+        lock (_lock)
+        {
+            if (!_queues.TryGetValue(url, out var q))
+                return false;
+
+            var nowMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            var msg = new SqsMessage
+            {
+                Id         = Guid.NewGuid().ToString(),
+                Body       = body,
+                Md5Body    = ComputeMd5Hex(body),
+                SentAtMs   = nowMs,
+                VisibleAtMs = nowMs,
+            };
+
+            if (!string.IsNullOrEmpty(groupId))
+                msg.GroupId = groupId;
+            if (!string.IsNullOrEmpty(dedupId))
+                msg.DedupId = dedupId;
+
+            msg.SystemAttributes["SenderId"]                  = AccountContext.GetAccountId();
+            msg.SystemAttributes["SentTimestamp"]              = nowMs.ToString();
+            msg.SystemAttributes["ApproximateReceiveCount"]    = "0";
+            msg.SystemAttributes["ApproximateFirstReceiveTimestamp"] = "0";
+
+            q.Messages.Add(msg);
+            return true;
+        }
+    }
+
     // ── ESM helpers (internal — used by Lambda ESM poller in Phase 4) ───────────
 
     /// <summary>Receive up to maxNumber messages for ESM consumption (thread-safe).</summary>

@@ -20,6 +20,7 @@ namespace MicroStack.Services.ApiGateway;
 internal sealed partial class ApiGatewayV2ServiceHandler : IServiceHandler
 {
     private readonly LambdaServiceHandler _lambdaHandler;
+    private readonly ApiGatewayV1ServiceHandler _v1Handler;
 
     // -- State ------------------------------------------------------------------
 
@@ -52,6 +53,7 @@ internal sealed partial class ApiGatewayV2ServiceHandler : IServiceHandler
     internal ApiGatewayV2ServiceHandler(LambdaServiceHandler lambdaHandler)
     {
         _lambdaHandler = lambdaHandler;
+        _v1Handler = new ApiGatewayV1ServiceHandler(lambdaHandler);
     }
 
     // -- IServiceHandler --------------------------------------------------------
@@ -65,7 +67,24 @@ internal sealed partial class ApiGatewayV2ServiceHandler : IServiceHandler
         if (executeMatch.Success)
         {
             var apiId = executeMatch.Groups[1].Value;
+            // Route to v1 handler if the API ID belongs to a REST API
+            if (_v1Handler.OwnsApiId(apiId))
+            {
+                return Task.FromResult(_v1Handler.HandleExecute(apiId, request));
+            }
             return Task.FromResult(HandleExecute(apiId, request));
+        }
+
+        // Route v1 control plane paths to the v1 handler
+        var pathLower = request.Path.TrimStart('/').ToLowerInvariant();
+        if (pathLower.StartsWith("restapis", StringComparison.Ordinal)
+            || pathLower.StartsWith("apikeys", StringComparison.Ordinal)
+            || pathLower.StartsWith("usageplans", StringComparison.Ordinal)
+            || pathLower.StartsWith("domainnames", StringComparison.Ordinal)
+            || (pathLower.StartsWith("tags/", StringComparison.Ordinal)
+                && pathLower.Contains("restapis", StringComparison.Ordinal)))
+        {
+            return Task.FromResult(_v1Handler.HandleControlPlane(request));
         }
 
         return Task.FromResult(HandleControlPlane(request));
@@ -80,6 +99,7 @@ internal sealed partial class ApiGatewayV2ServiceHandler : IServiceHandler
         _deployments.Clear();
         _authorizers.Clear();
         _apiTags.Clear();
+        _v1Handler.Reset();
     }
 
     public object? GetState() => null;
