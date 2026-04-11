@@ -686,3 +686,56 @@ CloudWatch Logs tests (22): PutGet, FilterEvents, CreateGroup, CreateGroupDuplic
 
 **Build status:** 0 warnings, 0 errors (Release)
 **Test status:** All 648 tests pass (7 ACM + 22 CloudWatch Logs + 619 existing), 1 skip (IntegrationSnsPublish)
+
+### 2026-04-11 — CloudWatch Metrics Service Handler (Task 34)
+
+**What was done:**
+- Created `src/MicroStack/Services/CloudWatch/CloudWatchServiceHandler.cs` (~2290 lines C#) — complete port of `ministack/services/cloudwatch.py` (1218 lines Python)
+- Registered CloudWatchServiceHandler in `Program.cs`
+- Added `AWSSDK.CloudWatch` NuGet reference to test project
+- Created `tests/MicroStack.Tests/CloudWatchTests.cs` with 24 integration tests
+
+**ServiceName:** `monitoring` (AWS canonical name for CloudWatch)
+**Protocol:** Query/XML (form-encoded) AND smithy-rpc-v2-cbor (AWS SDK v4 default)
+**XML Namespace:** `http://monitoring.amazonaws.com/doc/2010-08-01/`
+
+**All 20 actions ported:**
+- PutMetricData, ListMetrics, GetMetricData, GetMetricStatistics
+- PutMetricAlarm, DescribeAlarms, DescribeAlarmsForMetric, DeleteAlarms
+- PutCompositeAlarm, EnableAlarmActions, DisableAlarmActions
+- SetAlarmState, DescribeAlarmHistory
+- PutDashboard, GetDashboard, ListDashboards, DeleteDashboards
+- TagResource, UntagResource, ListTagsForResource
+
+**CBOR protocol support (major implementation effort):**
+- AWS SDK v4 for CloudWatch uses CBOR by default (binary protocol, not JSON/XML)
+- Requests arrive as `application/cbor` to paths like `/service/GraniteServiceVersion20100801/operation/{Action}`
+- Full CBOR decoder using `System.Formats.Cbor.CborReader` (replaces initial manual byte-level decoder)
+- Full CBOR encoder using `System.Formats.Cbor.CborWriter`
+- `CborEpochTimestamp` marker struct for CBOR tag 1 (epoch-based timestamps) — required by SDK's CBOR unmarshaller
+- `CborTagTimestamps` / `CborTagTimestampsObj` helpers convert dictionaries with DateTime values
+- CBOR responses must use `Dictionary<string, object?>` (not anonymous types) to preserve timestamp tagging
+
+**Key discoveries and fixes:**
+1. **CBOR error type names differ from exception class names**: SDK's CBOR error unmarshaller matches on short names from `__type` field:
+   - `SetAlarmState` → expects `"ResourceNotFound"` (NOT `"ResourceNotFoundException"`)
+   - `GetDashboard` → expects `"DashboardNotFoundError"` (NOT `"ResourceNotFoundException"`)
+   - These must match exactly — any mismatch causes the SDK to fall through to generic `AmazonCloudWatchException`
+2. **CBOR timestamp tagging**: SDK expects DateTime fields encoded with CBOR tag 1 (epoch seconds as double)
+3. **Anonymous types lose CBOR tagging**: Must use `Dictionary<string, object?>` for all CBOR responses containing timestamps
+
+**Test coverage (24 tests):**
+- PutMetricData: PutAndListMetrics, PutListMetricsWithDimensions
+- ListMetrics: ListMetricsNamespace, ListMetricsPagination, ListMetricsAll, ListMetricsDimensionFilter
+- Alarms: PutAndDescribeAlarm, PutCompositeAlarm, DescribeAlarmsPagination, DescribeAlarmsForMetric, AlarmStateTransitions
+- SetAlarmState: SetAlarmStateNotFoundReturnsError (ResourceNotFoundException)
+- AlarmHistory: DescribeAlarmHistory
+- Alarm actions: EnableDisableAlarmActions
+- DeleteAlarms: DeleteAlarms
+- GetMetricData: GetMetricData, GetMetricDataTimeRange
+- GetMetricStatistics: GetMetricStatisticsCompute
+- Dashboards: PutAndGetDashboard, ListDashboards, DeleteDashboard, GetDashboardNotFound (DashboardNotFoundErrorException)
+- Tags: TagAndUntagResource
+
+**Build status:** 0 warnings, 0 errors (Release)
+**Test status:** All 673 tests pass (24 CloudWatch + 648 existing), 1 skip (IntegrationSnsPublish)
