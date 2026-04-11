@@ -7,6 +7,8 @@
   <ItemGroup>
     <PackageReference Include="AWSSDK.APIGateway" Version="4.*" />
     <PackageReference Include="AWSSDK.ApiGatewayV2" Version="4.*" />
+    <PackageReference Include="AWSSDK.CertificateManager" Version="4.*" />
+    <PackageReference Include="AWSSDK.CloudWatchLogs" Version="4.*" />
     <PackageReference Include="AWSSDK.DynamoDBv2" Version="4.*" />
     <PackageReference Include="AWSSDK.EC2" Version="4.*" />
     <PackageReference Include="AWSSDK.ElasticLoadBalancingV2" Version="4.*" />
