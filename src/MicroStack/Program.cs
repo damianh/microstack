@@ -12,6 +12,7 @@ using MicroStack.Services.ApiGateway;
 using MicroStack.Services.Lambda;
 using MicroStack.Services.StepFunctions;
 using MicroStack.Services.Alb;
+using MicroStack.Services.Route53;
 using MicroStack.Services.Sts;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -61,6 +62,7 @@ var sfnHandler = new StepFunctionsServiceHandler(lambdaHandler, registry);
 registry.Register(sfnHandler);
 registry.Register(new Ec2ServiceHandler());
 registry.Register(new AlbServiceHandler());
+registry.Register(new Route53ServiceHandler());
 
 // Health endpoint (multiple aliases for LocalStack compatibility)
 foreach (var healthPath in new[] { "/_ministack/health", "/health", "/_localstack/health" })

@@ -528,3 +528,116 @@
 
 **Build status:** 0 warnings, 0 errors (Release)
 **Test status:** All 556 tests pass (78 EC2 + 478 existing), 1 skip (IntegrationSnsPublish)
+
+### 2026-04-11 — ALB/ELBv2 Service Handler (Task 30)
+
+**What was done:**
+- Created `src/MicroStack/Services/Alb/AlbServiceHandler.cs` (~790 lines C#) — complete port of `ministack/services/alb.py` (1085 lines Python, control plane only)
+- Registered AlbServiceHandler in `Program.cs`
+- Added `AWSSDK.ElasticLoadBalancingV2` NuGet reference to test project
+- Created `tests/MicroStack.Tests/AlbTests.cs` with 32 integration tests
+
+**ServiceName:** `elasticloadbalancing` (canonical name for ELBv2)
+**Protocol:** AWS Query/XML (same pattern as EC2 — form-encoded body with `Action=...`, XML responses)
+**XML Namespace:** `http://elasticloadbalancing.amazonaws.com/doc/2015-12-01/`
+
+**All 26 control plane actions ported:**
+- Load Balancer: CreateLoadBalancer, DescribeLoadBalancers, DeleteLoadBalancer, ModifyLoadBalancerAttributes, DescribeLoadBalancerAttributes, SetSecurityGroups, SetSubnets
+- Target Group: CreateTargetGroup, DescribeTargetGroups, ModifyTargetGroup, DeleteTargetGroup, DescribeTargetGroupAttributes, ModifyTargetGroupAttributes
+- Listener: CreateListener, DescribeListeners, ModifyListener, DeleteListener
+- Rule: CreateRule, DescribeRules, ModifyRule, DeleteRule, SetRulePriorities
+- Target Registration: RegisterTargets, DeregisterTargets, DescribeTargetHealth
+- Tags: AddTags, RemoveTags, DescribeTags
+
+**Key implementation details:**
+- State in AccountScopedDictionary: _lbs, _tgs, _listeners, _rules, _targets, _tags, _lbAttrs, _tgAttrs
+- XML response format: `<ActionResponse xmlns="..."><ActionResult>...</ActionResult><ResponseMetadata>...</ResponseMetadata></ActionResponse>`
+- Error response format: `<ErrorResponse xmlns="..."><Error><Code>...</Code><Message>...</Message></Error></ErrorResponse>`
+- Content-Type: `text/xml` (matching Python source, differs from EC2's `application/xml`)
+- ELBv2 uses `.member.{i}` prefix convention for member lists (not just `.{i}` like EC2)
+- CreateListener auto-creates default rule for the listener
+- Listener creation links target groups to load balancers via LoadBalancerArns
+- DeleteListener cascades to delete all rules for that listener
+- Lock _lock = new() for all mutations
+
+**Data plane NOT ported (by design):**
+- find_lb_for_host, dispatch_request, rule matching, forward/redirect/fixed-response execution
+- Lambda integration (_invoke_lambda_target) — would require data plane routing infrastructure
+- These would be separate tasks if needed
+
+**Test coverage (32 tests):**
+- Load Balancer CRUD: CreateDescribeDeleteLoadBalancer, DescribeLoadBalancerByName, DuplicateLoadBalancerNameThrows
+- LB Attributes: LoadBalancerAttributes (describe + modify + verify)
+- Target Group CRUD: CreateDescribeDeleteTargetGroup, DuplicateTargetGroupNameThrows
+- TG Attributes: TargetGroupAttributes (describe + modify + verify)
+- Modify TG: ModifyTargetGroupUpdatesHealthCheckPath
+- Listener CRUD: ListenerCrud (create + describe + TG linking + modify port + delete)
+- Rule CRUD: RuleCrud (default rule + create custom + delete), DeleteDefaultRuleThrows, SetRulePriorities
+- Target Registration: RegisterDeregisterTargets, RegisterDuplicateTargetIsIdempotent
+- Tags: TagOperations (create with tags + add + describe + remove), AddTagsOverwritesExistingKey, TagsOnTargetGroup, DescribeTagsMultipleResources
+- SetSecurityGroups, SetSubnets
+- Listener actions: ListenerWithFixedResponseAction, ListenerWithRedirectAction
+- ModifyRule: ModifyRuleUpdatesConditionsAndActions
+- Describe by ARN: DescribeRulesByArn, DescribeListenersByArn, DescribeTargetGroupsByName, DescribeTargetGroupsByLoadBalancerArn
+- Error handling: DescribeLoadBalancerAttributesForNonexistentLbThrows, DescribeTargetGroupAttributesForNonexistentTgThrows
+- Cascading deletes: DeleteListenerRemovesAssociatedRules
+- Modify listener actions: ModifyListenerDefaultActions
+
+**Handler fixes needed during testing:** None — handler worked correctly on first implementation.
+
+**Test fixes needed:**
+1. AWS SDK v4 maps error codes to specific exception subtypes (DuplicateLoadBalancerNameException, OperationNotPermittedException, LoadBalancerNotFoundException, TargetGroupNotFoundException, DuplicateTargetGroupNameException) — changed ThrowsAsync type parameters accordingly
+2. SDK v4 collection properties (LoadBalancers, TargetGroups, Listeners, Rules) are null when XML response has empty member sets — used `?? []` null-coalescing pattern
+3. `Rule.IsDefault` is `bool?` not `bool` — used `== true` comparison
+
+**Build status:** 0 warnings, 0 errors (Release)
+**Test status:** All 588 tests pass (32 ALB + 556 existing), 1 skip (IntegrationSnsPublish)
+
+### 2026-04-11 — Route53ServiceHandler Implementation (Task 31)
+
+**What was done:**
+- Created `src/MicroStack/Services/Route53/Route53ServiceHandler.cs` — full port of `ministack/services/route53.py` (953 lines Python → ~780 lines C#)
+- Registered Route53ServiceHandler in `Program.cs`
+- Added `AWSSDK.Route53` NuGet reference to test project
+- Created `tests/MicroStack.Tests/Route53Tests.cs` with 31 integration tests
+
+**What was ported:**
+- REST/XML protocol with path-based routing under `/2013-04-01/`
+- Hosted Zones: CreateHostedZone (with idempotency via CallerReference), GetHostedZone, DeleteHostedZone, ListHostedZones, ListHostedZonesByName, GetHostedZoneCount, UpdateHostedZoneComment
+- Record Sets: ChangeResourceRecordSets (CREATE, UPSERT, DELETE actions), ListResourceRecordSets
+- Alias records support (AliasTarget)
+- Auto-creation of SOA and NS default records on zone creation
+- Pagination support for ListResourceRecordSets (MaxItems, NextRecordName/NextRecordType cursor)
+- Reversed-label sort ordering for DNS names (per Route53 spec)
+- Changes: GetChange
+- Health Checks: CreateHealthCheck (with CallerReference idempotency), GetHealthCheck, DeleteHealthCheck, ListHealthChecks, UpdateHealthCheck
+- Tags: ChangeTagsForResource (add/remove), ListTagsForResource
+- Zone deletion protection (HostedZoneNotEmpty error when non-default records exist)
+- Duplicate CREATE detection (InvalidChangeBatch error)
+- DELETE non-existent record detection (InvalidChangeBatch error)
+- All error responses with proper XML format and error codes
+
+**Architecture notes:**
+- Uses `System.Xml.Linq.XDocument/XElement` for XML parsing and generation (not System.Xml.ElementTree like Python)
+- Uses `[GeneratedRegex]` for path matching patterns
+- Thread-safe via `Lock` object around all state mutations
+- All state stored in `AccountScopedDictionary` for multi-account isolation
+- Nested data model classes (`HostedZone`, `ChangeInfo`, `RecordSet`, `AliasTargetInfo`, `GeoLocationInfo`, `HealthCheck`) are `sealed` with `internal` access
+
+**Tests (31 total):**
+- CreateAndGetHostedZone, CreateZoneIdempotency, ListHostedZones, ListHostedZonesByName
+- DeleteHostedZone, DeleteZoneWithRecordsFails, NoSuchHostedZone
+- ChangeResourceRecordSetsCreate, ListResourceRecordSets, UpsertRecord, DeleteRecord
+- ListResourceRecordSetsStartNameUsesReversedLabelOrder
+- ListResourceRecordSetsTruncatedNextRecordUsesNextPageStart
+- ListResourceRecordSetsPaginationAdvancesWithNextRecordCursor
+- GetChange, AliasRecord, UpsertIsIdempotent, CreateRecordDuplicateFails
+- CreateHealthCheck, ListHealthChecks, DeleteHealthCheck, HealthCheckIdempotency, UpdateHealthCheck
+- TagsForHostedZone, GetHostedZoneCount, CreateHostedZoneWithConfig, MultipleRecordTypes
+- UpsertCreatesWhenNotExist, DeleteDeletedRecordFails
+- ChangeRecordSetsOnNonExistentZoneFails, ListResourceRecordSetsOnNonExistentZoneFails
+
+**Handler fixes needed during testing:** None — handler worked correctly on first implementation.
+
+**Build status:** 0 warnings, 0 errors (Release)
+**Test status:** All 619 tests pass (31 Route53 + 588 existing), 1 skip (IntegrationSnsPublish)
