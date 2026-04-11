@@ -416,7 +416,8 @@ internal sealed partial class AwsServiceRouter
             return "cloudfront";
         if (pathLower.StartsWith("/2013-04-01/", StringComparison.Ordinal))
             return "route53";
-        if (pathLower.StartsWith("/v2/apis", StringComparison.Ordinal))
+        if (pathLower.StartsWith("/v2/apis", StringComparison.Ordinal)
+            || pathLower.StartsWith("/v2/tags", StringComparison.Ordinal))
             return "apigateway";
         if (pathLower.StartsWith("/restapis", StringComparison.Ordinal)
             || pathLower.StartsWith("/apikeys", StringComparison.Ordinal)

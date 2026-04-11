@@ -2384,6 +2384,68 @@ internal sealed class LambdaServiceHandler : IServiceHandler
         }
     }
 
+    /// <summary>
+    /// Invokes a Lambda function for API Gateway proxy integration.
+    /// Returns the raw response payload bytes (the Lambda function's return value serialized as JSON).
+    /// </summary>
+    internal (bool Success, byte[]? ResponsePayload, string? Error) InvokeForApiGateway(
+        string functionArnOrName, byte[] eventPayload)
+    {
+        var funcName = functionArnOrName;
+        if (funcName.Contains(':'))
+        {
+            var parts = funcName.Split(':');
+            funcName = parts[^1];
+        }
+        funcName = funcName.Replace("/invocations", "");
+
+        string name;
+        Dictionary<string, object?> config;
+        byte[]? codeZip;
+        string runtime;
+
+        lock (_lock)
+        {
+            (name, _) = ParseFunctionReference(funcName);
+            if (!_functions.TryGetValue(name, out var record))
+            {
+                return (false, null, $"Lambda function '{funcName}' not found");
+            }
+
+            config = record.Config;
+            codeZip = record.CodeZip;
+            runtime = config.TryGetValue("Runtime", out var rtVal) ? rtVal?.ToString() ?? "" : "";
+        }
+
+        if (codeZip is null || codeZip.Length == 0 || !IsSupportedRuntime(runtime))
+        {
+            return (true, JsonSerializer.SerializeToUtf8Bytes(new Dictionary<string, object?>
+            {
+                ["statusCode"] = 200,
+                ["body"] = "Mock response",
+            }), null);
+        }
+
+        try
+        {
+            var requestId = HashHelpers.NewUuid();
+            var worker = _workerPool.GetOrCreate(name, config, codeZip);
+            var result = worker.Invoke(eventPayload, requestId);
+            if (!result.Success)
+            {
+                return (false, null, result.Error ?? "Invocation failed");
+            }
+            var responseBytes = result.ResultJson is not null
+                ? Encoding.UTF8.GetBytes(result.ResultJson)
+                : Encoding.UTF8.GetBytes("null");
+            return (true, responseBytes, null);
+        }
+        catch (Exception ex)
+        {
+            return (false, null, ex.Message);
+        }
+    }
+
     // -- Function URL Config ---------------------------------------------------
 
     private ServiceResponse HandleCreateFunctionUrlConfig(string funcName, ServiceRequest request)

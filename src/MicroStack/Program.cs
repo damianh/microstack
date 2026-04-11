@@ -7,6 +7,7 @@ using MicroStack.Services.Sqs;
 using MicroStack.Services.SecretsManager;
 using MicroStack.Services.Ssm;
 using MicroStack.Services.Kms;
+using MicroStack.Services.ApiGateway;
 using MicroStack.Services.Lambda;
 using MicroStack.Services.Sts;
 
@@ -50,7 +51,9 @@ registry.Register(new StsServiceHandler(iamHandler));
 registry.Register(new SecretsManagerServiceHandler());
 registry.Register(new SsmServiceHandler());
 registry.Register(new KmsServiceHandler());
-registry.Register(new LambdaServiceHandler(sqsHandler, ddbHandler));
+var lambdaHandler = new LambdaServiceHandler(sqsHandler, ddbHandler);
+registry.Register(lambdaHandler);
+registry.Register(new ApiGatewayV2ServiceHandler(lambdaHandler));
 
 // Health endpoint (multiple aliases for LocalStack compatibility)
 foreach (var healthPath in new[] { "/_ministack/health", "/health", "/_localstack/health" })
