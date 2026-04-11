@@ -641,3 +641,48 @@
 
 **Build status:** 0 warnings, 0 errors (Release)
 **Test status:** All 619 tests pass (31 Route53 + 588 existing), 1 skip (IntegrationSnsPublish)
+
+### 2026-04-11 — ACM (Task 32) + CloudWatch Logs (Task 33) Implementation
+
+**What was done:**
+- Created `src/MicroStack/Services/Acm/AcmServiceHandler.cs` — port of `ministack/services/acm.py` (253 lines Python → ~400 lines C#)
+- Created `src/MicroStack/Services/CloudWatchLogs/CloudWatchLogsServiceHandler.cs` — port of `ministack/services/cloudwatch_logs.py` (873 lines Python → ~1100 lines C#)
+- Registered both handlers in `Program.cs`
+- Added `AWSSDK.CertificateManager` and `AWSSDK.CloudWatchLogs` NuGet references to test project
+
+**ACM handler actions ported (12):**
+- RequestCertificate, DescribeCertificate, ListCertificates, DeleteCertificate
+- GetCertificate, ImportCertificate
+- AddTagsToCertificate, RemoveTagsFromCertificate, ListTagsForCertificate
+- UpdateCertificateOptions, RenewCertificate, ResendValidationEmail
+
+**CloudWatch Logs handler actions ported (30):**
+- CreateLogGroup, DeleteLogGroup, DescribeLogGroups
+- CreateLogStream, DeleteLogStream, DescribeLogStreams
+- PutLogEvents, GetLogEvents, FilterLogEvents
+- PutRetentionPolicy, DeleteRetentionPolicy
+- TagLogGroup, UntagLogGroup, ListTagsLogGroup (legacy)
+- TagResource, UntagResource, ListTagsForResource (modern ARN-based)
+- PutSubscriptionFilter, DeleteSubscriptionFilter, DescribeSubscriptionFilters
+- PutMetricFilter, DeleteMetricFilter, DescribeMetricFilters
+- PutDestination, DeleteDestination, DescribeDestinations, PutDestinationPolicy
+- StartQuery, GetQueryResults, StopQuery (Insights stubs)
+
+**Tests written:**
+ACM tests (7): RequestCertificate, DescribeCertificate, ListCertificates, Tags,
+  GetCertificate, ImportCertificate, DeleteCertificate, DescribeCertificateNotFound
+
+CloudWatch Logs tests (22): PutGet, FilterEvents, CreateGroup, CreateGroupDuplicate,
+  DeleteGroup, DescribeGroups, CreateStream, PutGetEventsV2, RetentionPolicy,
+  RetentionPolicyInvalidValue, TagsLegacy, PutRequiresGroup, SubscriptionFilter,
+  MetricFilter, InsightsStartQuery, DescribeLogGroupsPrefix, ListTagsForResourceArnWithoutStar,
+  GetLogEventsPaginationStops, FilterWithWildcard, TagResource, DestinationCrud
+
+**Notable decisions:**
+- Legacy tag APIs (TagLogGroup, UntagLogGroup, ListTagsLogGroup) marked `[Obsolete]` with error=true in SDK v4; tests use `#pragma warning disable CS0618` to test these
+- ARN resolution for ListTagsForResource strips trailing `:*` to match Terraform behavior
+- Filter pattern compilation supports include/exclude terms (e.g., "ERROR -DEBUG")
+- GetLogEvents pagination returns caller's token when at end of stream (SDK stop-pagination pattern)
+
+**Build status:** 0 warnings, 0 errors (Release)
+**Test status:** All 648 tests pass (7 ACM + 22 CloudWatch Logs + 619 existing), 1 skip (IntegrationSnsPublish)
