@@ -200,3 +200,106 @@ Actions: CreateFileSystem, DescribeFileSystems, DeleteFileSystem, UpdateFileSyst
 
 **Build result:** 0 warnings, 0 errors
 **Test result:** 1008 passed, 1 skipped (pre-existing), 0 failed (17 SES + 9 WAF + 8 EFS = 34 new tests)
+
+### 2026-04-12 - Add AppSync, CloudFront, EMR, ServiceDiscovery handlers + tests, fix build errors
+
+**What was done:**
+- Created `tests/MicroStack.Tests/ServiceDiscoveryTests.cs` — 16 integration tests porting Python tests from `tests/test_servicediscovery.py`
+- Registered AppSync, CloudFront, EMR, ServiceDiscovery handlers in `Program.cs`
+- Added `AWSSDK.AppSync`, `AWSSDK.CloudFront`, `AWSSDK.ServiceDiscovery` NuGet packages (already present)
+
+**Build errors fixed (3):**
+1. `AppSyncTests.cs(310)` — `ListTypesRequest.Format` expected `TypeDefinitionFormat` not `OutputType` (SDK v4 type mismatch)
+2. `CloudFrontTests.cs(82,87)` — `ForwardedValues` and `MinTTL` deprecated as error in Release mode. Replaced with `CachePolicyId`
+
+**Pre-existing CloudFront test failures fixed (4):**
+- `DeleteDistribution`, `DeleteEnabledDistribution`, `GetNonexistent`, `UpdateDistributionEtagMismatch`
+- Root cause: `Assert.ThrowsAsync<AmazonCloudFrontException>` but SDK v4 throws specific subclasses
+- Fix: Use `NoSuchDistributionException`, `DistributionNotDisabledException`, `PreconditionFailedException`
+
+**ServiceDiscovery tests (16):**
+- FullServiceDiscoveryFlow: Create private DNS namespace → create service → register instance → discover instances → list operations → deregister & delete (with Route53 hosted zone verification)
+- TagOperations: Create HTTP namespace with tags → list/add/remove tags
+- ServiceAttributesCrud: Update/get/delete service attributes
+- NamespaceAndServiceUpdate: Update private DNS namespace & service, verify operations listing
+- InstanceHealthAndRevision: Register instance, update custom health status, verify health filter, check instances revision counter
+- CreateHttpNamespaceWithProperties: Verify HTTP namespace type
+- CreatePublicDnsNamespace: Verify public DNS namespace + hosted zone creation
+- GetInstance: Register and retrieve specific instance by ID
+- GetService: Create and retrieve service by ID
+- DiscoverInstancesHealthFilter: Two instances with different health, filter by HEALTHY/UNHEALTHY/ALL
+- CreateServiceWithTags: Service creation with tags, verify via ListTagsForResource
+- UpdateHttpNamespace: Update description of HTTP namespace
+- UpdatePublicDnsNamespace: Update public DNS namespace
+- DeleteNamespaceNotFound: Verify NamespaceNotFoundException for nonexistent ID
+- DeleteServiceNotFound: Verify ServiceNotFoundException for nonexistent ID
+- ListOperationsWithFilter: Filter operations by STATUS=SUCCESS
+
+**Key implementation notes:**
+- ServiceDiscovery uses JSON protocol via X-Amz-Target header (Route53CloudMap_20170314.ActionName)
+- ServiceDiscovery handler takes Route53ServiceHandler dependency for DNS namespace→hosted zone integration
+- SDK v4 `DiscoverInstances` sends requests to `data-servicediscovery.{region}.amazonaws.com` (different host) — works through the test infrastructure
+- Disambiguated `Tag`/`ListTagsForResourceRequest` types between Route53 and ServiceDiscovery via `using Tag = Amazon.ServiceDiscovery.Model.Tag`
+
+**Build result:** 0 warnings, 0 errors
+**Test result:** 1057 passed, 1 skipped (pre-existing), 0 failed (16 new ServiceDiscovery tests + 4 CloudFront fixes)
+
+### 2026-04-12 - Port Cognito Service Handlers from Python
+
+**What was done:**
+- Created `src/MicroStack/Services/Cognito/CognitoIdpServiceHandler.cs` (~2176 lines) — Cognito Identity Provider (User Pools)
+- Created `src/MicroStack/Services/Cognito/CognitoIdentityServiceHandler.cs` (~350 lines) — Cognito Identity (Identity Pools)
+- Created `tests/MicroStack.Tests/CognitoTests.cs` (~1743 lines, 55 integration tests)
+- Modified `src/MicroStack/Program.cs` — registered both handlers
+- Modified `tests/MicroStack.Tests/MicroStack.Tests.csproj` — added AWSSDK.CognitoIdentityProvider and AWSSDK.CognitoIdentity NuGet packages
+
+**CognitoIdpServiceHandler actions implemented (37 total):**
+- User Pool CRUD: CreateUserPool, DescribeUserPool, ListUserPools, UpdateUserPool, DeleteUserPool
+- User Pool Client CRUD: CreateUserPoolClient, DescribeUserPoolClient, ListUserPoolClients, UpdateUserPoolClient, DeleteUserPoolClient
+- User management: AdminCreateUser, AdminGetUser, AdminDeleteUser, AdminSetUserPassword, AdminEnableUser, AdminDisableUser, AdminUpdateUserAttributes, AdminConfirmSignUp, ListUsers
+- Auth flows: AdminInitiateAuth, InitiateAuth, RespondToAuthChallenge, AdminRespondToAuthChallenge, AdminUserGlobalSignOut, GlobalSignOut, RevokeToken
+- Self-service: SignUp, ConfirmSignUp, ForgotPassword, ConfirmForgotPassword, ChangePassword, GetUser, DeleteUser, UpdateUserAttributes
+- Groups: CreateGroup, DeleteGroup, GetGroup, ListGroups, AdminAddUserToGroup, AdminRemoveUserFromGroup, AdminListGroupsForUser, ListUsersInGroup
+- Domains: CreateUserPoolDomain, DeleteUserPoolDomain, DescribeUserPoolDomain
+- MFA: GetUserPoolMfaConfig, SetUserPoolMfaConfig, AssociateSoftwareToken, VerifySoftwareToken, AdminSetUserMFAPreference, SetUserMFAPreference
+- Tags: TagResource, UntagResource, ListTagsForResource
+- Well-known endpoints: JWKS (/.well-known/jwks.json), OpenID Configuration (/.well-known/openid-configuration)
+- OAuth2: Token endpoint (/oauth2/token)
+- RSA JWT token generation with real RSA signing
+
+**CognitoIdentityServiceHandler actions implemented (10 total):**
+- Identity Pool CRUD: CreateIdentityPool, DescribeIdentityPool, ListIdentityPools, UpdateIdentityPool, DeleteIdentityPool
+- Identity operations: GetId, GetCredentialsForIdentity, GetOpenIdToken, DescribeIdentity, ListIdentities
+- Roles: SetIdentityPoolRoles, GetIdentityPoolRoles
+- Developer identities: MergeDeveloperIdentities
+
+**Test coverage (55 tests):**
+- CreateAndDescribeUserPool, ListUserPools, UpdateUserPool, DeleteUserPool
+- CreateAndDescribeUserPoolClient, ListUserPoolClients, UpdateUserPoolClient, ClientSecretGenerated
+- AdminCreateAndGetUser, AdminDeleteUser, AdminSetUserPassword, ListUsers, ListUsersFilter, DuplicateUsernameError
+- AdminInitiateAuthUserPasswordAuth, InitiateAuthWrongPassword, SignUpAndConfirm
+- RespondToAuthChallengeNewPassword, ForgotAndConfirmPassword, ChangePassword
+- AdminDisableAndEnableUser, AdminUserGlobalSignOut, RevokeToken
+- RefreshTokenAuthCorrectUser, RefreshTokenAlias
+- GroupCrudAndMembership, ListUsersInGroup
+- UserPoolDomainCrud
+- MfaConfig, AssociateAndVerifySoftwareToken, AdminGetUserMfaFields
+- Tags
+- IdentityPoolCrud, GetIdAndCredentials, IdentityPoolRoles, ListIdentities, GetOpenIdToken
+- DescribeIdentity, MergeDeveloperIdentities, CredentialsSecretAccessKey
+- JwksEndpoint, OpenIdConfigurationEndpoint
+- DeleteUserSelf, GetUserSelf, UpdateUserAttributesSelf
+- AdminUpdateUserAttributes, AdminConfirmSignUp
+- OAuth2TokenEndpoint, GlobalSignOut
+- MfaPreferences, AdminListGroupsForUser, UserPoolDomainDescribeNonExistent
+- ListUserPoolClientsEmpty, AdminRespondToAuthChallenge
+
+**Key implementation notes:**
+- Both Cognito services use JSON protocol via X-Amz-Target header (same as KMS)
+- CognitoIdentityServiceHandler takes CognitoIdpServiceHandler as dependency (for GetOpenIdToken JWT generation)
+- RSA key pair generated per user pool for JWT signing
+- Disambiguated conflicting types (NotAuthorizedException, TagResourceRequest, etc.) between CognitoIdentity.Model and CognitoIdentityProvider.Model using type aliases
+- UserPoolType.Name property (not PoolName) in AWS SDK v4
+
+**Build result:** 0 warnings, 0 errors
+**Test result:** 1112 passed, 1 skipped (pre-existing), 0 failed (55 new Cognito tests)
