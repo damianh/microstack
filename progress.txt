@@ -789,3 +789,94 @@ The AWS SDK for ElastiCache expects specific XML element names for list items, N
 
 **Build status:** 0 warnings, 0 errors (Release)
 **Test status:** All 843 tests pass (25 ElastiCache + 18 ECR + 16 RDS Data + 784 existing), 1 skip (IntegrationSnsPublish)
+
+### 2026-04-12 — CloudFormation Service Handler (Task 42)
+
+**What was done:**
+- Created `src/MicroStack/Services/CloudFormation/CloudFormationServiceHandler.cs` (~2148 lines C#) — complete port of all 7 Python files in `ministack/services/cloudformation/` (~3395 lines Python)
+- Created `src/MicroStack/Services/CloudFormation/CloudFormationProvisioners.cs` (~1345 lines C#) — resource provisioners for all supported resource types
+- Registered CloudFormationServiceHandler in `Program.cs`
+- Added `AWSSDK.CloudFormation` NuGet reference to test project
+- Created `tests/MicroStack.Tests/CloudFormationTests.cs` with 32 integration tests
+- Fixed S3 `ParseBucketKey` to handle virtual-host without `.s3` subdomain (bucket.localhost:port)
+
+**ServiceName:** `cloudformation`
+**Protocol:** Query/XML (form-encoded body with `Action=...`, XML responses)
+**XML Namespace:** `http://cloudformation.amazonaws.com/doc/2010-05-15/`
+
+**All 21 CloudFormation actions ported:**
+- Stack CRUD: CreateStack, DescribeStacks, UpdateStack, DeleteStack, ListStacks
+- Stack events: DescribeStackEvents
+- Stack resources: DescribeStackResource, DescribeStackResources, ListStackResources
+- Templates: GetTemplateSummary, ValidateTemplate, GetTemplate
+- Change sets: CreateChangeSet, DescribeChangeSet, ExecuteChangeSet, DeleteChangeSet, ListChangeSets
+- Exports/Imports: ListExports, ListImports
+- Stack policies: UpdateTerminationProtection, SetStackPolicy, GetStackPolicy
+
+**All 16 intrinsic functions ported:**
+- Ref, Fn::GetAtt, Fn::Join, Fn::Sub, Fn::Select, Fn::Split, Fn::If
+- Fn::Equals, Fn::Not, Fn::And, Fn::Or, Fn::Base64
+- Fn::FindInMap, Fn::ImportValue, Fn::GetAZs, Fn::Cidr
+
+**Resource provisioners for all supported types:**
+- S3: Bucket, BucketPolicy
+- SQS: Queue
+- SNS: Topic, Subscription
+- DynamoDB: Table (with GSI)
+- Lambda: Function, Permission, Version, EventSourceMapping, Alias
+- IAM: Role, Policy, InstanceProfile, ManagedPolicy
+- SSM: Parameter
+- CloudWatch Logs: LogGroup
+- EventBridge: Rule
+- Kinesis: Stream
+- SecretsManager: Secret
+- KMS: Key
+- EC2: VPC, Subnet, SecurityGroup, InternetGateway, RouteTable, LaunchTemplate
+- ECR: Repository
+- ECS: Cluster
+- ELBv2: LoadBalancer, Listener, TargetGroup
+- Cognito: UserPool, UserPoolClient, IdentityPool
+- CloudFormation: WaitCondition, WaitConditionHandle, CustomResource (no-ops)
+
+**Key implementation details:**
+- Dependency extraction and topological sort for resource ordering (handles Ref, Fn::GetAtt, DependsOn)
+- Stack rollback on failure with resource cleanup (create rollback + update rollback with previous state restore)
+- Change set lifecycle (create, describe, execute, delete, list)
+- Stack exports/imports with cross-stack validation
+- Conditions evaluation and conditional resource creation
+- Deep clone helpers for template/property manipulation
+- NoValue sentinel object for Fn::If with AWS::NoValue
+- All provisioners use ServiceRequest/ServiceResponse protocol to call target handlers synchronously
+- Python's async deploy → C# synchronous deploy within lock (simpler, matches test patterns)
+
+**Bugs found and fixed during testing:**
+1. **S3BucketPolicy provisioner**: Was embedding `?policy` in URL path instead of QueryParams dict — S3 handler checks QueryParams, not path. Fixed to pass `{"policy": [""]}` in QueryParams.
+2. **Lambda provisioner**: Was passing raw ZipFile source code to Lambda handler, which expects base64-encoded data. Fixed to base64-encode ZipFile content before sending.
+3. **S3 ParseBucketKey virtual-host**: AWS SDK v4 sends requests to `bucket.localhost:port` (without `.s3`), but S3 handler regex only matched `bucket.s3.` pattern. Added second regex for `bucket.localhost:port` pattern.
+4. **DeployStack optional parameters**: Had `bool isUpdate = false, Dictionary<string, object?>? previousStack = null` — violated coding standard. Replaced with overloads.
+5. **Null Buckets collection**: AWS SDK v4 returns `null` for `ListBucketsResponse.Buckets` when no buckets exist. Test helpers updated to use `?? []` pattern.
+6. **Null Stacks collection**: Same issue with `DescribeStacksResponse.Stacks` after all stacks deleted.
+
+**Test coverage (32 tests):**
+- Stack CRUD: CreateDescribeDeleteStack, StackWithParameters, DeleteNonexistentStackSucceeds
+- Conditions: ConditionsCreateAndSkip
+- Outputs/Exports: OutputsAndExports, ImportNonexistentExportFails
+- Intrinsics: IntrinsicRefGetAtt, FnSub
+- Multi-resource: MultiResourceDependencies, MultiResourceStackWithS3LambdaDynamoDB
+- Change sets: ChangeSetLifecycle
+- Stack events: StackEvents
+- Auto-naming: AutoNameS3FollowsAwsPattern, AutoNameSqsFollowsAwsPattern, AutoNameDynamoDbFollowsAwsPattern, ExplicitNameNotOverridden
+- Rollback: RollbackOnFailure, UpdateRollbackOnFailure
+- Update: UpdateStack
+- List/Describe: ListStacks, ListStackResources, DescribeStackResource
+- Template: GetTemplate, GetTemplateSummary, ValidateTemplate
+- CDK: CdkBootstrapResources
+- Wait: WaitConditionNoOp
+- Kinesis: KinesisStream
+- S3BucketPolicy
+- SecretsManager: SecretsManagerGenerateSecretString
+- EC2: Ec2LaunchTemplate
+- ELBv2: ElbV2LoadBalancerAndListener
+
+**Build status:** 0 warnings, 0 errors (Release)
+**Test status:** All 1144 tests pass (32 CloudFormation + 1112 existing), 1 skip (IntegrationSnsPublish)
