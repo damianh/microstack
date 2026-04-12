@@ -739,3 +739,53 @@ CloudWatch Logs tests (22): PutGet, FilterEvents, CreateGroup, CreateGroupDuplic
 
 **Build status:** 0 warnings, 0 errors (Release)
 **Test status:** All 673 tests pass (24 CloudWatch + 648 existing), 1 skip (IntegrationSnsPublish)
+
+### 2026-04-12 — ElastiCache, ECR, RDS Data API Service Handlers (Tasks 38, 39, 40)
+
+**What was done:**
+- Created `src/MicroStack/Services/ElastiCache/ElastiCacheServiceHandler.cs` (~1603 lines C#) — complete port of `ministack/services/elasticache.py` (1338 lines Python)
+- Created `src/MicroStack/Services/Ecr/EcrServiceHandler.cs` (~842 lines C#) — complete port of `ministack/services/ecr.py` (602 lines Python)
+- Created `src/MicroStack/Services/RdsData/RdsDataServiceHandler.cs` (~185 lines C#) — complete port of `ministack/services/rds_data.py` (454 lines Python)
+- Registered all three handlers in `Program.cs` with `using` statements
+- Updated `AwsRequestMiddleware.cs` to add `/BatchExecute` to RDS Data API path routing
+- Added `AWSSDK.ElastiCache`, `AWSSDK.ECR`, `AWSSDK.RDSDataService` NuGet packages to test project
+- Created `tests/MicroStack.Tests/ElastiCacheTests.cs` with 25 integration tests
+- Created `tests/MicroStack.Tests/EcrTests.cs` with 18 integration tests
+- Created `tests/MicroStack.Tests/RdsDataTests.cs` with 16 integration tests (raw HTTP, no SDK)
+
+**ElastiCache handler (Query/XML protocol):**
+Actions ported: CreateCacheCluster, DeleteCacheCluster, DescribeCacheClusters, ModifyCacheCluster, RebootCacheCluster, CreateReplicationGroup, DeleteReplicationGroup, DescribeReplicationGroups, ModifyReplicationGroup, IncreaseReplicaCount, DecreaseReplicaCount, CreateCacheSubnetGroup, DescribeCacheSubnetGroups, DeleteCacheSubnetGroup, ModifyCacheSubnetGroup, CreateCacheParameterGroup, DescribeCacheParameterGroups, DeleteCacheParameterGroup, DescribeCacheParameters, ModifyCacheParameterGroup, ResetCacheParameterGroup, CreateUser, DescribeUsers, DeleteUser, ModifyUser, CreateUserGroup, DescribeUserGroups, DeleteUserGroup, ModifyUserGroup, DescribeCacheEngineVersions, ListTagsForResource, AddTagsToResource, RemoveTagsFromResource, CreateSnapshot, DeleteSnapshot, DescribeSnapshots, DescribeEvents
+
+**ECR handler (JSON protocol via X-Amz-Target):**
+Actions ported: CreateRepository, DeleteRepository, DescribeRepositories, PutImage, BatchGetImage, ListImages, BatchDeleteImage, DescribeImages, GetLifecyclePolicy, PutLifecyclePolicy, DeleteLifecyclePolicy, PutImageTagMutability, PutImageScanningConfiguration, SetRepositoryPolicy, GetRepositoryPolicy, DeleteRepositoryPolicy, TagResource, UntagResource, ListTagsForResource, GetAuthorizationToken
+
+**RDS Data API handler (REST/JSON protocol):**
+Actions ported: ExecuteStatement, BatchExecuteStatement
+
+**Critical discovery — AWS SDK for .NET ElastiCache XML element names:**
+The AWS SDK for ElastiCache expects specific XML element names for list items, NOT the generic `<member>` tag that Python's boto3 uses. Applied 15+ fixes:
+- `CacheClusters/CacheCluster` (not `<member>`)
+- `CacheNodes/CacheNode` (not `<member>`)
+- `ReplicationGroups/ReplicationGroup` (not `<member>`)
+- `NodeGroups/NodeGroup` (not `<member>`)
+- `NodeGroupMembers/NodeGroupMember` (not `<member>`)
+- `CacheSubnetGroups/CacheSubnetGroup` (not `<member>`)
+- `CacheParameterGroups/CacheParameterGroup` (not `<member>`)
+- `Parameters/Parameter` (not `<member>`)
+- `CacheEngineVersions/CacheEngineVersion` (not `<member>`)
+- `Snapshots/Snapshot` (not `<member>`)
+- `NodeSnapshots/NodeSnapshot` (not `<member>`)
+- `TagList/Tag` (not `<member>`)
+- Users/member ✅, UserGroups/member ✅, SecurityGroups/member ✅, UserGroupIds/member ✅ — these DO use `<member>`
+
+**Error code fixes:**
+- `UserNotFoundFault` → `UserNotFound` (SDK expects `UserNotFound`)
+- `UserGroupNotFoundFault` → `UserGroupNotFound` (SDK expects `UserGroupNotFound`)
+
+**Test coverage:**
+- ElastiCache (25 tests): CreateDescribeCacheCluster, DescribeAllCacheClusters, DescribeCacheClusterNotFound, DeleteCacheCluster, ModifyCacheCluster, RebootCacheCluster, ReplicationGroupCrud, DescribeReplicationGroups, ModifyReplicationGroup, IncreaseDecreaseReplicaCount, CreateDescribeCacheSubnetGroup, DeleteCacheSubnetGroup, ModifyCacheSubnetGroup, CreateAndDescribeCacheParameterGroup, DeleteCacheParameterGroup, DescribeCacheParameters, ModifyCacheParameterGroup, ResetCacheParameterGroup, DescribeCacheEngineVersions, CreateUser, CreateUserGroup, DescribeUsers, SnapshotCrud, Tags, DescribeEvents
+- ECR (18 tests): CreateRepository, DuplicateRepositoryThrows, DescribeRepositories, DeleteRepository, PutAndBatchGetImage, ListImages, BatchDeleteImage, DescribeImages, LifecyclePolicy, ImageTagMutability, ImageScanningConfiguration, RepositoryPolicy, Tags, GetAuthorizationToken, PutAndListMultipleImages, DescribeRepositoriesByName, BatchGetImageNotFound, DeleteRepositoryNonExistent
+- RDS Data (16 tests): raw HTTP tests for ExecuteStatement, BatchExecuteStatement, select/insert/update/delete, parameterized queries, type casting, path routing, error handling
+
+**Build status:** 0 warnings, 0 errors (Release)
+**Test status:** All 843 tests pass (25 ElastiCache + 18 ECR + 16 RDS Data + 784 existing), 1 skip (IntegrationSnsPublish)
