@@ -17,6 +17,8 @@
     <PackageReference Include="AWSSDK.ElastiCache" Version="4.*" />
     <PackageReference Include="AWSSDK.ElasticLoadBalancingV2" Version="4.*" />
     <PackageReference Include="AWSSDK.EventBridge" Version="4.*" />
+    <PackageReference Include="AWSSDK.Glue" Version="4.*" />
+    <PackageReference Include="AWSSDK.Athena" Version="4.*" />
     <PackageReference Include="AWSSDK.Kinesis" Version="4.*" />
     <PackageReference Include="AWSSDK.KinesisFirehose" Version="4.*" />
     <PackageReference Include="AWSSDK.KeyManagementService" Version="4.*" />

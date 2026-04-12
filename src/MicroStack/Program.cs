@@ -25,6 +25,8 @@ using MicroStack.Services.RdsData;
 using MicroStack.Services.EventBridge;
 using MicroStack.Services.Kinesis;
 using MicroStack.Services.Firehose;
+using MicroStack.Services.Glue;
+using MicroStack.Services.Athena;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -85,6 +87,8 @@ registry.Register(new RdsDataServiceHandler());
 registry.Register(new EventBridgeServiceHandler());
 registry.Register(new KinesisServiceHandler());
 registry.Register(new FirehoseServiceHandler());
+registry.Register(new GlueServiceHandler());
+registry.Register(new AthenaServiceHandler());
 
 // Health endpoint (multiple aliases for LocalStack compatibility)
 foreach (var healthPath in new[] { "/_ministack/health", "/health", "/_localstack/health" })
