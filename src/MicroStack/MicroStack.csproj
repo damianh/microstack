@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <AssemblyName>MicroStack</AssemblyName>
+    <RootNamespace>MicroStack</RootNamespace>
+  </PropertyGroup>
+
+  <!-- OCI container image publishing via 'dotnet publish /t:PublishContainer' -->
+  <PropertyGroup>
+    <ContainerBaseImage>mcr.microsoft.com/dotnet/aspnet:10.0-alpine</ContainerBaseImage>
+    <ContainerRepository>microstack</ContainerRepository>
+    <ContainerImageTag>latest</ContainerImageTag>
+    <!-- Multi-arch: amd64 + arm64 -->
+    <ContainerRuntimeIdentifiers>linux-musl-x64;linux-musl-arm64</ContainerRuntimeIdentifiers>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ContainerPort Include="4566" Type="tcp" />
+    <ContainerEnvironmentVariable Include="ASPNETCORE_HTTP_PORTS" Value="4566" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="MicroStack.Tests" />
+  </ItemGroup>
+
+</Project>

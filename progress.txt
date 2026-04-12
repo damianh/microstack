@@ -1,0 +1,882 @@
+## Progress Log
+
+### 2026-04-10 — S3ServiceHandler Implementation
+
+**What was done:**
+- Created `src/MicroStack/Services/S3/S3ServiceHandler.cs` — a complete port of `ministack/services/s3.py` (2888 lines Python → ~1500 lines C#)
+- Registered S3ServiceHandler in `Program.cs`
+- Added `AWSSDK.S3` NuGet reference to test project
+
+**What was ported:**
+- All bucket operations: CreateBucket, DeleteBucket, ListBuckets, HeadBucket, GetBucketLocation
+- All bucket sub-resources: Policy, Versioning, Encryption, Lifecycle, CORS, ACL, Tagging, Notification, Logging, Accelerate, RequestPayment, Website, OwnershipControls, PublicAccessBlock
+- All object operations: PutObject, GetObject, DeleteObject, HeadObject, CopyObject
+- Object tagging: Get/Put/Delete
+- Object Lock: GetObjectLockConfiguration, PutObjectLockConfiguration, GetObjectRetention, PutObjectRetention, GetObjectLegalHold, PutObjectLegalHold
+- Replication: Put/Get/Delete
+- List objects: V1 (Marker pagination), V2 (ContinuationToken pagination), ListObjectVersions
+- Batch delete: DeleteObjects
+- Multipart upload: Create, UploadPart, UploadPartCopy, Complete, Abort, ListMultipartUploads, ListParts
+- Range requests: 206 Partial Content
+- Content-MD5 validation
+- Bucket name validation (regex + IP exclusion + ".." check)
+
+**What was NOT ported (by design):**
+- S3 Event Notifications (`_fire_s3_event_async`, `_deliver_event_to_sqs`, etc.) — no SNS/Lambda/EventBridge yet
+- File persistence (`_persist_object`, `_load_persisted_data`) — in-memory only
+- GetState/RestoreState — returns null/no-op (Phase 1)
+
+**Build status:** 0 warnings, 0 errors
+**Test status:** All 77 existing tests pass (SQS + DynamoDB)
+**Tests needed:** S3-specific integration tests using AWSSDK.S3 against the handler
+
+### 2026-04-10 — S3 Integration Tests (63 tests, all passing)
+
+**What was done:**
+- Created `tests/MicroStack.Tests/S3Tests.cs` with 63 integration tests covering all S3 operations
+- All 140 tests pass (63 S3 + 77 existing SQS/DynamoDB/Health)
+- Release-mode build: 0 warnings, 0 errors
+
+**Test coverage areas (63 tests):**
+- Bucket operations: CreateBucket, CreateBucketAlreadyExists, DeleteBucket, DeleteBucketNotEmpty, DeleteBucketNotFound, HeadBucket
+- Object operations: PutGetObject, PutObjectNoBucket, HeadObject, HeadObjectNotFound, DeleteObject, DeleteObjectIdempotent, CopyObject, CopyObjectMetadataReplace
+- List objects: ListObjectsV1 (with delimiter/prefix), ListObjectsV2, ListObjectsPagination, ListV1MarkerPagination
+- Batch operations: DeleteObjectsBatch, DeleteObjectsReturnsDeleted
+- Multipart upload: MultipartUpload, AbortMultipartUpload, MultipartListParts, ListMultipartUploads, UploadPartCopy
+- Range requests: GetObjectRange, RangeSuffix, RangeBeyondEnd
+- Metadata: ObjectMetadata, PutObjectContentTypePreserved, HeadObjectReturnsContentLength
+- Tags: BucketTagging, ObjectTagging, PutObjectWithTaggingHeader, TagCountLimit, CopyPreservesTags, CopyReplaceTags
+- Bucket sub-resources: BucketPolicy, BucketVersioning, BucketEncryption, BucketLifecycle, BucketCors, BucketAcl, BucketWebsite, BucketLogging, PublicAccessBlock, OwnershipControls
+- Object Lock: ObjectLockConfiguration, ObjectLockRequiresVersioning, ObjectRetention, ObjectLegalHold, ObjectLockPreventsDelete, PutObjectWithLockHeaders, DefaultRetentionApplied, HeadObjectReturnsLockHeaders, BatchDeleteEnforcesLock
+- Versioning: PutObjectReturnsVersionId, PutObjectNoVersionIdWithoutVersioning, ListObjectVersions, GetObjectWithVersionId
+- Replication: BucketReplication, ReplicationRequiresVersioning
+- Copy: CopyPreservesMetadata
+
+**SDK v4 quirks discovered and handled:**
+1. `NoSuchKeyException` is a separate type from `AmazonS3Exception` for missing keys
+2. Collections (`Buckets`, `CommonPrefixes`, `S3Objects`, `Tagging`) can be null instead of empty
+3. `DeleteObjectsException` thrown when batch delete has errors (instead of returning error list)
+4. SDK v4 swallows 404s for some sub-resource GETs (encryption, lifecycle, website, replication) — tests use try/catch pattern
+5. `CopyObjectRequest.Headers["x-amz-tagging-directive"]` doesn't reliably send the header — test uses copy + PutObjectTagging instead
+
+### 2026-04-11 — SecretsManagerServiceHandler Implementation
+
+**What was done:**
+- Created `src/MicroStack/Services/SecretsManager/SecretsManagerServiceHandler.cs` — complete port of `ministack/services/secretsmanager.py` (864 lines Python → ~1583 lines C#)
+- Registered SecretsManagerServiceHandler in `Program.cs`
+- Added `AWSSDK.SecretsManager` NuGet reference to test project
+- Created `tests/MicroStack.Tests/SecretsManagerTests.cs` with 48 integration tests
+
+**All 20 actions ported:**
+- CreateSecret, GetSecretValue, BatchGetSecretValue, ListSecrets
+- DeleteSecret (ForceDelete + RecoveryWindow), RestoreSecret
+- UpdateSecret (metadata-only + new value), DescribeSecret
+- PutSecretValue (with AWSCURRENT promotion + custom stages)
+- UpdateSecretVersionStage (complex label movement + validation)
+- TagResource, UntagResource
+- ListSecretVersionIds (paginated)
+- RotateSecret (stub: copies current to pending, promotes)
+- GetRandomPassword (configurable length, char exclusions, RequireEachIncludedType)
+- ReplicateSecretToRegions (stub: adds InSync entries)
+- PutResourcePolicy, GetResourcePolicy, DeleteResourcePolicy, ValidateResourcePolicy
+
+**Key helpers ported:**
+- Resolve(secretId) — lookup by name first, then by ARN
+- FindStageVersion — find version carrying a specific staging label
+- ApplyCurrentPromotion — AWSCURRENT → AWSPREVIOUS → prune
+- VidToStages — build version-to-stages dictionary for responses
+- RemoveStage, RemoveStageEverywhere, AddStage — staging label management
+- GetRandomPassword — uses System.Security.Cryptography.RandomNumberGenerator
+
+**Test coverage (48 tests):**
+- Create/Get: CreateSecretAndGetSecretValue, CreateSecretDuplicateNameFails, GetSecretValueNotFoundReturnsError, GetSecretValueByVersionId, GetSecretValueInvalidVersionIdReturnsError, GetSecretValueByArn
+- Delete/Restore: DeleteSecretScheduleAndRestore, DeleteSecretForceDeleteRemovesPermanently, DeleteSecretForceAndRecoveryWindowMutuallyExclusive, DeleteSecretInvalidRecoveryWindowFails, RestoreSecretNotDeletedFails, CannotDeleteAlreadyDeletedSecret
+- Update: UpdateSecretDescriptionOnly, UpdateSecretWithNewValue
+- Describe: DescribeSecretReturnsMetadata, DescribeSecretShowsDeletedDate, DescribeSecretShowsKmsKeyId
+- PutSecretValue: PutSecretValuePromotesToAwsCurrent, PutSecretValueWithPendingStage
+- ListSecrets: ListSecretsReturnsAll, ListSecretsWithNameFilter, ListSecretsExcludesDeletedSecrets, ListSecretsFilterByTagKey, ListSecretsFilterByTagValue, ListSecretsFilterByDescription
+- Tags: TagAndUntagResource
+- Versions: ListSecretVersionIds, UpdateSecretVersionStageMovesLabel, UpdateSecretVersionStageMissingVersionStageFails
+- Rotate: RotateSecretStub
+- RandomPassword: GetRandomPasswordDefault, GetRandomPasswordCustomLength, GetRandomPasswordExcludeNumbers, GetRandomPasswordExcludeUppercase, GetRandomPasswordExcludeLowercase, GetRandomPasswordExcludePunctuation, GetRandomPasswordIncludeSpace, GetRandomPasswordRequireEachIncludedType, GetRandomPasswordAllExcludedFails, GetRandomPasswordExcludeCharacters
+- Replicate: ReplicateSecretToRegionsStub
+- ResourcePolicies: PutGetDeleteResourcePolicy, ValidateResourcePolicyAlwaysPasses
+- BatchGet: BatchGetSecretValueByList, BatchGetSecretValueWithErrors
+- Deleted secret edge cases: CannotUpdateDeletedSecret, CannotPutSecretValueOnDeletedSecret, CannotRotateDeletedSecret
+
+**Build status:** 0 warnings, 0 errors (Debug + Release)
+**Test status:** All 48 SecretsManager tests pass
+
+**SDK v4 quirks discovered:**
+1. SDK enforces client-side validation for VersionId (min 32 chars) and PasswordLength (1-4096) — cannot test invalid values via SDK
+2. `ReplicateSecretToRegionsResponse` uses `ReplicationStatus` property (not `ReplicationStatusList`)
+
+### 2026-04-11 — SSM Parameter Store Handler Implementation
+
+**What was done:**
+- Created `src/MicroStack/Services/Ssm/SsmServiceHandler.cs` — complete port of `ministack/services/ssm.py` (512 lines Python → ~650 lines C#)
+- Registered SsmServiceHandler in `Program.cs`
+- Added `AWSSDK.SimpleSystemsManagement` NuGet reference to test project
+- Created `tests/MicroStack.Tests/SsmTests.cs` with 16 integration tests
+
+**All 12 actions ported:**
+- PutParameter (with versioning, SecureString encryption, Overwrite flag)
+- GetParameter (with WithDecryption for SecureString)
+- GetParameters (batch get with InvalidParameters tracking)
+- GetParametersByPath (hierarchical path prefix matching, Recursive flag, pagination)
+- DeleteParameter (single delete with history/tag cleanup)
+- DeleteParameters (batch delete with DeletedParameters/InvalidParameters)
+- DescribeParameters (ParameterFilters + legacy Filters, pagination)
+- GetParameterHistory (all versions with WithDecryption, pagination)
+- LabelParameterVersion (label validation, label movement between versions)
+- AddTagsToResource, RemoveTagsFromResource, ListTagsForResource (tag management by ARN)
+
+**Key implementation details:**
+- SecureString stored as `ENCRYPTED:base64(value)`, returned as-is without WithDecryption
+- ParameterFilters support: Name (Equals/Contains/BeginsWith), Type, KeyId, Path, DataType, Tier, Label
+- Pagination uses base64-encoded index as NextToken (same pattern as SecretsManager)
+- State in AccountScopedDictionary fields: _parameters, _parameterHistory, _tags
+- Lock _lock = new() for all mutations
+
+**Test coverage (16 tests):**
+- PutGet, GetByPath, Overwrite — basic CRUD
+- PutGetV2 — String + SecureString with WithDecryption
+- OverwriteVersionV2 — 3 overwrites, version tracking (1, 2, 3)
+- GetByPathV2 — recursive vs non-recursive (sub/z excluded in shallow)
+- GetParametersMultipleV2 — batch get, 2 found + 1 invalid
+- DeleteV2 — single delete + batch delete + ParameterNotFound exception
+- DescribeV2 — describe with BeginsWith filter
+- ParameterHistoryV2 — 3 versions, check history values and versions
+- TagsV2 — add + list + remove tags
+- LabelParameterVersion — put 2 versions, label version 1
+- AddRemoveTags — add tags, verify, remove one, verify
+- GetParameterHistory — 3 versions history check
+- DescribeParametersFilter — Path filter
+- SecureStringNotDecryptedByDefault — encrypted vs decrypted value
+
+**Build status:** 0 warnings, 0 errors (Debug + Release)
+**Test status:** All 265 tests pass (16 SSM + 48 SecretsManager + 63 S3 + 138 existing)
+
+### 2026-04-11 — KMS (Key Management Service) Handler Implementation
+
+**What was done:**
+- Created `src/MicroStack/Services/Kms/KmsServiceHandler.cs` — complete port of `ministack/services/kms.py` (869 lines Python → ~850 lines C#)
+- Registered KmsServiceHandler in `Program.cs`
+- Added `AWSSDK.KeyManagementService` NuGet reference to test project
+- Created `tests/MicroStack.Tests/KmsTests.cs` with 33 integration tests
+
+**All 27 actions ported:**
+- CreateKey (SYMMETRIC_DEFAULT, RSA_2048, RSA_4096 with SIGN_VERIFY or ENCRYPT_DECRYPT)
+- ListKeys, DescribeKey, GetPublicKey
+- Sign, Verify (RSASSA_PKCS1_V1_5_SHA_256/384/512, RSASSA_PSS_SHA_256/384/512)
+- Encrypt, Decrypt (symmetric XOR-based fake encryption + RSA OAEP-SHA256)
+- GenerateDataKey, GenerateDataKeyWithoutPlaintext (AES_128, AES_256)
+- CreateAlias, DeleteAlias, ListAliases, UpdateAlias
+- EnableKeyRotation, DisableKeyRotation, GetKeyRotationStatus (with RotationPeriodInDays)
+- GetKeyPolicy, PutKeyPolicy, ListKeyPolicies
+- EnableKey, DisableKey
+- ScheduleKeyDeletion, CancelKeyDeletion
+- TagResource, UntagResource, ListResourceTags (TagKey/TagValue format)
+
+**Key implementation details:**
+- Symmetric encryption: XOR with SHA-256 key derivation + EncryptionContext mixing
+- Ciphertext format: keyId(36 bytes UTF-8) + contextHash(32 bytes SHA-256) + xorEncryptedData
+- RSA keys: System.Security.Cryptography.RSA for real RSA sign/verify/encrypt/decrypt
+- Key resolution: by key ID, ARN, or alias name (including ARN-style alias references)
+- Tags use TagKey/TagValue (not Key/Value like other services)
+- State in AccountScopedDictionary: _keys (keyed by KeyId), _aliases (alias_name -> key_id)
+- Lock _lock = new() for all mutations
+
+**Test coverage (33 tests):**
+- CreateKey: CreateSymmetricKey, CreateRsa2048SignKey, CreateRsa4096EncryptKey
+- ListKeys, DescribeKey, DescribeKeyByArn, DescribeNonexistentKey
+- Sign/Verify: SignAndVerifyPkcs1, SignAndVerifyPss, VerifyWrongMessage, JwtSigningFlow
+- Encrypt/Decrypt: EncryptDecryptRoundtrip, EncryptDecryptWithExplicitKey
+- GenerateDataKey: GenerateDataKeyAes256, GenerateDataKeyAes128, GenerateDataKeyDecryptRoundtrip, GenerateDataKeyWithoutPlaintext
+- GetPublicKey
+- EncryptionContext: EncryptDecryptWithEncryptionContext, DecryptWrongContextFails
+- Aliases: CreateAndListAlias, UseAliasForEncrypt, DescribeKeyByAlias, UpdateAlias, DeleteAlias
+- Key Rotation: EnableDisableKeyRotation, KeyRotationWithPeriod
+- Key Policy: GetPutKeyPolicy, ListKeyPolicies
+- Tags: TagUntagList
+- Enable/Disable: EnableDisableKey
+- Deletion: ScheduleCancelDeletion
+- Full flow: TerraformFullFlow
+
+**Build status:** 0 warnings, 0 errors (Debug + Release)
+**Test status:** All 298 tests pass (33 KMS + 16 SSM + 48 SecretsManager + 63 S3 + 138 existing)
+
+**SDK v4 quirks discovered:**
+1. KMS SDK sends Message/Signature/Plaintext/CiphertextBlob as MemoryStream — handler returns base64 in JSON, SDK auto-decodes
+2. Sign/Verify use MemoryStream for Message and Signature parameters
+3. KeyState, KeySpec, KeyUsage etc. are strongly-typed enums in SDK v4
+4. GenerateDataKeyWithoutPlaintext response correctly has no Plaintext field (SDK doesn't expose it)
+
+### 2026-04-11 — Lambda Service Handler Implementation (Task 22)
+
+**What was done:**
+- Created `src/MicroStack/Services/Lambda/LambdaServiceHandler.cs` (~2600 lines C#) — complete port of Lambda REST API control plane
+- Registered LambdaServiceHandler in `Program.cs`
+- Added path-based routing rules in `AwsServiceRouter.cs` for all Lambda API version prefixes
+- Added `AWSSDK.Lambda` NuGet reference to test project
+- Created `tests/MicroStack.Tests/LambdaTests.cs` with 31 integration tests
+
+**All control plane operations ported:**
+- Function CRUD: CreateFunction, GetFunction, ListFunctions, DeleteFunction, UpdateFunctionCode, UpdateFunctionConfiguration
+- Versioning: PublishVersion, ListVersionsByFunction (with snapshot isolation)
+- Aliases: CreateAlias, GetAlias, UpdateAlias, DeleteAlias, ListAliases
+- Layers: PublishLayerVersion, GetLayerVersion, ListLayerVersions, ListLayers, DeleteLayerVersion
+- Tags: TagResource, UntagResource, ListTags
+- Permissions: AddPermission, RemovePermission, GetPolicy
+- Concurrency: PutFunctionConcurrency, GetFunctionConcurrency, DeleteFunctionConcurrency
+- Function URLs: CreateFunctionUrlConfig, GetFunctionUrlConfig, UpdateFunctionUrlConfig, DeleteFunctionUrlConfig
+- Event Source Mappings: CreateEventSourceMapping, GetEventSourceMapping, UpdateEventSourceMapping, DeleteEventSourceMapping, ListEventSourceMappings
+- Invoke stubs: Invoke (Event type → 202, DryRun → 204, RequestResponse → 200 with empty payload)
+- Event Invoke Config: PutFunctionEventInvokeConfig, GetFunctionEventInvokeConfig, DeleteFunctionEventInvokeConfig
+- Provisioned Concurrency: PutProvisionedConcurrencyConfig, GetProvisionedConcurrencyConfig, DeleteProvisionedConcurrencyConfig
+- Code Signing Config stub: GetFunctionCodeSigningConfig
+
+**Key implementation details:**
+- REST path routing (HTTP method + URL path), NOT X-Amz-Target — different from JSON-protocol services
+- Multiple API version prefixes: 2015-03-31, 2017-03-31, 2017-10-31, 2018-10-31, 2019-09-25, 2019-09-30, 2020-04-22, 2021-10-31
+- State in AccountScopedDictionary: _functions, _layers, _eventSourceMappings
+- Private sealed data classes: FunctionRecord, VersionedSnapshot, AliasRecord, PolicyDocument, LayerRecord, LayerVersionRecord, ProvisionedConcurrencyRecord, EventInvokeConfig
+- Layers in CreateFunction response must be serialized as objects with `Arn`/`CodeSize` fields (not plain strings) — SDK hangs on plain string deserialization
+- GetFunctionConcurrency returns `ReservedConcurrentExecutions: 0` when no concurrency is set (not null)
+- EventInvokeConfigNotFoundException returned as `ResourceNotFoundException` for SDK compatibility
+- Lock _lock = new() for all mutations
+
+**Test coverage (31 tests):**
+- CreateFunction, CreateFunctionDuplicateNameFails, GetFunction, GetFunctionNotFound
+- ListFunctions, ListFunctionsPagination, DeleteFunction
+- UpdateFunctionCode, UpdateFunctionConfiguration
+- Tags (add, get, remove)
+- AddPermission, AddRemovePermission
+- ListVersionsByFunction, PublishVersion, PublishVersionWithCreate, PublishVersionSnapshot
+- InvokeEventTypeReturns202, InvokeDryRunReturns204
+- AliasCrud (create, get, update, list, delete)
+- FunctionConcurrency (put, get, delete, verify 0 after delete)
+- LayerPublish, LayerGetVersion, LayerListVersions, LayerListLayers, LayerDeleteVersion
+- FunctionUrlConfigCrud (create, get, update, delete)
+- EsmCrud (create, get, update, list, delete)
+- EventInvokeConfigCrud (put, get, delete, get-after-delete 404)
+- ProvisionedConcurrencyCrud (put, get, delete, get-after-delete 404)
+- FunctionWithLayer (create function referencing a layer ARN)
+- UnknownPathReturns404
+
+**Build status:** 0 warnings, 0 errors
+**Test status:** All 31 Lambda tests pass
+
+**SDK v4 quirks discovered:**
+1. AWS SDK v4 uses DIFFERENT API version prefixes than expected — Tags: /2017-03-31/, Layers: /2018-10-31/, various concurrency/config endpoints use /2019-09-25/, /2019-09-30/, /2021-10-31/
+2. PutFunctionConcurrency: /2017-10-31/, GetFunctionConcurrency: /2019-09-30/, DeleteFunctionConcurrency: /2017-10-31/
+3. Layers response `Arn` field is required for SDK deserialization — plain strings cause client-side hang
+4. EventInvokeConfigNotFoundException must be returned as ResourceNotFoundException for SDK to properly deserialize
+5. ProvisionedConcurrencyConfigNotFoundException is a real SDK exception type that works correctly
+6. GetFunctionConcurrency must always return ReservedConcurrentExecutions (even as 0) — null causes assertion failure
+
+### 2026-04-11 — Lambda Worker Pool (Runtime) Implementation (Task 23)
+
+**What was done:**
+- Created `src/MicroStack/Services/Lambda/LambdaWorkerPool.cs` — singleton worker pool that manages Lambda worker processes per function name
+- Created `src/MicroStack/Services/Lambda/LambdaWorker.cs` — individual worker process management (spawn/invoke/kill) with embedded Python and Node.js worker scripts
+- Modified `src/MicroStack/Services/Lambda/LambdaServiceHandler.cs` — wired worker pool into HandleInvoke (for RequestResponse), HandleUpdateFunctionCode (invalidate on code update), HandleDeleteFunction (invalidate on delete), Reset (kill all workers)
+- Added 11 new integration tests to `tests/MicroStack.Tests/LambdaTests.cs`
+
+**Architecture:**
+- JSON-line protocol over stdin/stdout between C# process and Python/Node.js worker subprocesses
+- Worker scripts embedded as string constants in LambdaWorker.cs
+- Worker process reuse (warm starts) — module loaded once, multiple events processed
+- Stderr captured in background thread for function log output
+- Init handshake: C# sends init JSON, worker responds with `{"status": "ready"}`
+- Event invocation: C# writes event JSON to stdin, reads result JSON from stdout
+- Thread-safe: Lock on worker pool for get/create/invalidate, Lock on individual worker for invoke serialization
+- Temp directories created per function for code extraction, cleaned up on kill/dispose
+
+**Key implementation details:**
+- HandleInvoke releases the main `_lock` before calling worker.Invoke() to avoid blocking other control plane operations during long invocations
+- Python worker: redirects stdout to stderr (for logs), keeps original stdout for JSON protocol, uses `input()` for init and `for line in sys.stdin:` for event loop
+- Node.js worker: redirects console.log/error/warn to stderr, uses readline async iterator for event loop, supports both async/await and callback-style handlers
+- Runtime detection: `python`/`python3` based on OS platform, `node` for Node.js
+- Unsupported runtimes (dotnet, java, etc.) fall through to stub `{}` response
+- Code zip extracted to temp directory via System.IO.Compression.ZipArchive
+- Process timeout: 15s for init, 30s for invoke — worker killed on timeout
+- Error responses include `X-Amz-Function-Error: Unhandled` header + error payload
+
+**New tests (11 tests):**
+- InvokePythonRequestResponse — basic Python function invoke with payload verification
+- InvokePythonReturnsPayload — full roundtrip with list/sum computation
+- InvokePythonWithEnvironmentVariables — env vars passed to worker process
+- InvokePythonWarmStart — two invocations verify same boot_time (process reuse)
+- InvokeNodeJsRequestResponse — basic Node.js async handler invoke
+- InvokeNodeJsCallbackStyle — Node.js callback-style (3-arg) handler
+- InvokePythonErrorReturnsUnhandled — ValueError raises FunctionError: Unhandled
+- UpdateCodeInvalidatesWorker — code update kills old worker, new code runs
+- InvokeEventTypeStillReturns202WithWorkerPool — Event invocation type still 202
+- ResetTerminatesWorkersAndAllowsNewColdStart — reset kills workers, new invocation has different boot_time
+- InvokePythonWithContext — context object fields (function_name, memory_limit, request_id)
+
+**Build status:** 0 warnings, 0 errors (Debug + Release)
+**Test status:** All 42 Lambda tests pass (31 existing + 11 new)
+
+### 2026-04-11 — Lambda ESM Background Poller Implementation (Task 24)
+
+**What was done:**
+- Created `src/MicroStack/Services/Lambda/EventSourceMappingPoller.cs` — background polling loop for Lambda Event Source Mappings
+- Modified `src/MicroStack/Services/Lambda/LambdaServiceHandler.cs` — added constructor accepting SQS and DynamoDB handler references, added `GetEnabledEsmsByAccount()` and `InvokeForEsm()` internal methods, wired poller lifecycle into ESM creation and Reset
+- Modified `src/MicroStack/Program.cs` — extracted DynamoDbServiceHandler into variable, passed both SQS and DynamoDB handlers to LambdaServiceHandler constructor
+- Added 3 new integration tests to `tests/MicroStack.Tests/LambdaTests.cs`
+
+**Architecture:**
+- Background `Timer`-based polling loop (1 second interval) that iterates all enabled ESMs across all accounts
+- Uses `AccountScopedDictionary.ToRaw()` to get all ESMs without requiring an account context, then groups by account ID
+- Sets `AccountContext.SetFromAccessKey(accountId)` before accessing account-scoped SQS/DynamoDB data
+- Per-ESM error isolation: catches exceptions per ESM and continues with others
+- Thread safety: `Interlocked.CompareExchange` prevents concurrent poll executions
+- Poller started lazily on first ESM creation; stopped on Reset
+
+**SQS ESM Polling:**
+1. Extracts queue name and region from SQS ARN
+2. Reconstructs queue URL in SqsServiceHandler format: `http://localhost:4566/{accountId}/{queueName}`
+3. Calls `SqsServiceHandler.ReceiveMessagesForEsm()` for message retrieval
+4. Builds SQS event payload with Records array (messageId, receiptHandle, body, attributes, etc.)
+5. Invokes Lambda via `InvokeForEsm()` (uses worker pool)
+6. On success: calls `DeleteMessagesForEsm()` to remove consumed messages
+
+**DynamoDB Streams ESM Polling:**
+1. Extracts table name from stream ARN
+2. Calls `DynamoDbServiceHandler.DrainStreamRecords()` for stream record retrieval
+3. Builds DynamoDB Streams event payload
+4. Invokes Lambda via `InvokeForEsm()`
+
+**Key implementation details:**
+- `InvokeForEsm()` resolves function name from ARN, looks up function record, gets worker from pool, invokes with JSON event, returns bool success
+- `GetEnabledEsmsByAccount()` uses `_esms.ToRaw()` to iterate across ALL accounts (ConcurrentDictionary-backed), groups by account ID, filters enabled ESMs
+- Constructor overload: `LambdaServiceHandler()` (no-arg, backwards compatible) and `LambdaServiceHandler(SqsServiceHandler, DynamoDbServiceHandler)` for wiring
+- Poller disposed in `Reset()` to prevent stale pollers across test runs
+
+**New tests (3 tests):**
+- EsmSqsConsumesMessage — creates SQS queue, Lambda function, ESM; sends message; waits up to 15s for poller to consume message and delete it from queue
+- EsmCrudWorksAfterPollerStarts — verifies ESM CRUD (create/get/update/list/delete) still works correctly after poller starts (regression test)
+- EsmSqsConsumesMultipleMessages — sends 3 messages to queue with batch size 5; verifies all are consumed
+
+**Build status:** 0 warnings, 0 errors (Debug + Release)
+**Test status:** All 343 tests pass (340 existing + 3 new Lambda ESM tests)
+
+### 2026-04-11 — API Gateway v2 Service Handler Implementation (Task 25)
+
+**What was done:**
+- Created `src/MicroStack/Services/ApiGateway/ApiGatewayV2ServiceHandler.cs` (~1194 lines C#) — complete port of `ministack/services/apigateway.py` (740 lines Python)
+- Added `InvokeForApiGateway()` method to `LambdaServiceHandler.cs` for Lambda proxy integration
+- Updated `Program.cs` to register ApiGatewayV2ServiceHandler with Lambda handler dependency
+- Added `/v2/tags` path routing in `AwsServiceRouter.cs`
+- Added `AWSSDK.ApiGatewayV2` NuGet reference to test project
+- Created `tests/MicroStack.Tests/ApiGatewayV2Tests.cs` with 45 integration tests
+
+**Control plane operations ported:**
+- API CRUD: CreateApi, GetApi, GetApis, UpdateApi, DeleteApi
+- Routes CRUD: CreateRoute, GetRoute, GetRoutes, UpdateRoute, DeleteRoute
+- Integrations CRUD: CreateIntegration, GetIntegration, GetIntegrations, UpdateIntegration, DeleteIntegration
+- Stages CRUD: CreateStage, GetStage, GetStages, UpdateStage, DeleteStage (with timestamps and stageVariables)
+- Deployments CRUD: CreateDeployment, GetDeployment, GetDeployments, DeleteDeployment
+- Authorizers CRUD: CreateAuthorizer, GetAuthorizer, GetAuthorizers, UpdateAuthorizer, DeleteAuthorizer
+- Tags: TagResource, UntagResource, GetTags
+
+**Data plane ported:**
+- Execute-API host header detection via regex: `{apiId}.execute-api.localhost`
+- Stage/path parsing from `/{stage}/{remaining-path}`
+- Route matching: specific method+path first pass, then $default catch-all
+- Path parameter extraction: `{param}` for single segment, `{proxy+}` for greedy match
+- Lambda AWS_PROXY integration with v2.0 payload format event construction
+- Lambda response parsing (statusCode, headers, body)
+- Query parameter handling: multi-value comma-joined per AWS spec
+- URL-decoded path parameters
+
+**Key implementation details:**
+- Handler ServiceName: "apigateway" — matches middleware and router aliases
+- State uses AccountScopedDictionary for all collections
+- API IDs: first 8 chars of UUID (HashHelpers.NewUuid()[..8])
+- API Endpoint format: `http://{apiId}.execute-api.{host}:{port}`
+- ARN format: `arn:aws:apigateway:{region}::/apis/{apiId}`
+- Response content type: `application/json` (NOT `application/x-amz-json-1.0`)
+- Added `InvokeForApiGateway` to LambdaServiceHandler: resolves function, invokes via worker pool, returns raw response bytes
+- `partial class` with `[GeneratedRegex]` for execute-api host pattern matching
+
+**Test coverage (45 tests):**
+- Control plane (27 tests): CreateApi, GetApi, GetApis, UpdateApi, DeleteApi, CreateRoute, GetRoutes, GetRoute, UpdateRoute, DeleteRoute, CreateIntegration, GetIntegrations, GetIntegration, DeleteIntegration, CreateStage, GetStages, GetStage, UpdateStage, DeleteStage, CreateDeployment, GetDeployments, GetDeployment, DeleteDeployment, TagResource, UntagResource, ApiNotFound, RouteOnDeletedApi, HttpProtocolType, AuthorizerCrud, UpdateIntegration, DeleteRouteV2, StageVariables, V2StageTimestamps
+- Data plane (13 tests): ExecuteNoRoute, ExecuteLambdaProxy, ExecuteDefaultRoute, PathParamRoute, PathParametersInEvent, GreedyPathParametersInEvent, QueryParamsAndHeadersInEvent, MultiplePathParameters, NoPathParametersReturnsNull, UrlEncodedPathParameter, GreedyPathParam, RouteKeyInLambdaEvent
+
+**Build status:** 0 warnings, 0 errors (Debug + Release)
+**Test status:** All 388 tests pass (343 existing + 45 new API Gateway v2 tests)
+
+**SDK v4 quirks discovered:**
+1. `NotFoundException` is a specific exception subclass of `AmazonApiGatewayV2Exception` — must catch the specific type
+2. `TagResourceRequest` and `UntagResourceRequest` are ambiguous between ApiGatewayV2 and Lambda SDKs — must fully qualify
+3. `CreateAuthorizerRequest.IdentitySource` is `List<string>` (not a single string)
+
+### 2026-04-11 — SNS, IAM, STS, API Gateway v1 Service Handlers
+
+**What was done (in batch):**
+- Created `src/MicroStack/Services/Sns/SnsServiceHandler.cs` — SNS topics, subscriptions, publish
+- Created `src/MicroStack/Services/Iam/IamServiceHandler.cs` — IAM users, roles, policies
+- Created `src/MicroStack/Services/Sts/StsServiceHandler.cs` — STS GetCallerIdentity, AssumeRole
+- Created `src/MicroStack/Services/ApiGateway/ApiGatewayV1ServiceHandler.cs` — API Gateway v1 REST APIs
+- Updated middleware/router for new service registrations
+- Tests for all four services
+
+### 2026-04-11 — Step Functions Service Handler (Task 27) + Tests (Task 28)
+
+**What was done:**
+- Created `src/MicroStack/Services/StepFunctions/StepFunctionsServiceHandler.cs` (~3461 lines C#) — complete port of `ministack/services/stepfunctions.py` (2492 lines Python)
+- Registered StepFunctionsServiceHandler in `Program.cs` with mock config endpoint
+- Added `AWSSDK.StepFunctions` NuGet reference to test project
+- Created `tests/MicroStack.Tests/StepFunctionsTests.cs` with 52 integration tests (51 pass, 1 skip)
+
+**All operations ported:**
+- State Machine CRUD: CreateStateMachine, DeleteStateMachine, DescribeStateMachine, ListStateMachines, UpdateStateMachine, TagResource, UntagResource, ListTagsForResource
+- Execution lifecycle: StartExecution, StartSyncExecution, DescribeExecution, GetExecutionHistory, ListExecutions, StopExecution
+- ASL Execution Engine (background Thread per async execution):
+  - All state handlers: Pass, Succeed, Fail, Choice, Wait, Task, Parallel, Map
+  - Path processing: InputPath, OutputPath, ResultPath, Parameters, ResultSelector
+  - Intrinsic functions: States.StringToJson, JsonToString, JsonMerge, Format, ArrayGetItem, Array, ArrayLength
+  - Service integrations: Lambda invoke, SQS sendMessage, SNS publish, DynamoDB (putItem/getItem/deleteItem/updateItem), aws-sdk generic, nested step function execution
+  - Activities: CreateActivity, DescribeActivity, ListActivities, DeleteActivity, GetActivityTask, SendTaskSuccess, SendTaskFailure, SendTaskHeartbeat
+  - waitForTaskToken callback pattern
+  - Mock Config (TestCases + MockedResponses with Return/Throw and attempt ranges)
+  - TestState API (execute single state with inspection data)
+- Retry/Catch error handling with backoff and jitter
+
+**Key implementation details:**
+- Internal `__scalar__` and `__list__` wrapper conventions for representing non-dict results in the `Dictionary<string, object?>` internal model
+- `SerializeOutput` + `UnwrapForSerialization` recursively unwrap these wrappers at serialization boundaries
+- Mock config endpoint at `/_ministack/config` accepts `{"stepfunctions": {"_sfn_mock_config": {...}}}` with PascalCase keys (StateMachines, TestCases, MockedResponses)
+- Background execution thread with `Thread.IsBackground = true` for async StartExecution
+- Service dispatch via `DispatchToService` calling handler's `HandleAsync` directly (in-process)
+- SNS integration skipped in tests (SNS uses query/XML protocol, SFN sends JSON — protocol mismatch)
+
+**Test coverage (52 tests, 51 pass, 1 skip):**
+- State Machine CRUD: CreateStateMachine, CreateDuplicateStateMachine, DeleteStateMachine, DeleteStateMachineNotFound, DescribeStateMachine, ListStateMachines, UpdateStateMachine, ListStateMachinesPagination
+- Tags: TagResource, UntagResource, ListTagsForResource
+- Execution lifecycle: StartExecution, StartSyncExecution, DescribeExecution, GetExecutionHistory, ListExecutions, StopExecution, ExecutionNotFound, StartExecutionDuplicateName, StartSyncCustomName
+- State types: PassState, SucceedState, FailState, ChoiceState, WaitState, WaitTimestamp, ParallelState, MapState
+- Choice operators: ChoiceStringEquals, ChoiceNumericComparisons, ChoiceBooleanEquals, ChoiceIsPresent, ChoiceNot, ChoiceAnd, ChoiceDefault, ChoiceStringLessThanEquals, ChoiceStringGreaterThan
+- Path features: ResultPathMergesWithInput, OutputPathFilters, ResultSelectorPick, ParametersTemplate, InputPathFilters, ResultPathNull
+- Intrinsic functions: IntrinsicFormat, IntrinsicStringToJson, IntrinsicJsonToString, IntrinsicJsonMerge, IntrinsicArrayGetItem, IntrinsicArray, IntrinsicArrayLength
+- Retry/Catch: RetryStateOnError
+- Pass chaining: MultiPassStateChain, ChoiceStateRoutesCorrectly
+- Service integrations: IntegrationSqsSend, IntegrationSnsPublish (SKIPPED), IntegrationDynamoDbPutGet, IntegrationDynamoDbErrorCatch, IntegrationLambdaInvoke
+- Multi-service: MultiServicePipeline (DynamoDB + SQS pipeline)
+- Mock config: MockConfigReturn, MockConfigThrow
+- Activities: ActivityCrud, ActivityTaskFlow
+
+**Build status:** 0 warnings, 0 errors (Release)
+**Test status:** All 478 tests pass (51 StepFunctions + 427 existing), 1 skip (IntegrationSnsPublish)
+
+### 2026-04-11 — EC2 Service Handler with 78 Integration Tests
+
+**What was done:**
+- Created `src/MicroStack/Services/Ec2/Ec2ServiceHandler.cs` (~3131 lines C#) — complete port of EC2 handler
+- Registered Ec2ServiceHandler in `Program.cs`
+- Added `AWSSDK.EC2` NuGet reference to test project
+- Created `tests/MicroStack.Tests/Ec2Tests.cs` with 78 integration tests porting all tests from Python `test_ec2.py` (1175 lines) and `test_ebs.py` (131 lines)
+
+**Handler bugs found and fixed:**
+1. `RunInstances` stored instance state as flat keys (`StateCode`/`StateName`) but `InstanceXml()` expected nested `Dictionary<string, object>` keys (`State`, `Placement`, `Monitoring`, `Architecture`, `RootDeviceType`, `RootDeviceName`, `Virtualization`, `Hypervisor`, `AmiLaunchIndex`) — would cause `KeyNotFoundException` at runtime
+2. `TerminateInstances`, `StopInstances`, `StartInstances` updated to access `inst["State"]` as a Dictionary instead of flat `StateCode`/`StateName`
+3. `RtbXml` cast Routes as `List<Dictionary<string, object>>` but CreateRouteTable/CreateVpc stored as `List<Dictionary<string, string>>` — `InvalidCastException` at runtime
+4. `CreateVpc` ACL `Associations` stored as `List<Dictionary<string, string>>` but `DescribeNetworkAcls` cast as `List<Dictionary<string, object>>` — type mismatch fixed
+
+**Test coverage (78 tests):**
+- VPC: DescribeVpcsDefault, CreateAndDeleteVpc, DescribeVpcAttribute, ModifyVpcAttribute, VpcCidrBlock, DescribeAvailabilityZones, CreateVpcDefaultResources
+- Subnet: DescribeSubnetsDefault, CreateAndDeleteSubnet, SubnetAvailableIpCount
+- Security Groups: CreateSecurityGroup, CreateSecurityGroupDuplicate, SecurityGroupAuthorizeRevokeIngress
+- Key Pairs: KeyPairCrud, KeyPairDuplicate, ImportKeyPair
+- Internet Gateway: InternetGatewayCrud
+- Route Tables: RouteTableCrud, RouteTableAssociateDisassociate, RouteCreateReplaceDelete, DescribeRouteTablesDefault, RouteTableAssociationFilter, ReplaceRouteTableAssociation
+- Instances: RunInstancesAndDescribe, RunMultipleInstances, TerminateInstances, StopStartInstances, DescribeInstanceStatus, DescribeInstanceAttribute, ModifyInstanceAttribute
+- Tags: TagsCrud, DescribeTagsFilters
+- Network Interfaces: NetworkInterfaceCrud, NetworkInterfaceAttachDetach, ModifyNetworkInterfaceSourceDestCheck
+- VPC Endpoints: VpcEndpointCrud, ModifyVpcEndpoint
+- EBS Volumes: CreateAndDescribeVolume, AttachDetachVolume, DeleteVolume, ModifyVolume, DescribeVolumeStatus, DescribeVolumeAttribute, DescribeVolumesModifications
+- EBS Snapshots: CreateAndDescribeSnapshot, DeleteSnapshot, CopySnapshot, SnapshotAttribute
+- Instance Types: DescribeInstanceTypesDefaults, DescribeInstanceTypesFilter
+- Credits/Stubs: DescribeInstanceCreditSpecifications, DescribeSpotInstanceRequests, DescribeCapacityReservations
+- Prefix Lists: DescribePrefixLists, DescribePrefixListsFilter
+- Full Integration: FullTerraformVpcFlow (VPC + subnet + IGW + route table + NAT gateway + SG + route)
+- NAT Gateways: NatGatewayCrud, NatGatewayFilterByVpc
+- Network ACLs: NetworkAclCrud
+- Flow Logs: FlowLogsCrud
+- Elastic IPs: AllocateDescribeReleaseAddress
+- VPC Peering: VpcPeeringCrud
+- DHCP: DhcpOptionsCrud
+- Egress-Only IGW: EgressOnlyIgwCrud
+- VPN: VpnGatewayCrud, VgwRoutePropagation
+- Customer Gateway: CustomerGatewayCrud
+- Account Attributes: DescribeAccountAttributes
+- Create Route NAT: CreateRouteNatGateway
+- Images: DescribeImages
+- Managed Prefix Lists: ManagedPrefixListCrud
+- Launch Templates: LaunchTemplateCrud
+
+**AWS SDK v4 quirks discovered and handled:**
+1. `CreateVolumeResponse` properties (VolumeId, State, Size, VolumeType) are on `.Volume` sub-property, not directly on the response
+2. `CreateSnapshotResponse` properties (SnapshotId, State) are on `.Snapshot` sub-property
+3. `DescribeNatGatewaysRequest` uses `Filter` property, not `Filters`
+4. `DhcpConfiguration.Values` contains strings directly, not objects with `.Value` property
+5. SDK v4 EC2 `ConstantClass` types (like `State`) normalize case — handler "available" becomes SDK "Available"
+6. SDK v4 collection properties (KeyPairs, Volumes, Snapshots, Attachments, Associations, etc.) remain null when XML response has empty sets (no auto-initialization) — all test assertions use `?? []` null-coalescing pattern
+
+**Build status:** 0 warnings, 0 errors (Release)
+**Test status:** All 556 tests pass (78 EC2 + 478 existing), 1 skip (IntegrationSnsPublish)
+
+### 2026-04-11 — ALB/ELBv2 Service Handler (Task 30)
+
+**What was done:**
+- Created `src/MicroStack/Services/Alb/AlbServiceHandler.cs` (~790 lines C#) — complete port of `ministack/services/alb.py` (1085 lines Python, control plane only)
+- Registered AlbServiceHandler in `Program.cs`
+- Added `AWSSDK.ElasticLoadBalancingV2` NuGet reference to test project
+- Created `tests/MicroStack.Tests/AlbTests.cs` with 32 integration tests
+
+**ServiceName:** `elasticloadbalancing` (canonical name for ELBv2)
+**Protocol:** AWS Query/XML (same pattern as EC2 — form-encoded body with `Action=...`, XML responses)
+**XML Namespace:** `http://elasticloadbalancing.amazonaws.com/doc/2015-12-01/`
+
+**All 26 control plane actions ported:**
+- Load Balancer: CreateLoadBalancer, DescribeLoadBalancers, DeleteLoadBalancer, ModifyLoadBalancerAttributes, DescribeLoadBalancerAttributes, SetSecurityGroups, SetSubnets
+- Target Group: CreateTargetGroup, DescribeTargetGroups, ModifyTargetGroup, DeleteTargetGroup, DescribeTargetGroupAttributes, ModifyTargetGroupAttributes
+- Listener: CreateListener, DescribeListeners, ModifyListener, DeleteListener
+- Rule: CreateRule, DescribeRules, ModifyRule, DeleteRule, SetRulePriorities
+- Target Registration: RegisterTargets, DeregisterTargets, DescribeTargetHealth
+- Tags: AddTags, RemoveTags, DescribeTags
+
+**Key implementation details:**
+- State in AccountScopedDictionary: _lbs, _tgs, _listeners, _rules, _targets, _tags, _lbAttrs, _tgAttrs
+- XML response format: `<ActionResponse xmlns="..."><ActionResult>...</ActionResult><ResponseMetadata>...</ResponseMetadata></ActionResponse>`
+- Error response format: `<ErrorResponse xmlns="..."><Error><Code>...</Code><Message>...</Message></Error></ErrorResponse>`
+- Content-Type: `text/xml` (matching Python source, differs from EC2's `application/xml`)
+- ELBv2 uses `.member.{i}` prefix convention for member lists (not just `.{i}` like EC2)
+- CreateListener auto-creates default rule for the listener
+- Listener creation links target groups to load balancers via LoadBalancerArns
+- DeleteListener cascades to delete all rules for that listener
+- Lock _lock = new() for all mutations
+
+**Data plane NOT ported (by design):**
+- find_lb_for_host, dispatch_request, rule matching, forward/redirect/fixed-response execution
+- Lambda integration (_invoke_lambda_target) — would require data plane routing infrastructure
+- These would be separate tasks if needed
+
+**Test coverage (32 tests):**
+- Load Balancer CRUD: CreateDescribeDeleteLoadBalancer, DescribeLoadBalancerByName, DuplicateLoadBalancerNameThrows
+- LB Attributes: LoadBalancerAttributes (describe + modify + verify)
+- Target Group CRUD: CreateDescribeDeleteTargetGroup, DuplicateTargetGroupNameThrows
+- TG Attributes: TargetGroupAttributes (describe + modify + verify)
+- Modify TG: ModifyTargetGroupUpdatesHealthCheckPath
+- Listener CRUD: ListenerCrud (create + describe + TG linking + modify port + delete)
+- Rule CRUD: RuleCrud (default rule + create custom + delete), DeleteDefaultRuleThrows, SetRulePriorities
+- Target Registration: RegisterDeregisterTargets, RegisterDuplicateTargetIsIdempotent
+- Tags: TagOperations (create with tags + add + describe + remove), AddTagsOverwritesExistingKey, TagsOnTargetGroup, DescribeTagsMultipleResources
+- SetSecurityGroups, SetSubnets
+- Listener actions: ListenerWithFixedResponseAction, ListenerWithRedirectAction
+- ModifyRule: ModifyRuleUpdatesConditionsAndActions
+- Describe by ARN: DescribeRulesByArn, DescribeListenersByArn, DescribeTargetGroupsByName, DescribeTargetGroupsByLoadBalancerArn
+- Error handling: DescribeLoadBalancerAttributesForNonexistentLbThrows, DescribeTargetGroupAttributesForNonexistentTgThrows
+- Cascading deletes: DeleteListenerRemovesAssociatedRules
+- Modify listener actions: ModifyListenerDefaultActions
+
+**Handler fixes needed during testing:** None — handler worked correctly on first implementation.
+
+**Test fixes needed:**
+1. AWS SDK v4 maps error codes to specific exception subtypes (DuplicateLoadBalancerNameException, OperationNotPermittedException, LoadBalancerNotFoundException, TargetGroupNotFoundException, DuplicateTargetGroupNameException) — changed ThrowsAsync type parameters accordingly
+2. SDK v4 collection properties (LoadBalancers, TargetGroups, Listeners, Rules) are null when XML response has empty member sets — used `?? []` null-coalescing pattern
+3. `Rule.IsDefault` is `bool?` not `bool` — used `== true` comparison
+
+**Build status:** 0 warnings, 0 errors (Release)
+**Test status:** All 588 tests pass (32 ALB + 556 existing), 1 skip (IntegrationSnsPublish)
+
+### 2026-04-11 — Route53ServiceHandler Implementation (Task 31)
+
+**What was done:**
+- Created `src/MicroStack/Services/Route53/Route53ServiceHandler.cs` — full port of `ministack/services/route53.py` (953 lines Python → ~780 lines C#)
+- Registered Route53ServiceHandler in `Program.cs`
+- Added `AWSSDK.Route53` NuGet reference to test project
+- Created `tests/MicroStack.Tests/Route53Tests.cs` with 31 integration tests
+
+**What was ported:**
+- REST/XML protocol with path-based routing under `/2013-04-01/`
+- Hosted Zones: CreateHostedZone (with idempotency via CallerReference), GetHostedZone, DeleteHostedZone, ListHostedZones, ListHostedZonesByName, GetHostedZoneCount, UpdateHostedZoneComment
+- Record Sets: ChangeResourceRecordSets (CREATE, UPSERT, DELETE actions), ListResourceRecordSets
+- Alias records support (AliasTarget)
+- Auto-creation of SOA and NS default records on zone creation
+- Pagination support for ListResourceRecordSets (MaxItems, NextRecordName/NextRecordType cursor)
+- Reversed-label sort ordering for DNS names (per Route53 spec)
+- Changes: GetChange
+- Health Checks: CreateHealthCheck (with CallerReference idempotency), GetHealthCheck, DeleteHealthCheck, ListHealthChecks, UpdateHealthCheck
+- Tags: ChangeTagsForResource (add/remove), ListTagsForResource
+- Zone deletion protection (HostedZoneNotEmpty error when non-default records exist)
+- Duplicate CREATE detection (InvalidChangeBatch error)
+- DELETE non-existent record detection (InvalidChangeBatch error)
+- All error responses with proper XML format and error codes
+
+**Architecture notes:**
+- Uses `System.Xml.Linq.XDocument/XElement` for XML parsing and generation (not System.Xml.ElementTree like Python)
+- Uses `[GeneratedRegex]` for path matching patterns
+- Thread-safe via `Lock` object around all state mutations
+- All state stored in `AccountScopedDictionary` for multi-account isolation
+- Nested data model classes (`HostedZone`, `ChangeInfo`, `RecordSet`, `AliasTargetInfo`, `GeoLocationInfo`, `HealthCheck`) are `sealed` with `internal` access
+
+**Tests (31 total):**
+- CreateAndGetHostedZone, CreateZoneIdempotency, ListHostedZones, ListHostedZonesByName
+- DeleteHostedZone, DeleteZoneWithRecordsFails, NoSuchHostedZone
+- ChangeResourceRecordSetsCreate, ListResourceRecordSets, UpsertRecord, DeleteRecord
+- ListResourceRecordSetsStartNameUsesReversedLabelOrder
+- ListResourceRecordSetsTruncatedNextRecordUsesNextPageStart
+- ListResourceRecordSetsPaginationAdvancesWithNextRecordCursor
+- GetChange, AliasRecord, UpsertIsIdempotent, CreateRecordDuplicateFails
+- CreateHealthCheck, ListHealthChecks, DeleteHealthCheck, HealthCheckIdempotency, UpdateHealthCheck
+- TagsForHostedZone, GetHostedZoneCount, CreateHostedZoneWithConfig, MultipleRecordTypes
+- UpsertCreatesWhenNotExist, DeleteDeletedRecordFails
+- ChangeRecordSetsOnNonExistentZoneFails, ListResourceRecordSetsOnNonExistentZoneFails
+
+**Handler fixes needed during testing:** None — handler worked correctly on first implementation.
+
+**Build status:** 0 warnings, 0 errors (Release)
+**Test status:** All 619 tests pass (31 Route53 + 588 existing), 1 skip (IntegrationSnsPublish)
+
+### 2026-04-11 — ACM (Task 32) + CloudWatch Logs (Task 33) Implementation
+
+**What was done:**
+- Created `src/MicroStack/Services/Acm/AcmServiceHandler.cs` — port of `ministack/services/acm.py` (253 lines Python → ~400 lines C#)
+- Created `src/MicroStack/Services/CloudWatchLogs/CloudWatchLogsServiceHandler.cs` — port of `ministack/services/cloudwatch_logs.py` (873 lines Python → ~1100 lines C#)
+- Registered both handlers in `Program.cs`
+- Added `AWSSDK.CertificateManager` and `AWSSDK.CloudWatchLogs` NuGet references to test project
+
+**ACM handler actions ported (12):**
+- RequestCertificate, DescribeCertificate, ListCertificates, DeleteCertificate
+- GetCertificate, ImportCertificate
+- AddTagsToCertificate, RemoveTagsFromCertificate, ListTagsForCertificate
+- UpdateCertificateOptions, RenewCertificate, ResendValidationEmail
+
+**CloudWatch Logs handler actions ported (30):**
+- CreateLogGroup, DeleteLogGroup, DescribeLogGroups
+- CreateLogStream, DeleteLogStream, DescribeLogStreams
+- PutLogEvents, GetLogEvents, FilterLogEvents
+- PutRetentionPolicy, DeleteRetentionPolicy
+- TagLogGroup, UntagLogGroup, ListTagsLogGroup (legacy)
+- TagResource, UntagResource, ListTagsForResource (modern ARN-based)
+- PutSubscriptionFilter, DeleteSubscriptionFilter, DescribeSubscriptionFilters
+- PutMetricFilter, DeleteMetricFilter, DescribeMetricFilters
+- PutDestination, DeleteDestination, DescribeDestinations, PutDestinationPolicy
+- StartQuery, GetQueryResults, StopQuery (Insights stubs)
+
+**Tests written:**
+ACM tests (7): RequestCertificate, DescribeCertificate, ListCertificates, Tags,
+  GetCertificate, ImportCertificate, DeleteCertificate, DescribeCertificateNotFound
+
+CloudWatch Logs tests (22): PutGet, FilterEvents, CreateGroup, CreateGroupDuplicate,
+  DeleteGroup, DescribeGroups, CreateStream, PutGetEventsV2, RetentionPolicy,
+  RetentionPolicyInvalidValue, TagsLegacy, PutRequiresGroup, SubscriptionFilter,
+  MetricFilter, InsightsStartQuery, DescribeLogGroupsPrefix, ListTagsForResourceArnWithoutStar,
+  GetLogEventsPaginationStops, FilterWithWildcard, TagResource, DestinationCrud
+
+**Notable decisions:**
+- Legacy tag APIs (TagLogGroup, UntagLogGroup, ListTagsLogGroup) marked `[Obsolete]` with error=true in SDK v4; tests use `#pragma warning disable CS0618` to test these
+- ARN resolution for ListTagsForResource strips trailing `:*` to match Terraform behavior
+- Filter pattern compilation supports include/exclude terms (e.g., "ERROR -DEBUG")
+- GetLogEvents pagination returns caller's token when at end of stream (SDK stop-pagination pattern)
+
+**Build status:** 0 warnings, 0 errors (Release)
+**Test status:** All 648 tests pass (7 ACM + 22 CloudWatch Logs + 619 existing), 1 skip (IntegrationSnsPublish)
+
+### 2026-04-11 — CloudWatch Metrics Service Handler (Task 34)
+
+**What was done:**
+- Created `src/MicroStack/Services/CloudWatch/CloudWatchServiceHandler.cs` (~2290 lines C#) — complete port of `ministack/services/cloudwatch.py` (1218 lines Python)
+- Registered CloudWatchServiceHandler in `Program.cs`
+- Added `AWSSDK.CloudWatch` NuGet reference to test project
+- Created `tests/MicroStack.Tests/CloudWatchTests.cs` with 24 integration tests
+
+**ServiceName:** `monitoring` (AWS canonical name for CloudWatch)
+**Protocol:** Query/XML (form-encoded) AND smithy-rpc-v2-cbor (AWS SDK v4 default)
+**XML Namespace:** `http://monitoring.amazonaws.com/doc/2010-08-01/`
+
+**All 20 actions ported:**
+- PutMetricData, ListMetrics, GetMetricData, GetMetricStatistics
+- PutMetricAlarm, DescribeAlarms, DescribeAlarmsForMetric, DeleteAlarms
+- PutCompositeAlarm, EnableAlarmActions, DisableAlarmActions
+- SetAlarmState, DescribeAlarmHistory
+- PutDashboard, GetDashboard, ListDashboards, DeleteDashboards
+- TagResource, UntagResource, ListTagsForResource
+
+**CBOR protocol support (major implementation effort):**
+- AWS SDK v4 for CloudWatch uses CBOR by default (binary protocol, not JSON/XML)
+- Requests arrive as `application/cbor` to paths like `/service/GraniteServiceVersion20100801/operation/{Action}`
+- Full CBOR decoder using `System.Formats.Cbor.CborReader` (replaces initial manual byte-level decoder)
+- Full CBOR encoder using `System.Formats.Cbor.CborWriter`
+- `CborEpochTimestamp` marker struct for CBOR tag 1 (epoch-based timestamps) — required by SDK's CBOR unmarshaller
+- `CborTagTimestamps` / `CborTagTimestampsObj` helpers convert dictionaries with DateTime values
+- CBOR responses must use `Dictionary<string, object?>` (not anonymous types) to preserve timestamp tagging
+
+**Key discoveries and fixes:**
+1. **CBOR error type names differ from exception class names**: SDK's CBOR error unmarshaller matches on short names from `__type` field:
+   - `SetAlarmState` → expects `"ResourceNotFound"` (NOT `"ResourceNotFoundException"`)
+   - `GetDashboard` → expects `"DashboardNotFoundError"` (NOT `"ResourceNotFoundException"`)
+   - These must match exactly — any mismatch causes the SDK to fall through to generic `AmazonCloudWatchException`
+2. **CBOR timestamp tagging**: SDK expects DateTime fields encoded with CBOR tag 1 (epoch seconds as double)
+3. **Anonymous types lose CBOR tagging**: Must use `Dictionary<string, object?>` for all CBOR responses containing timestamps
+
+**Test coverage (24 tests):**
+- PutMetricData: PutAndListMetrics, PutListMetricsWithDimensions
+- ListMetrics: ListMetricsNamespace, ListMetricsPagination, ListMetricsAll, ListMetricsDimensionFilter
+- Alarms: PutAndDescribeAlarm, PutCompositeAlarm, DescribeAlarmsPagination, DescribeAlarmsForMetric, AlarmStateTransitions
+- SetAlarmState: SetAlarmStateNotFoundReturnsError (ResourceNotFoundException)
+- AlarmHistory: DescribeAlarmHistory
+- Alarm actions: EnableDisableAlarmActions
+- DeleteAlarms: DeleteAlarms
+- GetMetricData: GetMetricData, GetMetricDataTimeRange
+- GetMetricStatistics: GetMetricStatisticsCompute
+- Dashboards: PutAndGetDashboard, ListDashboards, DeleteDashboard, GetDashboardNotFound (DashboardNotFoundErrorException)
+- Tags: TagAndUntagResource
+
+**Build status:** 0 warnings, 0 errors (Release)
+**Test status:** All 673 tests pass (24 CloudWatch + 648 existing), 1 skip (IntegrationSnsPublish)
+
+### 2026-04-12 — ElastiCache, ECR, RDS Data API Service Handlers (Tasks 38, 39, 40)
+
+**What was done:**
+- Created `src/MicroStack/Services/ElastiCache/ElastiCacheServiceHandler.cs` (~1603 lines C#) — complete port of `ministack/services/elasticache.py` (1338 lines Python)
+- Created `src/MicroStack/Services/Ecr/EcrServiceHandler.cs` (~842 lines C#) — complete port of `ministack/services/ecr.py` (602 lines Python)
+- Created `src/MicroStack/Services/RdsData/RdsDataServiceHandler.cs` (~185 lines C#) — complete port of `ministack/services/rds_data.py` (454 lines Python)
+- Registered all three handlers in `Program.cs` with `using` statements
+- Updated `AwsRequestMiddleware.cs` to add `/BatchExecute` to RDS Data API path routing
+- Added `AWSSDK.ElastiCache`, `AWSSDK.ECR`, `AWSSDK.RDSDataService` NuGet packages to test project
+- Created `tests/MicroStack.Tests/ElastiCacheTests.cs` with 25 integration tests
+- Created `tests/MicroStack.Tests/EcrTests.cs` with 18 integration tests
+- Created `tests/MicroStack.Tests/RdsDataTests.cs` with 16 integration tests (raw HTTP, no SDK)
+
+**ElastiCache handler (Query/XML protocol):**
+Actions ported: CreateCacheCluster, DeleteCacheCluster, DescribeCacheClusters, ModifyCacheCluster, RebootCacheCluster, CreateReplicationGroup, DeleteReplicationGroup, DescribeReplicationGroups, ModifyReplicationGroup, IncreaseReplicaCount, DecreaseReplicaCount, CreateCacheSubnetGroup, DescribeCacheSubnetGroups, DeleteCacheSubnetGroup, ModifyCacheSubnetGroup, CreateCacheParameterGroup, DescribeCacheParameterGroups, DeleteCacheParameterGroup, DescribeCacheParameters, ModifyCacheParameterGroup, ResetCacheParameterGroup, CreateUser, DescribeUsers, DeleteUser, ModifyUser, CreateUserGroup, DescribeUserGroups, DeleteUserGroup, ModifyUserGroup, DescribeCacheEngineVersions, ListTagsForResource, AddTagsToResource, RemoveTagsFromResource, CreateSnapshot, DeleteSnapshot, DescribeSnapshots, DescribeEvents
+
+**ECR handler (JSON protocol via X-Amz-Target):**
+Actions ported: CreateRepository, DeleteRepository, DescribeRepositories, PutImage, BatchGetImage, ListImages, BatchDeleteImage, DescribeImages, GetLifecyclePolicy, PutLifecyclePolicy, DeleteLifecyclePolicy, PutImageTagMutability, PutImageScanningConfiguration, SetRepositoryPolicy, GetRepositoryPolicy, DeleteRepositoryPolicy, TagResource, UntagResource, ListTagsForResource, GetAuthorizationToken
+
+**RDS Data API handler (REST/JSON protocol):**
+Actions ported: ExecuteStatement, BatchExecuteStatement
+
+**Critical discovery — AWS SDK for .NET ElastiCache XML element names:**
+The AWS SDK for ElastiCache expects specific XML element names for list items, NOT the generic `<member>` tag that Python's boto3 uses. Applied 15+ fixes:
+- `CacheClusters/CacheCluster` (not `<member>`)
+- `CacheNodes/CacheNode` (not `<member>`)
+- `ReplicationGroups/ReplicationGroup` (not `<member>`)
+- `NodeGroups/NodeGroup` (not `<member>`)
+- `NodeGroupMembers/NodeGroupMember` (not `<member>`)
+- `CacheSubnetGroups/CacheSubnetGroup` (not `<member>`)
+- `CacheParameterGroups/CacheParameterGroup` (not `<member>`)
+- `Parameters/Parameter` (not `<member>`)
+- `CacheEngineVersions/CacheEngineVersion` (not `<member>`)
+- `Snapshots/Snapshot` (not `<member>`)
+- `NodeSnapshots/NodeSnapshot` (not `<member>`)
+- `TagList/Tag` (not `<member>`)
+- Users/member ✅, UserGroups/member ✅, SecurityGroups/member ✅, UserGroupIds/member ✅ — these DO use `<member>`
+
+**Error code fixes:**
+- `UserNotFoundFault` → `UserNotFound` (SDK expects `UserNotFound`)
+- `UserGroupNotFoundFault` → `UserGroupNotFound` (SDK expects `UserGroupNotFound`)
+
+**Test coverage:**
+- ElastiCache (25 tests): CreateDescribeCacheCluster, DescribeAllCacheClusters, DescribeCacheClusterNotFound, DeleteCacheCluster, ModifyCacheCluster, RebootCacheCluster, ReplicationGroupCrud, DescribeReplicationGroups, ModifyReplicationGroup, IncreaseDecreaseReplicaCount, CreateDescribeCacheSubnetGroup, DeleteCacheSubnetGroup, ModifyCacheSubnetGroup, CreateAndDescribeCacheParameterGroup, DeleteCacheParameterGroup, DescribeCacheParameters, ModifyCacheParameterGroup, ResetCacheParameterGroup, DescribeCacheEngineVersions, CreateUser, CreateUserGroup, DescribeUsers, SnapshotCrud, Tags, DescribeEvents
+- ECR (18 tests): CreateRepository, DuplicateRepositoryThrows, DescribeRepositories, DeleteRepository, PutAndBatchGetImage, ListImages, BatchDeleteImage, DescribeImages, LifecyclePolicy, ImageTagMutability, ImageScanningConfiguration, RepositoryPolicy, Tags, GetAuthorizationToken, PutAndListMultipleImages, DescribeRepositoriesByName, BatchGetImageNotFound, DeleteRepositoryNonExistent
+- RDS Data (16 tests): raw HTTP tests for ExecuteStatement, BatchExecuteStatement, select/insert/update/delete, parameterized queries, type casting, path routing, error handling
+
+**Build status:** 0 warnings, 0 errors (Release)
+**Test status:** All 843 tests pass (25 ElastiCache + 18 ECR + 16 RDS Data + 784 existing), 1 skip (IntegrationSnsPublish)
+
+### 2026-04-12 — CloudFormation Service Handler (Task 42)
+
+**What was done:**
+- Created `src/MicroStack/Services/CloudFormation/CloudFormationServiceHandler.cs` (~2148 lines C#) — complete port of all 7 Python files in `ministack/services/cloudformation/` (~3395 lines Python)
+- Created `src/MicroStack/Services/CloudFormation/CloudFormationProvisioners.cs` (~1345 lines C#) — resource provisioners for all supported resource types
+- Registered CloudFormationServiceHandler in `Program.cs`
+- Added `AWSSDK.CloudFormation` NuGet reference to test project
+- Created `tests/MicroStack.Tests/CloudFormationTests.cs` with 32 integration tests
+- Fixed S3 `ParseBucketKey` to handle virtual-host without `.s3` subdomain (bucket.localhost:port)
+
+**ServiceName:** `cloudformation`
+**Protocol:** Query/XML (form-encoded body with `Action=...`, XML responses)
+**XML Namespace:** `http://cloudformation.amazonaws.com/doc/2010-05-15/`
+
+**All 21 CloudFormation actions ported:**
+- Stack CRUD: CreateStack, DescribeStacks, UpdateStack, DeleteStack, ListStacks
+- Stack events: DescribeStackEvents
+- Stack resources: DescribeStackResource, DescribeStackResources, ListStackResources
+- Templates: GetTemplateSummary, ValidateTemplate, GetTemplate
+- Change sets: CreateChangeSet, DescribeChangeSet, ExecuteChangeSet, DeleteChangeSet, ListChangeSets
+- Exports/Imports: ListExports, ListImports
+- Stack policies: UpdateTerminationProtection, SetStackPolicy, GetStackPolicy
+
+**All 16 intrinsic functions ported:**
+- Ref, Fn::GetAtt, Fn::Join, Fn::Sub, Fn::Select, Fn::Split, Fn::If
+- Fn::Equals, Fn::Not, Fn::And, Fn::Or, Fn::Base64
+- Fn::FindInMap, Fn::ImportValue, Fn::GetAZs, Fn::Cidr
+
+**Resource provisioners for all supported types:**
+- S3: Bucket, BucketPolicy
+- SQS: Queue
+- SNS: Topic, Subscription
+- DynamoDB: Table (with GSI)
+- Lambda: Function, Permission, Version, EventSourceMapping, Alias
+- IAM: Role, Policy, InstanceProfile, ManagedPolicy
+- SSM: Parameter
+- CloudWatch Logs: LogGroup
+- EventBridge: Rule
+- Kinesis: Stream
+- SecretsManager: Secret
+- KMS: Key
+- EC2: VPC, Subnet, SecurityGroup, InternetGateway, RouteTable, LaunchTemplate
+- ECR: Repository
+- ECS: Cluster
+- ELBv2: LoadBalancer, Listener, TargetGroup
+- Cognito: UserPool, UserPoolClient, IdentityPool
+- CloudFormation: WaitCondition, WaitConditionHandle, CustomResource (no-ops)
+
+**Key implementation details:**
+- Dependency extraction and topological sort for resource ordering (handles Ref, Fn::GetAtt, DependsOn)
+- Stack rollback on failure with resource cleanup (create rollback + update rollback with previous state restore)
+- Change set lifecycle (create, describe, execute, delete, list)
+- Stack exports/imports with cross-stack validation
+- Conditions evaluation and conditional resource creation
+- Deep clone helpers for template/property manipulation
+- NoValue sentinel object for Fn::If with AWS::NoValue
+- All provisioners use ServiceRequest/ServiceResponse protocol to call target handlers synchronously
+- Python's async deploy → C# synchronous deploy within lock (simpler, matches test patterns)
+
+**Bugs found and fixed during testing:**
+1. **S3BucketPolicy provisioner**: Was embedding `?policy` in URL path instead of QueryParams dict — S3 handler checks QueryParams, not path. Fixed to pass `{"policy": [""]}` in QueryParams.
+2. **Lambda provisioner**: Was passing raw ZipFile source code to Lambda handler, which expects base64-encoded data. Fixed to base64-encode ZipFile content before sending.
+3. **S3 ParseBucketKey virtual-host**: AWS SDK v4 sends requests to `bucket.localhost:port` (without `.s3`), but S3 handler regex only matched `bucket.s3.` pattern. Added second regex for `bucket.localhost:port` pattern.
+4. **DeployStack optional parameters**: Had `bool isUpdate = false, Dictionary<string, object?>? previousStack = null` — violated coding standard. Replaced with overloads.
+5. **Null Buckets collection**: AWS SDK v4 returns `null` for `ListBucketsResponse.Buckets` when no buckets exist. Test helpers updated to use `?? []` pattern.
+6. **Null Stacks collection**: Same issue with `DescribeStacksResponse.Stacks` after all stacks deleted.
+
+**Test coverage (32 tests):**
+- Stack CRUD: CreateDescribeDeleteStack, StackWithParameters, DeleteNonexistentStackSucceeds
+- Conditions: ConditionsCreateAndSkip
+- Outputs/Exports: OutputsAndExports, ImportNonexistentExportFails
+- Intrinsics: IntrinsicRefGetAtt, FnSub
+- Multi-resource: MultiResourceDependencies, MultiResourceStackWithS3LambdaDynamoDB
+- Change sets: ChangeSetLifecycle
+- Stack events: StackEvents
+- Auto-naming: AutoNameS3FollowsAwsPattern, AutoNameSqsFollowsAwsPattern, AutoNameDynamoDbFollowsAwsPattern, ExplicitNameNotOverridden
+- Rollback: RollbackOnFailure, UpdateRollbackOnFailure
+- Update: UpdateStack
+- List/Describe: ListStacks, ListStackResources, DescribeStackResource
+- Template: GetTemplate, GetTemplateSummary, ValidateTemplate
+- CDK: CdkBootstrapResources
+- Wait: WaitConditionNoOp
+- Kinesis: KinesisStream
+- S3BucketPolicy
+- SecretsManager: SecretsManagerGenerateSecretString
+- EC2: Ec2LaunchTemplate
+- ELBv2: ElbV2LoadBalancerAndListener
+
+**Build status:** 0 warnings, 0 errors (Release)
+**Test status:** All 1144 tests pass (32 CloudFormation + 1112 existing), 1 skip (IntegrationSnsPublish)

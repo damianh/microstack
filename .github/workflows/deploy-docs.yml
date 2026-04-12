@@ -1,0 +1,55 @@
+name: deploy-docs
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build-docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+          dotnet-quality: 'preview'
+
+      - name: Install Atoll CLI
+        run: dotnet tool install --global Atoll.Cli --version 0.7.0
+
+      - name: Restore docs
+        run: dotnet restore docs/Docs/Docs.csproj
+
+      - name: Build docs project
+        run: dotnet build docs/Docs/Docs.csproj -c Release --no-restore
+
+      - name: Build docs site
+        run: atoll build --root docs/Docs
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/Docs/dist
+
+  deploy:
+    needs: build-docs
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

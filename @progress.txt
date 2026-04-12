@@ -1,0 +1,344 @@
+## Progress Log
+
+### 2026-04-12 - Fix ECS build errors and ensure all tests pass
+
+**Problem:** EcsTests.cs had 5 build errors preventing compilation.
+
+**Errors fixed:**
+1. `EcsTests.cs(386)` - `ServiceAlreadyExistsException` does not exist in AWS ECS SDK v4.
+   - Fix: Changed handler error code from `"ServiceAlreadyExists"` to `"InvalidParameterException"` in `EcsServiceHandler.cs` line 1079.
+   - Fix: Changed test assertion from `ThrowsAsync<Amazon.ECS.Model.ServiceAlreadyExistsException>` to `ThrowsAsync<InvalidParameterException>`.
+
+2. `EcsTests.cs(1170, 1186)` - `KeyValuePair` ambiguous between `Amazon.ECS.Model.KeyValuePair` and `System.Collections.Generic.KeyValuePair`.
+   - Fix: Fully qualified to `Amazon.ECS.Model.KeyValuePair` in both locations.
+
+3. `EcsTests.cs(1633, 1634)` - `string` does not contain `.Value` property. In SDK v4, `TaskDefinition.Compatibilities` is `List<string>` (not `List<Compatibility>`).
+   - Fix: Removed `.Select(c => c.Value)` and asserted directly against the string list.
+
+**Result:**
+- Build: 0 warnings, 0 errors
+- ECS tests: 70/70 passing
+- Total tests: 742 passed, 1 skipped (pre-existing skip), 0 failed
+
+### 2026-04-12 - Port RDS Service Handler from Python
+
+**What was done:**
+- Created `src/MicroStack/Services/Rds/RdsServiceHandler.cs` (2172 lines)
+- Full port of `ministack/services/rds.py` (2252 lines Python → 2172 lines C#)
+- Registered handler in `Program.cs` with `using MicroStack.Services.Rds;` + `registry.Register(new RdsServiceHandler());`
+
+**Actions implemented (34 total):**
+- DB Instance: CreateDBInstance, DescribeDBInstances, ModifyDBInstance, DeleteDBInstance, RebootDBInstance, StopDBInstance, StartDBInstance
+- DB Cluster: CreateDBCluster, DescribeDBClusters, ModifyDBCluster, DeleteDBCluster
+- DB Subnet Group: CreateDBSubnetGroup, DescribeDBSubnetGroups, ModifyDBSubnetGroup, DeleteDBSubnetGroup
+- DB Parameter Group: CreateDBParameterGroup, DescribeDBParameterGroups, DeleteDBParameterGroup, DescribeDBParameters, ModifyDBParameterGroup
+- DB Cluster Parameter Group: CreateDBClusterParameterGroup, DescribeDBClusterParameterGroups, DeleteDBClusterParameterGroup
+- DB Snapshot: CreateDBSnapshot, DescribeDBSnapshots, DeleteDBSnapshot, CopyDBSnapshot
+- DB Cluster Snapshot: CreateDBClusterSnapshot, DescribeDBClusterSnapshots, DeleteDBClusterSnapshot
+- Tags: AddTagsToResource, ListTagsForResource, RemoveTagsFromResource
+- Event Subscriptions: CreateEventSubscription, DescribeEventSubscriptions, DeleteEventSubscription
+- DB Proxy: CreateDBProxy, DescribeDBProxies, DeleteDBProxy
+- Describe helpers: DescribeOrderableDBInstanceOptions, DescribeEngineDefaultClusterParameters, DescribeDBEngineVersions
+
+**Architecture:**
+- `internal sealed class RdsServiceHandler : IServiceHandler`
+- Query/XML protocol (form-encoded body → XML responses)
+- XML namespace: `http://rds.amazonaws.com/doc/2014-10-31/`
+- Uses `AccountScopedDictionary<string, Dictionary<string, object?>>` for all state stores
+- Thread-safe with `Lock` around DispatchAction
+- Docker support intentionally omitted (not needed for emulator)
+
+**Build result:** 0 warnings, 0 errors
+
+**Note:** Tests not yet written — this was handler-only step.
+
+### 2026-04-12 - Add RDS Integration Tests (39 tests)
+
+**What was done:**
+- Created `tests/MicroStack.Tests/RdsTests.cs` — 39 integration tests porting all Python tests from `tests/test_rds.py`
+- Added `AWSSDK.RDS` NuGet package reference
+
+**Handler fixes required:**
+- Added missing StopDBCluster/StartDBCluster actions
+- Added missing OptionGroup CRUD (CreateOptionGroup, DescribeOptionGroups, DeleteOptionGroup)
+- Added missing GlobalCluster CRUD (CreateGlobalCluster, DescribeGlobalClusters, ModifyGlobalCluster, DeleteGlobalCluster, RemoveFromGlobalCluster)
+- Added OptionGroupXml and GlobalClusterXml serializers
+- Fixed DescribeDBProxies list item wrapper from `<DBProxy>` to `<member>` for SDK compatibility
+- Fixed DescribeGlobalClusters list item wrapper to `<GlobalClusterMember>` for SDK compatibility
+
+**Tests cover:**
+- DB Instance: Create, Describe, Modify, Delete, Reboot, Stop/Start, AlreadyExists error, NotFound error, DeletionProtection
+- DB Cluster: Create, Describe, Modify, Delete, Stop/Start, NotFound error
+- DB Subnet Group: Create/Describe, Modify, Delete
+- DB Parameter Group: Create/Describe, Modify, Delete
+- DB Cluster Parameter Group: Create/Describe, Delete
+- DB Snapshot: Create/Describe, Delete, Full CRUD lifecycle, CopyDBSnapshot
+- DB Cluster Snapshot: Create/Describe, Delete
+- Tags: Add, List, Remove with create-time tags
+- Event Subscriptions: Create, Describe, Delete
+- DB Proxy: Create, Describe, Delete
+- Option Group: Create, Describe, Delete
+- DescribeOrderableDBInstanceOptions
+- DescribeDBEngineVersions (Postgres + MySQL)
+- Global Cluster: Lifecycle, WithSource, DeleteWithMembersFails, Modify (rename + deletion protection)
+
+**Build result:** 0 warnings, 0 errors
+**Test result:** 781 passed, 1 skipped (pre-existing), 0 failed (39 new RDS tests)
+
+### 2026-04-12 - Add EventBridge and Kinesis Integration Tests (50 tests)
+
+**What was done:**
+- Created `tests/MicroStack.Tests/EventBridgeTests.cs` — 30 integration tests porting Python tests from `tests/test_eventbridge.py`
+- Created `tests/MicroStack.Tests/KinesisTests.cs` — 20 integration tests porting Python tests from `tests/test_kinesis.py`
+- Handlers were already written and compile clean; no handler fixes were needed
+
+**EventBridge tests (30):**
+- Event Bus: Create/Describe, Update description, Delete, Delete default bus fails, Duplicate creation fails, Delete cleans up rules and targets
+- Rules: PutRule with event pattern, PutRule with schedule, DeleteRule (verify not found), Enable/Disable rule toggle
+- Targets: PutTargets and ListTargets, RemoveTargets, ListRuleNamesByTarget, ListRuleNamesByTarget pagination
+- PutEvents: Two entries, three entries with EventId validation
+- TestEventPattern: Match, no-match, invalid event JSON
+- Tags: Tag/untag resource
+- Archives: Full lifecycle (create/describe/list/delete), Update archive
+- Replays: Full lifecycle (start/describe/list/cancel), state transitions
+- Permissions: Put/remove permission
+- Connections: Create/describe/delete, Deauthorize connection
+- API Destinations: Create/describe/delete lifecycle
+- Endpoints: Create/describe/list/update/delete lifecycle
+- Partner Event Sources: Create/describe/list/delete stubs
+- Event Sources: Activate/deactivate/describe stubs, ListEventSources, PutPartnerEvents
+
+**Kinesis tests (20):**
+- Stream lifecycle: Create, Delete, List, Describe + Summary, ListShards
+- PutRecord/GetRecords: Put 3 records and read back, PutRecordsBatch (7 records)
+- Tags: Add/remove tags
+- Retention: Increase/decrease retention period
+- Encryption: Start/stop stream encryption toggle
+- Enhanced monitoring: Enable/disable monitoring metrics
+- Shard operations: SplitShard, MergeShards, UpdateShardCount
+- Consumers: Register/deregister/list/describe stream consumer
+- Iterator types: AT_TIMESTAMP shard iterator
+- Error cases: Duplicate stream creation (ResourceInUseException), Describe nonexistent stream (ResourceNotFoundException)
+- Misc: Put/get two records, GetRecords returns NextShardIterator
+
+**Notes on AWS SDK v4 validation:**
+- SDK v4 validates ARN patterns client-side at compile time (not just runtime)
+- Partner event source names must match `aws.partner/xxx/yyy` pattern
+- ConnectionArn for API destinations must match `connection/<name>/<uuid>` pattern
+- Exception types are specific subclasses (e.g. `ResourceNotFoundException`, `ResourceInUseException`, `ResourceAlreadyExistsException`, `InvalidEventPatternException`) not base `AmazonXxxException`
+
+**Build result:** 0 warnings, 0 errors
+**Test result:** 909 passed, 1 skipped (pre-existing), 0 failed (50 new EventBridge + Kinesis tests)
+
+### 2026-04-12 - Add Glue and Athena Service Handlers (65 tests)
+
+**What was done:**
+- Created `src/MicroStack/Services/Glue/GlueServiceHandler.cs` (~900 lines C#) — full port of `ministack/services/glue.py` (1124 lines Python)
+- Created `src/MicroStack/Services/Athena/AthenaServiceHandler.cs` (~750 lines C#) — full port of `ministack/services/athena.py` (912 lines Python)
+- Registered both handlers in `Program.cs`
+- Added `AWSSDK.Glue` and `AWSSDK.Athena` NuGet packages to test project
+- Created `tests/MicroStack.Tests/GlueTests.cs` with 35 integration tests
+- Created `tests/MicroStack.Tests/AthenaTests.cs` with 30 integration tests
+
+**Glue handler (JSON protocol via X-Amz-Target: AWSGlue):**
+Actions ported: CreateDatabase, GetDatabase, GetDatabases, UpdateDatabase, DeleteDatabase, CreateTable, GetTable, GetTables, UpdateTable, DeleteTable, BatchDeleteTable, CreatePartition, GetPartition, GetPartitions, BatchGetPartition, BatchCreatePartition, DeletePartition, CreateCrawler, GetCrawler, UpdateCrawler, DeleteCrawler, StartCrawler, StopCrawler, GetCrawlers, CreateJob, GetJob, GetJobs, UpdateJob, DeleteJob, StartJobRun, GetJobRun, GetJobRuns, BatchStopJobRun, CreateRegistry, GetRegistry, DeleteRegistry, CreateSchema, GetSchema, GetSchemaVersion, DeleteSchema, TagResource, UntagResource, GetTags
+
+**Athena handler (JSON protocol via X-Amz-Target: AmazonAthena):**
+Actions ported: StartQueryExecution, GetQueryExecution, GetQueryResults, StopQueryExecution, ListQueryExecutions, BatchGetQueryExecution, CreateWorkGroup, GetWorkGroup, ListWorkGroups, UpdateWorkGroup, DeleteWorkGroup, CreateNamedQuery, GetNamedQuery, ListNamedQueries, DeleteNamedQuery, BatchGetNamedQuery, CreateDataCatalog, GetDataCatalog, ListDataCatalogs, UpdateDataCatalog, DeleteDataCatalog, CreatePreparedStatement, GetPreparedStatement, ListPreparedStatements, DeletePreparedStatement, UpdatePreparedStatement, GetTableMetadata, ListTableMetadata, TagResource, UntagResource, ListTagsForResource
+
+**Key implementation details:**
+- Both use JSON protocol (X-Amz-Target header routing)
+- Glue: job runs immediately SUCCEEDED (no background thread), crawlers go to READY state
+- Athena: synchronous mock query execution — queries immediately succeed with mock results parsed from SQL (e.g., `SELECT 42 AS answer` returns columns=["answer"], rows=[[42]])
+- Athena: `_workgroups` and `_dataCatalogs` are plain `Dictionary` (not AccountScopedDictionary) due to default entries ("primary" workgroup, "AwsDataCatalog")
+- Athena SDK validates StatementName must match `[a-zA-Z_][a-zA-Z0-9_@:]{1,256}` — hyphens NOT allowed
+
+**Test fixes needed:**
+- `CreatePreparedStatementAndGet` assertion expected `"ath-ps-v2"` but actual was `"ath_ps_v2"` (underscores used to satisfy SDK validation)
+- `ListPreparedStatements` assertion expected `"lps-stmt"` but actual was `"lps_stmt"` (same reason)
+
+**Glue tests (35):** CreateAndGetDatabase, ListDatabases, UpdateDatabase, DeleteDatabase, CreateAndGetTable, ListTables, UpdateTable, DeleteTable, BatchDeleteTable, CreateAndGetPartition, ListPartitions, BatchGetPartition, BatchCreatePartition, DeletePartition, CreateAndGetCrawler, UpdateCrawler, DeleteCrawler, StartStopCrawler, ListCrawlers, CreateAndGetJob, ListJobs, UpdateJob, DeleteJob, StartAndGetJobRun, ListJobRuns, BatchStopJobRun, CreateAndGetRegistry, DeleteRegistry, CreateAndGetSchema, GetSchemaVersion, DeleteSchema, TagAndUntagResource, CreateDuplicateDatabaseFails, CreateDuplicateTableFails, CreateDuplicateCrawlerFails
+
+**Athena tests (30):** StartQueryExecutionAndGetResults, StopQueryExecution, ListQueryExecutions, BatchGetQueryExecution, QueryNotFoundReturnsError, CreateWorkGroupAndGet, ListWorkGroupsIncludesPrimary, UpdateWorkGroupDescription, UpdateWorkGroupResultConfiguration, DeleteWorkGroupAndVerifyGone, CannotDeletePrimaryWorkGroup, CreateNamedQueryAndGet, ListNamedQueriesReturnsIds, DeleteNamedQueryAndVerifyGone, BatchGetNamedQuery, CreateDataCatalogAndGet, ListDataCatalogs, UpdateDataCatalog, DeleteDataCatalogAndVerifyGone, CannotDeleteDefaultDataCatalog, CreatePreparedStatementAndGet, ListPreparedStatements, DeletePreparedStatementAndVerifyGone, TagAndUntagResource, GetTableMetadata, ListTableMetadata, QueryResultsContainColumnInfo, CreateDuplicateWorkGroupFails, CreateDuplicateDataCatalogFails, CreateDuplicatePreparedStatementFails
+
+**Build result:** 0 warnings, 0 errors
+**Test result:** 974 passed, 1 skipped (pre-existing), 0 failed (35 Glue + 30 Athena = 65 new tests)
+
+### 2026-04-12 - Port SES, WAF v2, and EFS Service Handlers + Tests (34 tests)
+
+**What was done:**
+- Created `src/MicroStack/Services/Ses/SesServiceHandler.cs` (~1146 lines) — full port of `ministack/services/ses.py` + `ses_v2.py`
+- Created `src/MicroStack/Services/Waf/WafServiceHandler.cs` (~599 lines) — full port of `ministack/services/waf.py`
+- Created `src/MicroStack/Services/Efs/EfsServiceHandler.cs` (~827 lines) — full port of `ministack/services/efs.py`
+- Registered all 3 handlers in `Program.cs`
+- Added EFS path routing (`/2015-02-01/`) to `AwsServiceRouter.cs`
+- Added 4 NuGet packages: `AWSSDK.SimpleEmail`, `AWSSDK.SimpleEmailV2`, `AWSSDK.WAFV2`, `AWSSDK.ElasticFileSystem`
+- Created `tests/MicroStack.Tests/SesTests.cs` — 17 integration tests (SES v1 + v2)
+- Created `tests/MicroStack.Tests/WafTests.cs` — 9 integration tests
+- Created `tests/MicroStack.Tests/EfsTests.cs` — 8 integration tests
+
+**SES handler (v1 Query/XML + v2 REST/JSON — single handler):**
+v1 actions: SendEmail, SendRawEmail, SendTemplatedEmail, SendBulkTemplatedEmail, VerifyEmailIdentity, VerifyDomainIdentity, VerifyDomainDkim, ListIdentities, GetIdentityVerificationAttributes, DeleteIdentity, GetSendQuota, GetSendStatistics, ListVerifiedEmailAddresses, CreateConfigurationSet, DeleteConfigurationSet, DescribeConfigurationSet, ListConfigurationSets, CreateTemplate, GetTemplate, UpdateTemplate, DeleteTemplate, ListTemplates, GetIdentityDkimAttributes, SetIdentityNotificationTopic, SetIdentityFeedbackForwardingEnabled
+v2 endpoints: SendEmail, CreateEmailIdentity, GetEmailIdentity, ListEmailIdentities, DeleteEmailIdentity, ConfigurationSet CRUD, Template CRUD, Tags, GetAccount
+
+**WAF v2 handler (JSON protocol via X-Amz-Target: AWSWAF_20190729):**
+Actions: CreateWebACL, GetWebACL, UpdateWebACL, DeleteWebACL, ListWebACLs, AssociateWebACL, DisassociateWebACL, GetWebACLForResource, ListResourcesForWebACL, CreateIPSet, GetIPSet, UpdateIPSet, DeleteIPSet, ListIPSets, CreateRuleGroup, GetRuleGroup, UpdateRuleGroup, DeleteRuleGroup, ListRuleGroups, TagResource, UntagResource, ListTagsForResource, CheckCapacity, DescribeManagedRuleGroup
+
+**EFS handler (REST/JSON with path routing /2015-02-01/...):**
+Actions: CreateFileSystem, DescribeFileSystems, DeleteFileSystem, UpdateFileSystem, CreateMountTarget, DescribeMountTargets, DeleteMountTarget, DescribeMountTargetSecurityGroups, ModifyMountTargetSecurityGroups, CreateAccessPoint, DescribeAccessPoints, DeleteAccessPoint, TagResource, UntagResource, ListTagsForResource, PutLifecycleConfiguration, DescribeLifecycleConfiguration, PutBackupPolicy, DescribeBackupPolicy, PutFileSystemPolicy, DescribeFileSystemPolicy, DescribeAccountPreferences, PutAccountPreferences
+
+**Bugs found & fixed during testing:**
+1. EFS `TagResource`/`UntagResource`/`ListTagsForResource` — resource IDs containing ARNs get URL-encoded in path (e.g., `%2F` for `/`). Added `Uri.UnescapeDataString()` to decode the resource ID from path segments.
+2. EFS `UntagResource` — tag keys sent as repeated query params (`tagKeys=key1&tagKeys=key2`). Fixed to use `rawQuery` (full `string[]`) instead of flattened single-value query dict.
+3. SES v1 `ListIdentities`/`ListConfigurationSets` — empty XML lists deserialized as null by AWS SDK v4. Fixed test assertions to use null-coalescing (`?? []`).
+
+**SES tests (17):** SendEmail, SendRawEmail, VerifyEmailAndListIdentities, VerifyDomainIdentity, GetIdentityVerificationAttributes, DeleteIdentity, ListIdentitiesByType, GetSendQuota, ConfigurationSetCrud, TemplateCrud, SendTemplatedEmail, VerifyDomainDkim, GetSendStatistics, V2SendEmail, V2EmailIdentityCrud, V2ConfigurationSetCrud, V2GetAccount
+
+**WAF tests (9):** WebAclCrud, UpdateWebAcl, AssociateDisassociateWebAcl, IpSetCrud, RuleGroupCrud, TagOperations, CheckCapacity, DescribeManagedRuleGroup, ListResourcesForWebAcl
+
+**EFS tests (8):** CreateAndDescribeFileSystem, CreationTokenIdempotency, DeleteFileSystem, MountTargetCrud, AccessPointCrud, TagOperations, LifecycleConfiguration, BackupPolicy
+
+**Build result:** 0 warnings, 0 errors
+**Test result:** 1008 passed, 1 skipped (pre-existing), 0 failed (17 SES + 9 WAF + 8 EFS = 34 new tests)
+
+### 2026-04-12 - Add AppSync, CloudFront, EMR, ServiceDiscovery handlers + tests, fix build errors
+
+**What was done:**
+- Created `tests/MicroStack.Tests/ServiceDiscoveryTests.cs` — 16 integration tests porting Python tests from `tests/test_servicediscovery.py`
+- Registered AppSync, CloudFront, EMR, ServiceDiscovery handlers in `Program.cs`
+- Added `AWSSDK.AppSync`, `AWSSDK.CloudFront`, `AWSSDK.ServiceDiscovery` NuGet packages (already present)
+
+**Build errors fixed (3):**
+1. `AppSyncTests.cs(310)` — `ListTypesRequest.Format` expected `TypeDefinitionFormat` not `OutputType` (SDK v4 type mismatch)
+2. `CloudFrontTests.cs(82,87)` — `ForwardedValues` and `MinTTL` deprecated as error in Release mode. Replaced with `CachePolicyId`
+
+**Pre-existing CloudFront test failures fixed (4):**
+- `DeleteDistribution`, `DeleteEnabledDistribution`, `GetNonexistent`, `UpdateDistributionEtagMismatch`
+- Root cause: `Assert.ThrowsAsync<AmazonCloudFrontException>` but SDK v4 throws specific subclasses
+- Fix: Use `NoSuchDistributionException`, `DistributionNotDisabledException`, `PreconditionFailedException`
+
+**ServiceDiscovery tests (16):**
+- FullServiceDiscoveryFlow: Create private DNS namespace → create service → register instance → discover instances → list operations → deregister & delete (with Route53 hosted zone verification)
+- TagOperations: Create HTTP namespace with tags → list/add/remove tags
+- ServiceAttributesCrud: Update/get/delete service attributes
+- NamespaceAndServiceUpdate: Update private DNS namespace & service, verify operations listing
+- InstanceHealthAndRevision: Register instance, update custom health status, verify health filter, check instances revision counter
+- CreateHttpNamespaceWithProperties: Verify HTTP namespace type
+- CreatePublicDnsNamespace: Verify public DNS namespace + hosted zone creation
+- GetInstance: Register and retrieve specific instance by ID
+- GetService: Create and retrieve service by ID
+- DiscoverInstancesHealthFilter: Two instances with different health, filter by HEALTHY/UNHEALTHY/ALL
+- CreateServiceWithTags: Service creation with tags, verify via ListTagsForResource
+- UpdateHttpNamespace: Update description of HTTP namespace
+- UpdatePublicDnsNamespace: Update public DNS namespace
+- DeleteNamespaceNotFound: Verify NamespaceNotFoundException for nonexistent ID
+- DeleteServiceNotFound: Verify ServiceNotFoundException for nonexistent ID
+- ListOperationsWithFilter: Filter operations by STATUS=SUCCESS
+
+**Key implementation notes:**
+- ServiceDiscovery uses JSON protocol via X-Amz-Target header (Route53CloudMap_20170314.ActionName)
+- ServiceDiscovery handler takes Route53ServiceHandler dependency for DNS namespace→hosted zone integration
+- SDK v4 `DiscoverInstances` sends requests to `data-servicediscovery.{region}.amazonaws.com` (different host) — works through the test infrastructure
+- Disambiguated `Tag`/`ListTagsForResourceRequest` types between Route53 and ServiceDiscovery via `using Tag = Amazon.ServiceDiscovery.Model.Tag`
+
+**Build result:** 0 warnings, 0 errors
+**Test result:** 1057 passed, 1 skipped (pre-existing), 0 failed (16 new ServiceDiscovery tests + 4 CloudFront fixes)
+
+### 2026-04-12 - Port Cognito Service Handlers from Python
+
+**What was done:**
+- Created `src/MicroStack/Services/Cognito/CognitoIdpServiceHandler.cs` (~2176 lines) — Cognito Identity Provider (User Pools)
+- Created `src/MicroStack/Services/Cognito/CognitoIdentityServiceHandler.cs` (~350 lines) — Cognito Identity (Identity Pools)
+- Created `tests/MicroStack.Tests/CognitoTests.cs` (~1743 lines, 55 integration tests)
+- Modified `src/MicroStack/Program.cs` — registered both handlers
+- Modified `tests/MicroStack.Tests/MicroStack.Tests.csproj` — added AWSSDK.CognitoIdentityProvider and AWSSDK.CognitoIdentity NuGet packages
+
+**CognitoIdpServiceHandler actions implemented (37 total):**
+- User Pool CRUD: CreateUserPool, DescribeUserPool, ListUserPools, UpdateUserPool, DeleteUserPool
+- User Pool Client CRUD: CreateUserPoolClient, DescribeUserPoolClient, ListUserPoolClients, UpdateUserPoolClient, DeleteUserPoolClient
+- User management: AdminCreateUser, AdminGetUser, AdminDeleteUser, AdminSetUserPassword, AdminEnableUser, AdminDisableUser, AdminUpdateUserAttributes, AdminConfirmSignUp, ListUsers
+- Auth flows: AdminInitiateAuth, InitiateAuth, RespondToAuthChallenge, AdminRespondToAuthChallenge, AdminUserGlobalSignOut, GlobalSignOut, RevokeToken
+- Self-service: SignUp, ConfirmSignUp, ForgotPassword, ConfirmForgotPassword, ChangePassword, GetUser, DeleteUser, UpdateUserAttributes
+- Groups: CreateGroup, DeleteGroup, GetGroup, ListGroups, AdminAddUserToGroup, AdminRemoveUserFromGroup, AdminListGroupsForUser, ListUsersInGroup
+- Domains: CreateUserPoolDomain, DeleteUserPoolDomain, DescribeUserPoolDomain
+- MFA: GetUserPoolMfaConfig, SetUserPoolMfaConfig, AssociateSoftwareToken, VerifySoftwareToken, AdminSetUserMFAPreference, SetUserMFAPreference
+- Tags: TagResource, UntagResource, ListTagsForResource
+- Well-known endpoints: JWKS (/.well-known/jwks.json), OpenID Configuration (/.well-known/openid-configuration)
+- OAuth2: Token endpoint (/oauth2/token)
+- RSA JWT token generation with real RSA signing
+
+**CognitoIdentityServiceHandler actions implemented (10 total):**
+- Identity Pool CRUD: CreateIdentityPool, DescribeIdentityPool, ListIdentityPools, UpdateIdentityPool, DeleteIdentityPool
+- Identity operations: GetId, GetCredentialsForIdentity, GetOpenIdToken, DescribeIdentity, ListIdentities
+- Roles: SetIdentityPoolRoles, GetIdentityPoolRoles
+- Developer identities: MergeDeveloperIdentities
+
+**Test coverage (55 tests):**
+- CreateAndDescribeUserPool, ListUserPools, UpdateUserPool, DeleteUserPool
+- CreateAndDescribeUserPoolClient, ListUserPoolClients, UpdateUserPoolClient, ClientSecretGenerated
+- AdminCreateAndGetUser, AdminDeleteUser, AdminSetUserPassword, ListUsers, ListUsersFilter, DuplicateUsernameError
+- AdminInitiateAuthUserPasswordAuth, InitiateAuthWrongPassword, SignUpAndConfirm
+- RespondToAuthChallengeNewPassword, ForgotAndConfirmPassword, ChangePassword
+- AdminDisableAndEnableUser, AdminUserGlobalSignOut, RevokeToken
+- RefreshTokenAuthCorrectUser, RefreshTokenAlias
+- GroupCrudAndMembership, ListUsersInGroup
+- UserPoolDomainCrud
+- MfaConfig, AssociateAndVerifySoftwareToken, AdminGetUserMfaFields
+- Tags
+- IdentityPoolCrud, GetIdAndCredentials, IdentityPoolRoles, ListIdentities, GetOpenIdToken
+- DescribeIdentity, MergeDeveloperIdentities, CredentialsSecretAccessKey
+- JwksEndpoint, OpenIdConfigurationEndpoint
+- DeleteUserSelf, GetUserSelf, UpdateUserAttributesSelf
+- AdminUpdateUserAttributes, AdminConfirmSignUp
+- OAuth2TokenEndpoint, GlobalSignOut
+- MfaPreferences, AdminListGroupsForUser, UserPoolDomainDescribeNonExistent
+- ListUserPoolClientsEmpty, AdminRespondToAuthChallenge
+
+**Key implementation notes:**
+- Both Cognito services use JSON protocol via X-Amz-Target header (same as KMS)
+- CognitoIdentityServiceHandler takes CognitoIdpServiceHandler as dependency (for GetOpenIdToken JWT generation)
+- RSA key pair generated per user pool for JWT signing
+- Disambiguated conflicting types (NotAuthorizedException, TagResourceRequest, etc.) between CognitoIdentity.Model and CognitoIdentityProvider.Model using type aliases
+- UserPoolType.Name property (not PoolName) in AWS SDK v4
+
+**Build result:** 0 warnings, 0 errors
+**Test result:** 1112 passed, 1 skipped (pre-existing), 0 failed (55 new Cognito tests)
+
+### 2026-04-12 - Port S3Files handler, Dockerfile, Multi-Tenancy and Unicode tests (Tasks 57, 59, 61, 63)
+
+**What was done:**
+- Created `src/MicroStack/Services/S3Files/S3FilesServiceHandler.cs` (~430 lines) — full port of `ministack/services/s3files.py` (379 lines Python)
+- Registered handler in `Program.cs` with `using MicroStack.Services.S3Files;` + `registry.Register(new S3FilesServiceHandler());`
+- Created `Dockerfile` at repo root — multi-stage build (SDK build → aspnet runtime, port 4566, healthcheck)
+- Created `.dockerignore` — excludes bin/, obj/, .vs/, .git/, etc.
+- Created `tests/MicroStack.Tests/MultiTenancyTests.cs` — 9 integration tests porting Python tests from `tests/test_multitenancy.py`
+- Created `tests/MicroStack.Tests/UnicodeTests.cs` — 7 integration tests porting Python tests from `tests/test_unicode.py`
+
+**S3Files handler (REST/JSON protocol with path-based routing):**
+Actions: CreateFileSystem, GetFileSystem, ListFileSystems, DeleteFileSystem, CreateMountTarget, GetMountTarget, ListMountTargets, UpdateMountTarget, DeleteMountTarget, CreateAccessPoint, GetAccessPoint, ListAccessPoints, DeleteAccessPoint, GetFileSystemPolicy, PutFileSystemPolicy, DeleteFileSystemPolicy, GetSynchronizationConfiguration, PutSynchronizationConfiguration, TagResource, UntagResource, ListTagsForResource
+
+**MultiTenancy tests (9):**
+- DefaultAccountId, TwelveDigitAccessKeyBecomesAccountId, DifferentTwelveDigitKeysGetDifferentAccounts, NonTwelveDigitNumericFallsBack
+- SqsQueueArnUsesDynamicAccount, SqsQueuesIsolatedByAccount
+- S3BucketsIsolatedByAccount, DynamoDbTablesIsolatedByAccount
+- ResetClearsAllAccounts
+
+**Unicode tests (7):**
+- UnicodeS3ObjectKey — Unicode key and body roundtrip (données/résumé/文件.txt)
+- UnicodeS3Metadata — percent-encoded metadata roundtrip (résumé.pdf, Ñoño)
+- UnicodeDynamoDbItem — Cyrillic/CJK/Arabic attribute values (ключ, значение 日本語 مرحبا)
+- UnicodeSqsMessage — CJK/Latin message body (こんにちは世界 héllo wörld)
+- UnicodeSecretsManager — Cyrillic/Chinese secret value (пароль: 密码)
+- UnicodeSsmParameter — Korean/Greek parameter value (값: τιμή)
+- UnicodeRoute53ZoneComment — Spanish/Latin zone comment (zona en español — Ünïcödé)
+
+**Dockerfile:**
+- Multi-stage: mcr.microsoft.com/dotnet/sdk:10.0-preview (build) → mcr.microsoft.com/dotnet/aspnet:10.0-preview (runtime)
+- ASPNETCORE_URLS=http://+:4566, EXPOSE 4566, HEALTHCHECK via curl
+- ENTRYPOINT ["dotnet", "MicroStack.dll"]
+
+**Bug fix:**
+- S3 `ListBuckets` returns null Buckets collection when account has no buckets → used null-coalescing `?? []` in test assertion
+
+**Build result:** 0 warnings, 0 errors
+**Test result:** 1160 passed, 1 skipped (pre-existing), 0 failed (16 new tests: 9 multi-tenancy + 7 unicode)
