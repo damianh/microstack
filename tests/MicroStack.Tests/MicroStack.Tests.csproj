@@ -40,6 +40,7 @@
     <PackageReference Include="AWSSDK.ElasticFileSystem" Version="4.*" />
     <PackageReference Include="AWSSDK.ElasticMapReduce" Version="4.*" />
     <PackageReference Include="AWSSDK.AppSync" Version="4.*" />
+    <PackageReference Include="AWSSDK.CloudFormation" Version="4.*" />
     <PackageReference Include="AWSSDK.CloudFront" Version="4.*" />
     <PackageReference Include="AWSSDK.CognitoIdentity" Version="4.*" />
     <PackageReference Include="AWSSDK.CognitoIdentityProvider" Version="4.*" />

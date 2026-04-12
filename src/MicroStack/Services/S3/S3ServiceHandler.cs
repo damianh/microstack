@@ -2080,6 +2080,15 @@ internal sealed partial class S3ServiceHandler : IServiceHandler
             return (bucket, key);
         }
 
+        // Virtual-host without .s3 subdomain: {bucket}.localhost[:port]
+        var vhostNoS3Match = Regex.Match(host, @"^([a-zA-Z0-9\-_]+)\.localhost(:\d+)?$");
+        if (vhostNoS3Match.Success)
+        {
+            var bucket = vhostNoS3Match.Groups[1].Value;
+            var key = path.TrimStart('/');
+            return (bucket, key);
+        }
+
         var trimmed = path.TrimStart('/');
         var parts = trimmed.Split('/', 2);
         var bucketName = parts.Length > 0 ? parts[0] : "";

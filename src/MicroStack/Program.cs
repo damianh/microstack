@@ -34,6 +34,7 @@ using MicroStack.Services.Emr;
 using MicroStack.Services.AppSync;
 using MicroStack.Services.CloudFront;
 using MicroStack.Services.ServiceDiscovery;
+using MicroStack.Services.CloudFormation;
 using MicroStack.Services.Cognito;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -108,6 +109,7 @@ registry.Register(new ServiceDiscoveryServiceHandler(route53Handler));
 var cognitoIdpHandler = new CognitoIdpServiceHandler();
 registry.Register(cognitoIdpHandler);
 registry.Register(new CognitoIdentityServiceHandler(cognitoIdpHandler));
+registry.Register(new CloudFormationServiceHandler(registry));
 
 // Health endpoint (multiple aliases for LocalStack compatibility)
 foreach (var healthPath in new[] { "/_ministack/health", "/health", "/_localstack/health" })
