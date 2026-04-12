@@ -22,6 +22,9 @@ using MicroStack.Services.Rds;
 using MicroStack.Services.ElastiCache;
 using MicroStack.Services.Ecr;
 using MicroStack.Services.RdsData;
+using MicroStack.Services.EventBridge;
+using MicroStack.Services.Kinesis;
+using MicroStack.Services.Firehose;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -79,6 +82,9 @@ registry.Register(new RdsServiceHandler());
 registry.Register(new ElastiCacheServiceHandler());
 registry.Register(new EcrServiceHandler());
 registry.Register(new RdsDataServiceHandler());
+registry.Register(new EventBridgeServiceHandler());
+registry.Register(new KinesisServiceHandler());
+registry.Register(new FirehoseServiceHandler());
 
 // Health endpoint (multiple aliases for LocalStack compatibility)
 foreach (var healthPath in new[] { "/_ministack/health", "/health", "/_localstack/health" })
