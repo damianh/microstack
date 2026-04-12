@@ -425,6 +425,8 @@ internal sealed partial class AwsServiceRouter
             || pathLower.StartsWith("/domainnames", StringComparison.Ordinal)
             || pathLower.StartsWith("/tags/arn:aws:apigateway:", StringComparison.Ordinal))
             return "apigateway";
+        if (pathLower.StartsWith("/2015-02-01/", StringComparison.Ordinal))
+            return "elasticfilesystem";
         if (pathLower.StartsWith("/2015-03-31/functions", StringComparison.Ordinal)
             || pathLower.StartsWith("/2015-03-31/layers", StringComparison.Ordinal)
             || pathLower.StartsWith("/2015-03-31/event-source-mappings", StringComparison.Ordinal)

@@ -163,3 +163,40 @@ Actions ported: StartQueryExecution, GetQueryExecution, GetQueryResults, StopQue
 
 **Build result:** 0 warnings, 0 errors
 **Test result:** 974 passed, 1 skipped (pre-existing), 0 failed (35 Glue + 30 Athena = 65 new tests)
+
+### 2026-04-12 - Port SES, WAF v2, and EFS Service Handlers + Tests (34 tests)
+
+**What was done:**
+- Created `src/MicroStack/Services/Ses/SesServiceHandler.cs` (~1146 lines) — full port of `ministack/services/ses.py` + `ses_v2.py`
+- Created `src/MicroStack/Services/Waf/WafServiceHandler.cs` (~599 lines) — full port of `ministack/services/waf.py`
+- Created `src/MicroStack/Services/Efs/EfsServiceHandler.cs` (~827 lines) — full port of `ministack/services/efs.py`
+- Registered all 3 handlers in `Program.cs`
+- Added EFS path routing (`/2015-02-01/`) to `AwsServiceRouter.cs`
+- Added 4 NuGet packages: `AWSSDK.SimpleEmail`, `AWSSDK.SimpleEmailV2`, `AWSSDK.WAFV2`, `AWSSDK.ElasticFileSystem`
+- Created `tests/MicroStack.Tests/SesTests.cs` — 17 integration tests (SES v1 + v2)
+- Created `tests/MicroStack.Tests/WafTests.cs` — 9 integration tests
+- Created `tests/MicroStack.Tests/EfsTests.cs` — 8 integration tests
+
+**SES handler (v1 Query/XML + v2 REST/JSON — single handler):**
+v1 actions: SendEmail, SendRawEmail, SendTemplatedEmail, SendBulkTemplatedEmail, VerifyEmailIdentity, VerifyDomainIdentity, VerifyDomainDkim, ListIdentities, GetIdentityVerificationAttributes, DeleteIdentity, GetSendQuota, GetSendStatistics, ListVerifiedEmailAddresses, CreateConfigurationSet, DeleteConfigurationSet, DescribeConfigurationSet, ListConfigurationSets, CreateTemplate, GetTemplate, UpdateTemplate, DeleteTemplate, ListTemplates, GetIdentityDkimAttributes, SetIdentityNotificationTopic, SetIdentityFeedbackForwardingEnabled
+v2 endpoints: SendEmail, CreateEmailIdentity, GetEmailIdentity, ListEmailIdentities, DeleteEmailIdentity, ConfigurationSet CRUD, Template CRUD, Tags, GetAccount
+
+**WAF v2 handler (JSON protocol via X-Amz-Target: AWSWAF_20190729):**
+Actions: CreateWebACL, GetWebACL, UpdateWebACL, DeleteWebACL, ListWebACLs, AssociateWebACL, DisassociateWebACL, GetWebACLForResource, ListResourcesForWebACL, CreateIPSet, GetIPSet, UpdateIPSet, DeleteIPSet, ListIPSets, CreateRuleGroup, GetRuleGroup, UpdateRuleGroup, DeleteRuleGroup, ListRuleGroups, TagResource, UntagResource, ListTagsForResource, CheckCapacity, DescribeManagedRuleGroup
+
+**EFS handler (REST/JSON with path routing /2015-02-01/...):**
+Actions: CreateFileSystem, DescribeFileSystems, DeleteFileSystem, UpdateFileSystem, CreateMountTarget, DescribeMountTargets, DeleteMountTarget, DescribeMountTargetSecurityGroups, ModifyMountTargetSecurityGroups, CreateAccessPoint, DescribeAccessPoints, DeleteAccessPoint, TagResource, UntagResource, ListTagsForResource, PutLifecycleConfiguration, DescribeLifecycleConfiguration, PutBackupPolicy, DescribeBackupPolicy, PutFileSystemPolicy, DescribeFileSystemPolicy, DescribeAccountPreferences, PutAccountPreferences
+
+**Bugs found & fixed during testing:**
+1. EFS `TagResource`/`UntagResource`/`ListTagsForResource` — resource IDs containing ARNs get URL-encoded in path (e.g., `%2F` for `/`). Added `Uri.UnescapeDataString()` to decode the resource ID from path segments.
+2. EFS `UntagResource` — tag keys sent as repeated query params (`tagKeys=key1&tagKeys=key2`). Fixed to use `rawQuery` (full `string[]`) instead of flattened single-value query dict.
+3. SES v1 `ListIdentities`/`ListConfigurationSets` — empty XML lists deserialized as null by AWS SDK v4. Fixed test assertions to use null-coalescing (`?? []`).
+
+**SES tests (17):** SendEmail, SendRawEmail, VerifyEmailAndListIdentities, VerifyDomainIdentity, GetIdentityVerificationAttributes, DeleteIdentity, ListIdentitiesByType, GetSendQuota, ConfigurationSetCrud, TemplateCrud, SendTemplatedEmail, VerifyDomainDkim, GetSendStatistics, V2SendEmail, V2EmailIdentityCrud, V2ConfigurationSetCrud, V2GetAccount
+
+**WAF tests (9):** WebAclCrud, UpdateWebAcl, AssociateDisassociateWebAcl, IpSetCrud, RuleGroupCrud, TagOperations, CheckCapacity, DescribeManagedRuleGroup, ListResourcesForWebAcl
+
+**EFS tests (8):** CreateAndDescribeFileSystem, CreationTokenIdempotency, DeleteFileSystem, MountTargetCrud, AccessPointCrud, TagOperations, LifecycleConfiguration, BackupPolicy
+
+**Build result:** 0 warnings, 0 errors
+**Test result:** 1008 passed, 1 skipped (pre-existing), 0 failed (17 SES + 9 WAF + 8 EFS = 34 new tests)

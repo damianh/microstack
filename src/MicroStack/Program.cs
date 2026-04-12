@@ -27,6 +27,9 @@ using MicroStack.Services.Kinesis;
 using MicroStack.Services.Firehose;
 using MicroStack.Services.Glue;
 using MicroStack.Services.Athena;
+using MicroStack.Services.Ses;
+using MicroStack.Services.Waf;
+using MicroStack.Services.Efs;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -89,6 +92,9 @@ registry.Register(new KinesisServiceHandler());
 registry.Register(new FirehoseServiceHandler());
 registry.Register(new GlueServiceHandler());
 registry.Register(new AthenaServiceHandler());
+registry.Register(new SesServiceHandler());
+registry.Register(new WafServiceHandler());
+registry.Register(new EfsServiceHandler());
 
 // Health endpoint (multiple aliases for LocalStack compatibility)
 foreach (var healthPath in new[] { "/_ministack/health", "/health", "/_localstack/health" })
