@@ -30,6 +30,10 @@ using MicroStack.Services.Athena;
 using MicroStack.Services.Ses;
 using MicroStack.Services.Waf;
 using MicroStack.Services.Efs;
+using MicroStack.Services.Emr;
+using MicroStack.Services.AppSync;
+using MicroStack.Services.CloudFront;
+using MicroStack.Services.ServiceDiscovery;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -78,7 +82,8 @@ var sfnHandler = new StepFunctionsServiceHandler(lambdaHandler, registry);
 registry.Register(sfnHandler);
 registry.Register(new Ec2ServiceHandler());
 registry.Register(new AlbServiceHandler());
-registry.Register(new Route53ServiceHandler());
+var route53Handler = new Route53ServiceHandler();
+registry.Register(route53Handler);
 registry.Register(new AcmServiceHandler());
 registry.Register(new CloudWatchLogsServiceHandler());
 registry.Register(new CloudWatchServiceHandler());
@@ -95,6 +100,10 @@ registry.Register(new AthenaServiceHandler());
 registry.Register(new SesServiceHandler());
 registry.Register(new WafServiceHandler());
 registry.Register(new EfsServiceHandler());
+registry.Register(new EmrServiceHandler());
+registry.Register(new AppSyncServiceHandler());
+registry.Register(new CloudFrontServiceHandler());
+registry.Register(new ServiceDiscoveryServiceHandler(route53Handler));
 
 // Health endpoint (multiple aliases for LocalStack compatibility)
 foreach (var healthPath in new[] { "/_ministack/health", "/health", "/_localstack/health" })
