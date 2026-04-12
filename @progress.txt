@@ -1,0 +1,21 @@
+## Progress Log
+
+### 2026-04-12 - Fix ECS build errors and ensure all tests pass
+
+**Problem:** EcsTests.cs had 5 build errors preventing compilation.
+
+**Errors fixed:**
+1. `EcsTests.cs(386)` - `ServiceAlreadyExistsException` does not exist in AWS ECS SDK v4.
+   - Fix: Changed handler error code from `"ServiceAlreadyExists"` to `"InvalidParameterException"` in `EcsServiceHandler.cs` line 1079.
+   - Fix: Changed test assertion from `ThrowsAsync<Amazon.ECS.Model.ServiceAlreadyExistsException>` to `ThrowsAsync<InvalidParameterException>`.
+
+2. `EcsTests.cs(1170, 1186)` - `KeyValuePair` ambiguous between `Amazon.ECS.Model.KeyValuePair` and `System.Collections.Generic.KeyValuePair`.
+   - Fix: Fully qualified to `Amazon.ECS.Model.KeyValuePair` in both locations.
+
+3. `EcsTests.cs(1633, 1634)` - `string` does not contain `.Value` property. In SDK v4, `TaskDefinition.Compatibilities` is `List<string>` (not `List<Compatibility>`).
+   - Fix: Removed `.Select(c => c.Value)` and asserted directly against the string list.
+
+**Result:**
+- Build: 0 warnings, 0 errors
+- ECS tests: 70/70 passing
+- Total tests: 742 passed, 1 skipped (pre-existing skip), 0 failed

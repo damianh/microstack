@@ -11,6 +11,7 @@
     <PackageReference Include="AWSSDK.CloudWatch" Version="4.*" />
     <PackageReference Include="AWSSDK.CloudWatchLogs" Version="4.*" />
     <PackageReference Include="AWSSDK.DynamoDBv2" Version="4.*" />
+    <PackageReference Include="AWSSDK.ECS" Version="4.*" />
     <PackageReference Include="AWSSDK.EC2" Version="4.*" />
     <PackageReference Include="AWSSDK.ElasticLoadBalancingV2" Version="4.*" />
     <PackageReference Include="AWSSDK.KeyManagementService" Version="4.*" />
