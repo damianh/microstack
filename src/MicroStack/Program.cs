@@ -18,6 +18,7 @@ using MicroStack.Services.CloudWatchLogs;
 using MicroStack.Services.CloudWatch;
 using MicroStack.Services.Sts;
 using MicroStack.Services.Ecs;
+using MicroStack.Services.Rds;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -71,6 +72,7 @@ registry.Register(new AcmServiceHandler());
 registry.Register(new CloudWatchLogsServiceHandler());
 registry.Register(new CloudWatchServiceHandler());
 registry.Register(new EcsServiceHandler());
+registry.Register(new RdsServiceHandler());
 
 // Health endpoint (multiple aliases for LocalStack compatibility)
 foreach (var healthPath in new[] { "/_ministack/health", "/health", "/_localstack/health" })

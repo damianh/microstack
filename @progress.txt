@@ -19,3 +19,68 @@
 - Build: 0 warnings, 0 errors
 - ECS tests: 70/70 passing
 - Total tests: 742 passed, 1 skipped (pre-existing skip), 0 failed
+
+### 2026-04-12 - Port RDS Service Handler from Python
+
+**What was done:**
+- Created `src/MicroStack/Services/Rds/RdsServiceHandler.cs` (2172 lines)
+- Full port of `ministack/services/rds.py` (2252 lines Python → 2172 lines C#)
+- Registered handler in `Program.cs` with `using MicroStack.Services.Rds;` + `registry.Register(new RdsServiceHandler());`
+
+**Actions implemented (34 total):**
+- DB Instance: CreateDBInstance, DescribeDBInstances, ModifyDBInstance, DeleteDBInstance, RebootDBInstance, StopDBInstance, StartDBInstance
+- DB Cluster: CreateDBCluster, DescribeDBClusters, ModifyDBCluster, DeleteDBCluster
+- DB Subnet Group: CreateDBSubnetGroup, DescribeDBSubnetGroups, ModifyDBSubnetGroup, DeleteDBSubnetGroup
+- DB Parameter Group: CreateDBParameterGroup, DescribeDBParameterGroups, DeleteDBParameterGroup, DescribeDBParameters, ModifyDBParameterGroup
+- DB Cluster Parameter Group: CreateDBClusterParameterGroup, DescribeDBClusterParameterGroups, DeleteDBClusterParameterGroup
+- DB Snapshot: CreateDBSnapshot, DescribeDBSnapshots, DeleteDBSnapshot, CopyDBSnapshot
+- DB Cluster Snapshot: CreateDBClusterSnapshot, DescribeDBClusterSnapshots, DeleteDBClusterSnapshot
+- Tags: AddTagsToResource, ListTagsForResource, RemoveTagsFromResource
+- Event Subscriptions: CreateEventSubscription, DescribeEventSubscriptions, DeleteEventSubscription
+- DB Proxy: CreateDBProxy, DescribeDBProxies, DeleteDBProxy
+- Describe helpers: DescribeOrderableDBInstanceOptions, DescribeEngineDefaultClusterParameters, DescribeDBEngineVersions
+
+**Architecture:**
+- `internal sealed class RdsServiceHandler : IServiceHandler`
+- Query/XML protocol (form-encoded body → XML responses)
+- XML namespace: `http://rds.amazonaws.com/doc/2014-10-31/`
+- Uses `AccountScopedDictionary<string, Dictionary<string, object?>>` for all state stores
+- Thread-safe with `Lock` around DispatchAction
+- Docker support intentionally omitted (not needed for emulator)
+
+**Build result:** 0 warnings, 0 errors
+
+**Note:** Tests not yet written — this was handler-only step.
+
+### 2026-04-12 - Add RDS Integration Tests (39 tests)
+
+**What was done:**
+- Created `tests/MicroStack.Tests/RdsTests.cs` — 39 integration tests porting all Python tests from `tests/test_rds.py`
+- Added `AWSSDK.RDS` NuGet package reference
+
+**Handler fixes required:**
+- Added missing StopDBCluster/StartDBCluster actions
+- Added missing OptionGroup CRUD (CreateOptionGroup, DescribeOptionGroups, DeleteOptionGroup)
+- Added missing GlobalCluster CRUD (CreateGlobalCluster, DescribeGlobalClusters, ModifyGlobalCluster, DeleteGlobalCluster, RemoveFromGlobalCluster)
+- Added OptionGroupXml and GlobalClusterXml serializers
+- Fixed DescribeDBProxies list item wrapper from `<DBProxy>` to `<member>` for SDK compatibility
+- Fixed DescribeGlobalClusters list item wrapper to `<GlobalClusterMember>` for SDK compatibility
+
+**Tests cover:**
+- DB Instance: Create, Describe, Modify, Delete, Reboot, Stop/Start, AlreadyExists error, NotFound error, DeletionProtection
+- DB Cluster: Create, Describe, Modify, Delete, Stop/Start, NotFound error
+- DB Subnet Group: Create/Describe, Modify, Delete
+- DB Parameter Group: Create/Describe, Modify, Delete
+- DB Cluster Parameter Group: Create/Describe, Delete
+- DB Snapshot: Create/Describe, Delete, Full CRUD lifecycle, CopyDBSnapshot
+- DB Cluster Snapshot: Create/Describe, Delete
+- Tags: Add, List, Remove with create-time tags
+- Event Subscriptions: Create, Describe, Delete
+- DB Proxy: Create, Describe, Delete
+- Option Group: Create, Describe, Delete
+- DescribeOrderableDBInstanceOptions
+- DescribeDBEngineVersions (Postgres + MySQL)
+- Global Cluster: Lifecycle, WithSource, DeleteWithMembersFails, Modify (rename + deletion protection)
+
+**Build result:** 0 warnings, 0 errors
+**Test result:** 781 passed, 1 skipped (pre-existing), 0 failed (39 new RDS tests)
