@@ -84,3 +84,48 @@
 
 **Build result:** 0 warnings, 0 errors
 **Test result:** 781 passed, 1 skipped (pre-existing), 0 failed (39 new RDS tests)
+
+### 2026-04-12 - Add EventBridge and Kinesis Integration Tests (50 tests)
+
+**What was done:**
+- Created `tests/MicroStack.Tests/EventBridgeTests.cs` — 30 integration tests porting Python tests from `tests/test_eventbridge.py`
+- Created `tests/MicroStack.Tests/KinesisTests.cs` — 20 integration tests porting Python tests from `tests/test_kinesis.py`
+- Handlers were already written and compile clean; no handler fixes were needed
+
+**EventBridge tests (30):**
+- Event Bus: Create/Describe, Update description, Delete, Delete default bus fails, Duplicate creation fails, Delete cleans up rules and targets
+- Rules: PutRule with event pattern, PutRule with schedule, DeleteRule (verify not found), Enable/Disable rule toggle
+- Targets: PutTargets and ListTargets, RemoveTargets, ListRuleNamesByTarget, ListRuleNamesByTarget pagination
+- PutEvents: Two entries, three entries with EventId validation
+- TestEventPattern: Match, no-match, invalid event JSON
+- Tags: Tag/untag resource
+- Archives: Full lifecycle (create/describe/list/delete), Update archive
+- Replays: Full lifecycle (start/describe/list/cancel), state transitions
+- Permissions: Put/remove permission
+- Connections: Create/describe/delete, Deauthorize connection
+- API Destinations: Create/describe/delete lifecycle
+- Endpoints: Create/describe/list/update/delete lifecycle
+- Partner Event Sources: Create/describe/list/delete stubs
+- Event Sources: Activate/deactivate/describe stubs, ListEventSources, PutPartnerEvents
+
+**Kinesis tests (20):**
+- Stream lifecycle: Create, Delete, List, Describe + Summary, ListShards
+- PutRecord/GetRecords: Put 3 records and read back, PutRecordsBatch (7 records)
+- Tags: Add/remove tags
+- Retention: Increase/decrease retention period
+- Encryption: Start/stop stream encryption toggle
+- Enhanced monitoring: Enable/disable monitoring metrics
+- Shard operations: SplitShard, MergeShards, UpdateShardCount
+- Consumers: Register/deregister/list/describe stream consumer
+- Iterator types: AT_TIMESTAMP shard iterator
+- Error cases: Duplicate stream creation (ResourceInUseException), Describe nonexistent stream (ResourceNotFoundException)
+- Misc: Put/get two records, GetRecords returns NextShardIterator
+
+**Notes on AWS SDK v4 validation:**
+- SDK v4 validates ARN patterns client-side at compile time (not just runtime)
+- Partner event source names must match `aws.partner/xxx/yyy` pattern
+- ConnectionArn for API destinations must match `connection/<name>/<uuid>` pattern
+- Exception types are specific subclasses (e.g. `ResourceNotFoundException`, `ResourceInUseException`, `ResourceAlreadyExistsException`, `InvalidEventPatternException`) not base `AmazonXxxException`
+
+**Build result:** 0 warnings, 0 errors
+**Test result:** 909 passed, 1 skipped (pre-existing), 0 failed (50 new EventBridge + Kinesis tests)
