@@ -129,3 +129,37 @@
 
 **Build result:** 0 warnings, 0 errors
 **Test result:** 909 passed, 1 skipped (pre-existing), 0 failed (50 new EventBridge + Kinesis tests)
+
+### 2026-04-12 - Add Glue and Athena Service Handlers (65 tests)
+
+**What was done:**
+- Created `src/MicroStack/Services/Glue/GlueServiceHandler.cs` (~900 lines C#) — full port of `ministack/services/glue.py` (1124 lines Python)
+- Created `src/MicroStack/Services/Athena/AthenaServiceHandler.cs` (~750 lines C#) — full port of `ministack/services/athena.py` (912 lines Python)
+- Registered both handlers in `Program.cs`
+- Added `AWSSDK.Glue` and `AWSSDK.Athena` NuGet packages to test project
+- Created `tests/MicroStack.Tests/GlueTests.cs` with 35 integration tests
+- Created `tests/MicroStack.Tests/AthenaTests.cs` with 30 integration tests
+
+**Glue handler (JSON protocol via X-Amz-Target: AWSGlue):**
+Actions ported: CreateDatabase, GetDatabase, GetDatabases, UpdateDatabase, DeleteDatabase, CreateTable, GetTable, GetTables, UpdateTable, DeleteTable, BatchDeleteTable, CreatePartition, GetPartition, GetPartitions, BatchGetPartition, BatchCreatePartition, DeletePartition, CreateCrawler, GetCrawler, UpdateCrawler, DeleteCrawler, StartCrawler, StopCrawler, GetCrawlers, CreateJob, GetJob, GetJobs, UpdateJob, DeleteJob, StartJobRun, GetJobRun, GetJobRuns, BatchStopJobRun, CreateRegistry, GetRegistry, DeleteRegistry, CreateSchema, GetSchema, GetSchemaVersion, DeleteSchema, TagResource, UntagResource, GetTags
+
+**Athena handler (JSON protocol via X-Amz-Target: AmazonAthena):**
+Actions ported: StartQueryExecution, GetQueryExecution, GetQueryResults, StopQueryExecution, ListQueryExecutions, BatchGetQueryExecution, CreateWorkGroup, GetWorkGroup, ListWorkGroups, UpdateWorkGroup, DeleteWorkGroup, CreateNamedQuery, GetNamedQuery, ListNamedQueries, DeleteNamedQuery, BatchGetNamedQuery, CreateDataCatalog, GetDataCatalog, ListDataCatalogs, UpdateDataCatalog, DeleteDataCatalog, CreatePreparedStatement, GetPreparedStatement, ListPreparedStatements, DeletePreparedStatement, UpdatePreparedStatement, GetTableMetadata, ListTableMetadata, TagResource, UntagResource, ListTagsForResource
+
+**Key implementation details:**
+- Both use JSON protocol (X-Amz-Target header routing)
+- Glue: job runs immediately SUCCEEDED (no background thread), crawlers go to READY state
+- Athena: synchronous mock query execution — queries immediately succeed with mock results parsed from SQL (e.g., `SELECT 42 AS answer` returns columns=["answer"], rows=[[42]])
+- Athena: `_workgroups` and `_dataCatalogs` are plain `Dictionary` (not AccountScopedDictionary) due to default entries ("primary" workgroup, "AwsDataCatalog")
+- Athena SDK validates StatementName must match `[a-zA-Z_][a-zA-Z0-9_@:]{1,256}` — hyphens NOT allowed
+
+**Test fixes needed:**
+- `CreatePreparedStatementAndGet` assertion expected `"ath-ps-v2"` but actual was `"ath_ps_v2"` (underscores used to satisfy SDK validation)
+- `ListPreparedStatements` assertion expected `"lps-stmt"` but actual was `"lps_stmt"` (same reason)
+
+**Glue tests (35):** CreateAndGetDatabase, ListDatabases, UpdateDatabase, DeleteDatabase, CreateAndGetTable, ListTables, UpdateTable, DeleteTable, BatchDeleteTable, CreateAndGetPartition, ListPartitions, BatchGetPartition, BatchCreatePartition, DeletePartition, CreateAndGetCrawler, UpdateCrawler, DeleteCrawler, StartStopCrawler, ListCrawlers, CreateAndGetJob, ListJobs, UpdateJob, DeleteJob, StartAndGetJobRun, ListJobRuns, BatchStopJobRun, CreateAndGetRegistry, DeleteRegistry, CreateAndGetSchema, GetSchemaVersion, DeleteSchema, TagAndUntagResource, CreateDuplicateDatabaseFails, CreateDuplicateTableFails, CreateDuplicateCrawlerFails
+
+**Athena tests (30):** StartQueryExecutionAndGetResults, StopQueryExecution, ListQueryExecutions, BatchGetQueryExecution, QueryNotFoundReturnsError, CreateWorkGroupAndGet, ListWorkGroupsIncludesPrimary, UpdateWorkGroupDescription, UpdateWorkGroupResultConfiguration, DeleteWorkGroupAndVerifyGone, CannotDeletePrimaryWorkGroup, CreateNamedQueryAndGet, ListNamedQueriesReturnsIds, DeleteNamedQueryAndVerifyGone, BatchGetNamedQuery, CreateDataCatalogAndGet, ListDataCatalogs, UpdateDataCatalog, DeleteDataCatalogAndVerifyGone, CannotDeleteDefaultDataCatalog, CreatePreparedStatementAndGet, ListPreparedStatements, DeletePreparedStatementAndVerifyGone, TagAndUntagResource, GetTableMetadata, ListTableMetadata, QueryResultsContainColumnInfo, CreateDuplicateWorkGroupFails, CreateDuplicateDataCatalogFails, CreateDuplicatePreparedStatementFails
+
+**Build result:** 0 warnings, 0 errors
+**Test result:** 974 passed, 1 skipped (pre-existing), 0 failed (35 Glue + 30 Athena = 65 new tests)
