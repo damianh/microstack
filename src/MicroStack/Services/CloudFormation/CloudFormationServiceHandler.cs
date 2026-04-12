@@ -17,7 +17,7 @@ internal sealed partial class CloudFormationServiceHandler : IServiceHandler
     private const string CfnNs = "http://cloudformation.amazonaws.com/doc/2010-05-15/";
 
     private static string Region =>
-        Environment.GetEnvironmentVariable("MINISTACK_REGION") ?? "us-east-1";
+        MicroStackOptions.Instance.Region;
 
     private readonly ServiceRegistry _registry;
 

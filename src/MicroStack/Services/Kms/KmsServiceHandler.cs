@@ -24,8 +24,7 @@ internal sealed class KmsServiceHandler : IServiceHandler
     private readonly AccountScopedDictionary<string, string> _aliases = new(); // alias_name -> key_id
     private readonly Lock _lock = new();
 
-    private static readonly string Region =
-        Environment.GetEnvironmentVariable("MINISTACK_REGION") ?? "us-east-1";
+    private static string Region => MicroStackOptions.Instance.Region;
 
     // -- IServiceHandler -------------------------------------------------------
 

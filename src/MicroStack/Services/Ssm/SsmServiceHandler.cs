@@ -21,8 +21,7 @@ internal sealed class SsmServiceHandler : IServiceHandler
     private readonly AccountScopedDictionary<string, Dictionary<string, string>> _tags = new();
     private readonly Lock _lock = new();
 
-    private static readonly string Region =
-        Environment.GetEnvironmentVariable("MINISTACK_REGION") ?? "us-east-1";
+    private static string Region => MicroStackOptions.Instance.Region;
 
     private const int DefaultPageSize = 10;
 
@@ -86,9 +85,41 @@ internal sealed class SsmServiceHandler : IServiceHandler
         }
     }
 
-    public object? GetState() => null;
+    public object? GetState()
+    {
+        lock (_lock)
+        {
+            return new Dictionary<string, object?>
+            {
+                ["parameters"] = _parameters.ToRaw(),
+                ["parameterHistory"] = _parameterHistory.ToRaw(),
+                ["tags"] = _tags.ToRaw(),
+            };
+        }
+    }
 
-    public void RestoreState(object state) { }
+    public void RestoreState(object state)
+    {
+        if (state is not Dictionary<string, object?> dict) return;
+        lock (_lock)
+        {
+            if (dict.TryGetValue("parameters", out var p)
+                && p is IReadOnlyDictionary<(string, string), SsmParameter> parameters)
+            {
+                _parameters.FromRaw(parameters);
+            }
+            if (dict.TryGetValue("parameterHistory", out var h)
+                && h is IReadOnlyDictionary<(string, string), List<SsmHistoryEntry>> history)
+            {
+                _parameterHistory.FromRaw(history);
+            }
+            if (dict.TryGetValue("tags", out var t)
+                && t is IReadOnlyDictionary<(string, string), Dictionary<string, string>> tags)
+            {
+                _tags.FromRaw(tags);
+            }
+        }
+    }
 
     // -- Helpers ---------------------------------------------------------------
 

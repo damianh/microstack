@@ -22,8 +22,7 @@ internal sealed class EmrServiceHandler : IServiceHandler
 {
     private readonly Lock _lock = new();
 
-    private static readonly string Region =
-        Environment.GetEnvironmentVariable("MINISTACK_REGION") ?? "us-east-1";
+    private static string Region => MicroStackOptions.Instance.Region;
 
     private static readonly char[] IdChars =
         "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789".ToCharArray();

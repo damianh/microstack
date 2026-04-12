@@ -32,14 +32,11 @@ internal sealed partial class ApiGatewayV2ServiceHandler : IServiceHandler
     private readonly AccountScopedDictionary<string, Dictionary<string, Dictionary<string, object?>>> _authorizers = new();
     private readonly AccountScopedDictionary<string, Dictionary<string, string>> _apiTags = new();
 
-    private static readonly string Region =
-        Environment.GetEnvironmentVariable("MINISTACK_REGION") ?? "us-east-1";
+    private static string Region => MicroStackOptions.Instance.Region;
 
-    private static readonly string Host =
-        Environment.GetEnvironmentVariable("MINISTACK_HOST") ?? "localhost";
+    private static string Host => MicroStackOptions.Instance.Host;
 
-    private static readonly string Port =
-        Environment.GetEnvironmentVariable("GATEWAY_PORT") ?? "4566";
+    private static string Port => MicroStackOptions.Instance.GatewayPort.ToString();
 
     private static readonly JsonSerializerOptions s_jsonOpts = new()
     {

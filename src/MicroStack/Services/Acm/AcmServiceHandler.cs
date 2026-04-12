@@ -18,8 +18,7 @@ internal sealed class AcmServiceHandler : IServiceHandler
     private readonly AccountScopedDictionary<string, AcmCertificate> _certificates = new(); // keyed by ARN
     private readonly Lock _lock = new();
 
-    private static readonly string Region =
-        Environment.GetEnvironmentVariable("MINISTACK_REGION") ?? "us-east-1";
+    private static string Region => MicroStackOptions.Instance.Region;
 
     // -- IServiceHandler -------------------------------------------------------
 

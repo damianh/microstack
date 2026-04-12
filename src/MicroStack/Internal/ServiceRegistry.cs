@@ -30,17 +30,16 @@ internal sealed class ServiceRegistry
         ["rds-data"]         = "rds-data",
     };
 
-    internal ServiceRegistry()
+    internal ServiceRegistry(MicroStackOptions options)
     {
-        // Handle LOCALSTACK_PERSISTENCE=1 -> S3_PERSIST=1 compatibility
-        if (Environment.GetEnvironmentVariable("LOCALSTACK_PERSISTENCE") == "1"
-            && Environment.GetEnvironmentVariable("S3_PERSIST") != "1")
+        // Handle LOCALSTACK_PERSISTENCE / S3_PERSIST compatibility
+        if (options.S3Persist)
         {
             Environment.SetEnvironmentVariable("S3_PERSIST", "1");
         }
 
-        // Parse SERVICES env var filter
-        var servicesEnv = Environment.GetEnvironmentVariable("SERVICES")?.Trim();
+        // Parse SERVICES option filter
+        var servicesEnv = options.Services;
         if (!string.IsNullOrEmpty(servicesEnv))
         {
             _allowedServices = new HashSet<string>(StringComparer.OrdinalIgnoreCase);

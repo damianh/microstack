@@ -469,7 +469,7 @@ internal sealed partial class AwsServiceRouter
         var m = RegionRegex().Match(auth);
         return m.Success
             ? m.Groups[1].Value
-            : (Environment.GetEnvironmentVariable("MINISTACK_REGION") ?? "us-east-1");
+            : MicroStackOptions.Instance.Region;
     }
 
     /// <summary>Extract the AWS access key ID from the Authorization header.</summary>

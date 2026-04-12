@@ -606,17 +606,15 @@ Create a fully functional .NET 10 port of MiniStack that passes equivalent integ
 
 ### Phase 9 — Packaging & Polish
 
-- [ ] 59 Dockerfile
-  **What**: Create a multi-stage Dockerfile: build stage uses `mcr.microsoft.com/dotnet/sdk:10.0` to publish a self-contained single-file executable, runtime stage uses `mcr.microsoft.com/dotnet/aspnet:10.0-alpine` (or runtime-deps for self-contained). Configure HEALTHCHECK, expose port 4566, set environment variables matching the Python Dockerfile. Include Node.js installation for Lambda Node.js runtime support.
+- [x] 59 Docker / OCI Image
+  **What**: Replaced the multi-stage Dockerfile with `dotnet publish /t:PublishContainer` OCI image support. Container configuration is in `MicroStack.csproj` via `ContainerRepository`, `ContainerImageTag`, `ContainerPort`, and `ContainerEnvironmentVariable` MSBuild items. Removed `Dockerfile` and `.dockerignore`.
   **Files**:
-    - `Dockerfile`
-    - `docker-compose.yml`
-    - `.dockerignore`
-  **Acceptance**: `docker build -t microstack .` succeeds. `docker run -p 4566:4566 microstack` starts and health endpoint responds.
+    - `src/MicroStack/MicroStack.csproj` (container properties added)
+    - `Dockerfile` (deleted)
+    - `.dockerignore` (deleted)
+  **Acceptance**: `dotnet publish /t:PublishContainer -c Release` pushes `microstack:latest` to local Docker. `docker run -p 4566:4566 microstack:latest` starts and health endpoint responds. ✅ Verified.
 
-  Source reference: `ministack/Dockerfile`, `ministack/docker-compose.yml`
-
-- [ ] 60 Configuration System
+- [x] 60 Configuration System
   **What**: Consolidate all environment variable handling into a strongly-typed configuration class. Environment variables: `GATEWAY_PORT`, `LOG_LEVEL`, `MINISTACK_HOST`, `MINISTACK_REGION`, `MINISTACK_ACCOUNT_ID`, `PERSIST_STATE`, `STATE_DIR`, `S3_PERSIST`, `S3_DATA_DIR`, `REDIS_HOST`, `REDIS_PORT`, `RDS_BASE_PORT`, `ELASTICACHE_BASE_PORT`, `LAMBDA_EXECUTOR`, `LAMBDA_DOCKER_NETWORK`, `SERVICES`, `LOCALSTACK_PERSISTENCE`. Use `IConfiguration` binding.
   **Files**:
     - `src/MicroStack/MicroStackOptions.cs`
@@ -631,7 +629,7 @@ Create a fully functional .NET 10 port of MiniStack that passes equivalent integ
 
   Source reference: `ministack/tests/test_multitenancy.py`
 
-- [ ] 62 Persistence Integration Test
+- [x] 62 Persistence Integration Test
   **What**: Port `test_ministack_persist.py` (272 lines). Verify that with `PERSIST_STATE=1`, service state survives server restart.
   **Files**:
     - `tests/MicroStack.Tests/PersistenceTests.cs`

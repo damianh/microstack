@@ -23,12 +23,9 @@ internal sealed class SqsServiceHandler : IServiceHandler
     private readonly AccountScopedDictionary<string, string> _queueNameToUrl = new();
     private readonly Lock _lock = new();
 
-    private static readonly string _region =
-        Environment.GetEnvironmentVariable("MINISTACK_REGION") ?? "us-east-1";
-    private static readonly string _defaultHost =
-        Environment.GetEnvironmentVariable("MINISTACK_HOST") ?? "localhost";
-    private static readonly string _defaultPort =
-        Environment.GetEnvironmentVariable("GATEWAY_PORT") ?? "4566";
+    private static string _region => MicroStackOptions.Instance.Region;
+    private static string _defaultHost => MicroStackOptions.Instance.Host;
+    private static string _defaultPort => MicroStackOptions.Instance.GatewayPort.ToString();
 
     private const int DedupWindowSeconds = 300; // 5 minutes
 
@@ -121,14 +118,32 @@ internal sealed class SqsServiceHandler : IServiceHandler
 
     public object? GetState()
     {
-        // Not implementing deep serialization for persistence in Phase 1.
-        // Full persistence will be wired up when state serialization is standardized.
-        return null;
+        lock (_lock)
+        {
+            return new Dictionary<string, object?>
+            {
+                ["queues"] = _queues.ToRaw(),
+                ["queueNameToUrl"] = _queueNameToUrl.ToRaw(),
+            };
+        }
     }
 
     public void RestoreState(object state)
     {
-        // Not implementing restore in Phase 1.
+        if (state is not Dictionary<string, object?> dict) return;
+        lock (_lock)
+        {
+            if (dict.TryGetValue("queues", out var q)
+                && q is IReadOnlyDictionary<(string, string), SqsQueue> queues)
+            {
+                _queues.FromRaw(queues);
+            }
+            if (dict.TryGetValue("queueNameToUrl", out var n)
+                && n is IReadOnlyDictionary<(string, string), string> names)
+            {
+                _queueNameToUrl.FromRaw(names);
+            }
+        }
     }
 
     // ── JSON protocol ───────────────────────────────────────────────────────────

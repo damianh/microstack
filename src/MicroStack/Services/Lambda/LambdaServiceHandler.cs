@@ -28,8 +28,7 @@ internal sealed class LambdaServiceHandler : IServiceHandler
     private readonly DynamoDbServiceHandler? _ddbHandler;
     private EventSourceMappingPoller? _poller;
 
-    private static readonly string Region =
-        Environment.GetEnvironmentVariable("MINISTACK_REGION") ?? "us-east-1";
+    private static string Region => MicroStackOptions.Instance.Region;
 
     internal LambdaServiceHandler() { }
 

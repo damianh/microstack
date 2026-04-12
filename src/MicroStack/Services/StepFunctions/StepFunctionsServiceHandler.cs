@@ -39,8 +39,7 @@ internal sealed partial class StepFunctionsServiceHandler : IServiceHandler
     private readonly LambdaServiceHandler _lambda;
     private readonly ServiceRegistry _registry;
 
-    private static readonly string Region =
-        Environment.GetEnvironmentVariable("MINISTACK_REGION") ?? "us-east-1";
+    private static string Region => MicroStackOptions.Instance.Region;
 
     private static readonly HashSet<string> TimestampResponseFields =
     [

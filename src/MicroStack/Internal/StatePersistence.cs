@@ -11,20 +11,17 @@ namespace MicroStack.Internal;
 /// </summary>
 internal sealed class StatePersistence
 {
-    private static readonly bool _enabled =
-        Environment.GetEnvironmentVariable("PERSIST_STATE") == "1";
-
-    private static readonly string _stateDir =
-        Environment.GetEnvironmentVariable("STATE_DIR")
-        ?? Path.Combine(Path.GetTempPath(), "ministack-state");
-
+    private readonly bool _enabled;
+    private readonly string _stateDir;
     private readonly ILogger<StatePersistence> _logger;
     private readonly ServiceRegistry _registry;
 
-    internal StatePersistence(ILogger<StatePersistence> logger, ServiceRegistry registry)
+    internal StatePersistence(ILogger<StatePersistence> logger, ServiceRegistry registry, MicroStackOptions options)
     {
         _logger   = logger;
         _registry = registry;
+        _enabled  = options.PersistState;
+        _stateDir = options.StateDir;
     }
 
     internal bool IsEnabled => _enabled;

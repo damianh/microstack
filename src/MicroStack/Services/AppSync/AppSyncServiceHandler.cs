@@ -22,8 +22,7 @@ internal sealed partial class AppSyncServiceHandler : IServiceHandler
 {
     private readonly Lock _lock = new();
 
-    private static readonly string Region =
-        Environment.GetEnvironmentVariable("MINISTACK_REGION") ?? "us-east-1";
+    private static string Region => MicroStackOptions.Instance.Region;
 
     // In-memory state
     private readonly AccountScopedDictionary<string, Dictionary<string, object?>> _apis = new();

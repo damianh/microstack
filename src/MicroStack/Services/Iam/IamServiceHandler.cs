@@ -48,8 +48,7 @@ internal sealed class IamServiceHandler : IServiceHandler
 
     private readonly Lock _lock = new();
 
-    private static readonly string Region =
-        Environment.GetEnvironmentVariable("MINISTACK_REGION") ?? "us-east-1";
+    private static string Region => MicroStackOptions.Instance.Region;
 
     private const string IamXmlNs = "https://iam.amazonaws.com/doc/2010-05-08/";
 

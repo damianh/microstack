@@ -59,8 +59,7 @@ internal sealed class EcsServiceHandler : IServiceHandler
 
     private readonly Lock _lock = new();
 
-    private static readonly string Region =
-        Environment.GetEnvironmentVariable("MINISTACK_REGION") ?? "us-east-1";
+    private static string Region => MicroStackOptions.Instance.Region;
 
     // -- IServiceHandler -------------------------------------------------------
 

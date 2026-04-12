@@ -36,8 +36,7 @@ internal sealed class ApiGatewayV1ServiceHandler
     private readonly AccountScopedDictionary<string, Dictionary<string, Dictionary<string, object?>>> _basePathMappings = new();
     private readonly AccountScopedDictionary<string, Dictionary<string, string>> _v1Tags = new();
 
-    private static readonly string Region =
-        Environment.GetEnvironmentVariable("MINISTACK_REGION") ?? "us-east-1";
+    private static string Region => MicroStackOptions.Instance.Region;
 
     private static readonly JsonSerializerOptions s_jsonOpts = new()
     {

@@ -30,8 +30,7 @@ internal sealed partial class EventBridgeServiceHandler : IServiceHandler
 {
     private readonly Lock _lock = new();
 
-    private static readonly string Region =
-        Environment.GetEnvironmentVariable("MINISTACK_REGION") ?? "us-east-1";
+    private static string Region => MicroStackOptions.Instance.Region;
 
     // In-memory state
     private Dictionary<string, Dictionary<string, object?>> _eventBuses = CreateDefaultBuses();

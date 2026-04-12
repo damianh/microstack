@@ -12,7 +12,7 @@ internal sealed class RdsServiceHandler : IServiceHandler
     private const string RdsNs = "http://rds.amazonaws.com/doc/2014-10-31/";
 
     private static string Region =>
-        Environment.GetEnvironmentVariable("MINISTACK_REGION") ?? "us-east-1";
+        MicroStackOptions.Instance.Region;
 
     // ── State stores ──────────────────────────────────────────────────────────
 

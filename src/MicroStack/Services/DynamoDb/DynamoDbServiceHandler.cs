@@ -23,8 +23,7 @@ internal sealed class DynamoDbServiceHandler : IServiceHandler
     private long _streamSeqCounter;
     private readonly Lock _lock = new();
 
-    private static readonly string _region =
-        Environment.GetEnvironmentVariable("MINISTACK_REGION") ?? "us-east-1";
+    private static string _region => MicroStackOptions.Instance.Region;
 
     // ── IServiceHandler ──────────────────────────────────────────────────────────
 

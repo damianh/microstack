@@ -24,8 +24,7 @@ internal sealed class SecretsManagerServiceHandler : IServiceHandler
     private readonly AccountScopedDictionary<string, string> _resourcePolicies = new(); // keyed by ARN
     private readonly Lock _lock = new();
 
-    private static readonly string Region =
-        Environment.GetEnvironmentVariable("MINISTACK_REGION") ?? "us-east-1";
+    private static string Region => MicroStackOptions.Instance.Region;
 
     // Characters used by GetRandomPassword
     private const string LowercaseChars = "abcdefghijklmnopqrstuvwxyz";
@@ -100,9 +99,35 @@ internal sealed class SecretsManagerServiceHandler : IServiceHandler
         }
     }
 
-    public object? GetState() => null;
+    public object? GetState()
+    {
+        lock (_lock)
+        {
+            return new Dictionary<string, object?>
+            {
+                ["secrets"] = _secrets.ToRaw(),
+                ["resourcePolicies"] = _resourcePolicies.ToRaw(),
+            };
+        }
+    }
 
-    public void RestoreState(object state) { }
+    public void RestoreState(object state)
+    {
+        if (state is not Dictionary<string, object?> dict) return;
+        lock (_lock)
+        {
+            if (dict.TryGetValue("secrets", out var s)
+                && s is IReadOnlyDictionary<(string, string), SmSecret> secrets)
+            {
+                _secrets.FromRaw(secrets);
+            }
+            if (dict.TryGetValue("resourcePolicies", out var rp)
+                && rp is IReadOnlyDictionary<(string, string), string> policies)
+            {
+                _resourcePolicies.FromRaw(policies);
+            }
+        }
+    }
 
     // -- Helpers ---------------------------------------------------------------
 

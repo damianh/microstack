@@ -26,7 +26,7 @@ internal sealed partial class CloudWatchServiceHandler : IServiceHandler
     public string ServiceName => "monitoring";
 
     private static string Region =>
-        Environment.GetEnvironmentVariable("MINISTACK_REGION") ?? "us-east-1";
+        MicroStackOptions.Instance.Region;
 
     private const string CwNs = "http://monitoring.amazonaws.com/doc/2010-08-01/";
     private const long TwoWeeksSeconds = 14 * 24 * 3600;

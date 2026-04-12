@@ -26,7 +26,7 @@ internal sealed class EcrServiceHandler : IServiceHandler
     public string ServiceName => "ecr";
 
     private static string Region =>
-        Environment.GetEnvironmentVariable("MINISTACK_REGION") ?? "us-east-1";
+        MicroStackOptions.Instance.Region;
 
     private readonly AccountScopedDictionary<string, Dictionary<string, object?>> _repositories = new();
     private readonly AccountScopedDictionary<string, List<Dictionary<string, object?>>> _images = new();

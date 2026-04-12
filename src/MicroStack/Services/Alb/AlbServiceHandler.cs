@@ -11,7 +11,7 @@ internal sealed class AlbServiceHandler : IServiceHandler
     private const string Ns = "http://elasticloadbalancing.amazonaws.com/doc/2015-12-01/";
 
     private static string Region =>
-        Environment.GetEnvironmentVariable("MINISTACK_REGION") ?? "us-east-1";
+        MicroStackOptions.Instance.Region;
 
     // State stores (account-scoped)
     private readonly AccountScopedDictionary<string, Dictionary<string, object>> _lbs = new();

@@ -10,8 +10,15 @@ internal static partial class AccountContext
 {
     private static readonly AsyncLocal<string?> _accountId = new();
 
-    private static readonly string _defaultAccountId =
-        Environment.GetEnvironmentVariable("MINISTACK_ACCOUNT_ID") ?? "000000000000";
+    private static string _defaultAccountId = "000000000000";
+
+    /// <summary>
+    /// Configures the default account ID from options. Called once at startup.
+    /// </summary>
+    internal static void Configure(MicroStackOptions options)
+    {
+        _defaultAccountId = options.DefaultAccountId;
+    }
 
     [GeneratedRegex(@"^\d{12}$")]
     private static partial Regex TwelveDigitRegex();

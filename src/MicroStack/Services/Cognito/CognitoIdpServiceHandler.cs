@@ -16,8 +16,7 @@ internal sealed partial class CognitoIdpServiceHandler : IServiceHandler
 {
     private readonly Lock _lock = new();
 
-    private static readonly string Region =
-        Environment.GetEnvironmentVariable("MINISTACK_REGION") ?? "us-east-1";
+    private static string Region => MicroStackOptions.Instance.Region;
 
     // ── Shared state (also read by CognitoIdentityServiceHandler) ──────────
     internal readonly AccountScopedDictionary<string, Dictionary<string, object?>> UserPools = new();

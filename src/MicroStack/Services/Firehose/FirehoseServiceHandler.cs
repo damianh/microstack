@@ -20,8 +20,7 @@ internal sealed class FirehoseServiceHandler : IServiceHandler
     private readonly Lock _lock = new();
     private int _destCounter;
 
-    private static readonly string Region =
-        Environment.GetEnvironmentVariable("MINISTACK_REGION") ?? "us-east-1";
+    private static string Region => MicroStackOptions.Instance.Region;
 
     // -- IServiceHandler -------------------------------------------------------
 

@@ -28,8 +28,7 @@ internal sealed class CloudWatchLogsServiceHandler : IServiceHandler
     private readonly AccountScopedDictionary<string, InsightsQuery> _queries = new(); // keyed by query ID
     private readonly Lock _lock = new();
 
-    private static readonly string Region =
-        Environment.GetEnvironmentVariable("MINISTACK_REGION") ?? "us-east-1";
+    private static string Region => MicroStackOptions.Instance.Region;
 
     private static readonly HashSet<int> ValidRetentionDays =
     [

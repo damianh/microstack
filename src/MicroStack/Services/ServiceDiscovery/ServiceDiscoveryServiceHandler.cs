@@ -23,8 +23,7 @@ namespace MicroStack.Services.ServiceDiscovery;
 /// </summary>
 internal sealed class ServiceDiscoveryServiceHandler : IServiceHandler
 {
-    private static readonly string Region =
-        Environment.GetEnvironmentVariable("MINISTACK_REGION") ?? "us-east-1";
+    private static string Region => MicroStackOptions.Instance.Region;
 
     private readonly Route53ServiceHandler _route53;
     private readonly Lock _lock = new();

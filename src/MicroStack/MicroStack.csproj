@@ -5,4 +5,19 @@
     <RootNamespace>MicroStack</RootNamespace>
   </PropertyGroup>
 
+  <!-- OCI container image publishing via 'dotnet publish /t:PublishContainer' -->
+  <PropertyGroup>
+    <ContainerRepository>microstack</ContainerRepository>
+    <ContainerImageTag>latest</ContainerImageTag>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ContainerPort Include="4566" Type="tcp" />
+    <ContainerEnvironmentVariable Include="ASPNETCORE_HTTP_PORTS" Value="4566" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="MicroStack.Tests" />
+  </ItemGroup>
+
 </Project>

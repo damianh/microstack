@@ -21,7 +21,7 @@ internal sealed class AwsRequestMiddleware
     private readonly ILogger<AwsRequestMiddleware> _logger;
 
     private static readonly string _host =
-        Environment.GetEnvironmentVariable("MINISTACK_HOST") ?? "localhost";
+        MicroStackOptions.Instance.Host;
 
     // Matches {apiId}.execute-api.<host>[:<port>]
     private static readonly System.Text.RegularExpressions.Regex _executeApiRe =

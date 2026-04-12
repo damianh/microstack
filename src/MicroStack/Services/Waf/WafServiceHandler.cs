@@ -19,8 +19,7 @@ internal sealed class WafServiceHandler : IServiceHandler
 {
     private readonly Lock _lock = new();
 
-    private static readonly string Region =
-        Environment.GetEnvironmentVariable("MINISTACK_REGION") ?? "us-east-1";
+    private static string Region => MicroStackOptions.Instance.Region;
 
     // ── State ────────────────────────────────────────────────────────────────
     private readonly AccountScopedDictionary<string, Dictionary<string, object?>> _webAcls = new();

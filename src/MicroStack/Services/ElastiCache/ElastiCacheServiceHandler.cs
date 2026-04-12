@@ -31,7 +31,7 @@ internal sealed class ElastiCacheServiceHandler : IServiceHandler
     private const string ElastiCacheNs = "http://elasticache.amazonaws.com/doc/2015-02-02/";
 
     private static string Region =>
-        Environment.GetEnvironmentVariable("MINISTACK_REGION") ?? "us-east-1";
+        MicroStackOptions.Instance.Region;
 
     // ── State stores ──────────────────────────────────────────────────────────
 

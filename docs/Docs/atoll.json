@@ -1,0 +1,11 @@
+{
+  "$schema": "https://raw.githubusercontent.com/damianh/atoll/main/schemas/atoll.schema.json",
+  "site": "https://damianh.github.io",
+  "base": "/microstack",
+  "outDir": "dist",
+  "build": {
+    "minify": true,
+    "fingerprint": true,
+    "clean": true
+  }
+}

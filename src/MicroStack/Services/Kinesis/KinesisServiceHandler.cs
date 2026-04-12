@@ -23,8 +23,7 @@ internal sealed class KinesisServiceHandler : IServiceHandler
 {
     private readonly Lock _lock = new();
 
-    private static readonly string Region =
-        Environment.GetEnvironmentVariable("MINISTACK_REGION") ?? "us-east-1";
+    private static string Region => MicroStackOptions.Instance.Region;
 
     private static readonly System.Numerics.BigInteger MaxHashKey = System.Numerics.BigInteger.Pow(2, 128) - 1;
     private const int IteratorExpirySeconds = 300;

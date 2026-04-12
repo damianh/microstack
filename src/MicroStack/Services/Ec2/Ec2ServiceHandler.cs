@@ -20,7 +20,7 @@ internal sealed class Ec2ServiceHandler : IServiceHandler
     private const string DefaultIgwId = "igw-00000001";
 
     private static string Region =>
-        Environment.GetEnvironmentVariable("MINISTACK_REGION") ?? "us-east-1";
+        MicroStackOptions.Instance.Region;
 
     private readonly AccountScopedDictionary<string, Dictionary<string, object>> _instances = new();
     private readonly AccountScopedDictionary<string, Dictionary<string, object>> _securityGroups = new();
@@ -2543,7 +2543,7 @@ internal sealed class Ec2ServiceHandler : IServiceHandler
 
     private static string SubnetXml(Dictionary<string, object> subnet, string tag)
     {
-        var region = Environment.GetEnvironmentVariable("MINISTACK_REGION") ?? "us-east-1";
+        var region = MicroStackOptions.Instance.Region;
         var accountId = AccountContext.GetAccountId();
         var defaultForAz = (bool)subnet["DefaultForAz"] ? "true" : "false";
         var mapPublic = (bool)subnet["MapPublicIpOnLaunch"] ? "true" : "false";
@@ -2615,7 +2615,7 @@ internal sealed class Ec2ServiceHandler : IServiceHandler
             attachment = $"<attachment><attachmentId>{a["AttachmentId"]}</attachmentId><instanceId>{a.GetValueOrDefault("InstanceId", "")}</instanceId><deviceIndex>{a.GetValueOrDefault("DeviceIndex", 0)}</deviceIndex><status>{a.GetValueOrDefault("Status", "attached")}</status></attachment>";
         }
         var privateIp = (string)eni["PrivateIpAddress"];
-        var region = Environment.GetEnvironmentVariable("MINISTACK_REGION") ?? "us-east-1";
+        var region = MicroStackOptions.Instance.Region;
         var sourceDestCheck = eni.TryGetValue("SourceDestCheck", out var sdc) && sdc is bool sdcBool ? (sdcBool ? "true" : "false") : "true";
         return $"<{tag}><networkInterfaceId>{eni["NetworkInterfaceId"]}</networkInterfaceId><subnetId>{eni["SubnetId"]}</subnetId><vpcId>{eni["VpcId"]}</vpcId><availabilityZone>{eni.GetValueOrDefault("AvailabilityZone", region + "a")}</availabilityZone><description>{eni["Description"]}</description><ownerId>{eni["OwnerId"]}</ownerId><status>{eni["Status"]}</status><privateIpAddress>{privateIp}</privateIpAddress><sourceDestCheck>{sourceDestCheck}</sourceDestCheck><interfaceType>{eni.GetValueOrDefault("InterfaceType", "interface")}</interfaceType><macAddress>{eni["MacAddress"]}</macAddress><groupSet>{groups}</groupSet><privateIpAddressesSet><item><privateIpAddress>{privateIp}</privateIpAddress><primary>true</primary></item></privateIpAddressesSet>{attachment}<tagSet/></{tag}>";
     }

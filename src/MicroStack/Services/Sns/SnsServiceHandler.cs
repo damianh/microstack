@@ -31,8 +31,7 @@ internal sealed class SnsServiceHandler : IServiceHandler
     private readonly AccountScopedDictionary<string, SnsPlatformEndpoint> _platformEndpoints = new();
     private readonly Lock _lock = new();
 
-    private static readonly string Region =
-        Environment.GetEnvironmentVariable("MINISTACK_REGION") ?? "us-east-1";
+    private static string Region => MicroStackOptions.Instance.Region;
 
     private const string SnsXmlNs = "http://sns.amazonaws.com/doc/2010-03-31/";
 
@@ -106,9 +105,47 @@ internal sealed class SnsServiceHandler : IServiceHandler
         }
     }
 
-    public object? GetState() => null;
+    public object? GetState()
+    {
+        lock (_lock)
+        {
+            return new Dictionary<string, object?>
+            {
+                ["topics"] = _topics.ToRaw(),
+                ["subArnToTopic"] = _subArnToTopic.ToRaw(),
+                ["platformApps"] = _platformApps.ToRaw(),
+                ["platformEndpoints"] = _platformEndpoints.ToRaw(),
+            };
+        }
+    }
 
-    public void RestoreState(object state) { }
+    public void RestoreState(object state)
+    {
+        if (state is not Dictionary<string, object?> dict) return;
+        lock (_lock)
+        {
+            if (dict.TryGetValue("topics", out var t)
+                && t is IReadOnlyDictionary<(string, string), SnsTopic> topics)
+            {
+                _topics.FromRaw(topics);
+            }
+            if (dict.TryGetValue("subArnToTopic", out var s)
+                && s is IReadOnlyDictionary<(string, string), string> subs)
+            {
+                _subArnToTopic.FromRaw(subs);
+            }
+            if (dict.TryGetValue("platformApps", out var pa)
+                && pa is IReadOnlyDictionary<(string, string), SnsPlatformApp> apps)
+            {
+                _platformApps.FromRaw(apps);
+            }
+            if (dict.TryGetValue("platformEndpoints", out var pe)
+                && pe is IReadOnlyDictionary<(string, string), SnsPlatformEndpoint> endpoints)
+            {
+                _platformEndpoints.FromRaw(endpoints);
+            }
+        }
+    }
 
     // ── Topic management ────────────────────────────────────────────────────────
 

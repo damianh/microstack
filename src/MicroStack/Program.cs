@@ -40,21 +40,24 @@ using MicroStack.Services.S3Files;
 
 var builder = WebApplication.CreateBuilder(args);
 
-var port = int.Parse(
-    Environment.GetEnvironmentVariable("GATEWAY_PORT")
-    ?? Environment.GetEnvironmentVariable("EDGE_PORT")
-    ?? "4566");
+// Bind all environment variables into strongly-typed options (single source of truth)
+var options = MicroStackOptions.BindFromEnvironment();
+builder.Services.AddSingleton(options);
 
-builder.WebHost.UseUrls($"http://0.0.0.0:{port}");
+builder.WebHost.UseUrls($"http://0.0.0.0:{options.GatewayPort}");
+
+// Configure static services that can't use constructor injection
+AccountContext.Configure(options);
 
 // Register core infrastructure
 // Note: ServiceRegistry and StatePersistence have internal constructors (per coding standards),
 // so we use factory lambdas instead of letting DI locate a public constructor.
 builder.Services.AddSingleton<AwsServiceRouter>();
-builder.Services.AddSingleton<ServiceRegistry>(_ => new ServiceRegistry());
+builder.Services.AddSingleton<ServiceRegistry>(_ => new ServiceRegistry(options));
 builder.Services.AddSingleton<StatePersistence>(sp => new StatePersistence(
     sp.GetRequiredService<ILogger<StatePersistence>>(),
-    sp.GetRequiredService<ServiceRegistry>()));
+    sp.GetRequiredService<ServiceRegistry>(),
+    options));
 
 var app = builder.Build();
 
