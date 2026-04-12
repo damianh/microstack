@@ -36,6 +36,7 @@ using MicroStack.Services.CloudFront;
 using MicroStack.Services.ServiceDiscovery;
 using MicroStack.Services.CloudFormation;
 using MicroStack.Services.Cognito;
+using MicroStack.Services.S3Files;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -110,6 +111,7 @@ var cognitoIdpHandler = new CognitoIdpServiceHandler();
 registry.Register(cognitoIdpHandler);
 registry.Register(new CognitoIdentityServiceHandler(cognitoIdpHandler));
 registry.Register(new CloudFormationServiceHandler(registry));
+registry.Register(new S3FilesServiceHandler());
 
 // Health endpoint (multiple aliases for LocalStack compatibility)
 foreach (var healthPath in new[] { "/_ministack/health", "/health", "/_localstack/health" })

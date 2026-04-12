@@ -1,0 +1,11 @@
+**/bin/
+**/obj/
+**/.vs/
+**/.vscode/
+.git/
+.gitignore
+*.md
+*.user
+*.suo
+*.ncrunchsolution*
+.weave/
