@@ -303,3 +303,42 @@ Actions: CreateFileSystem, DescribeFileSystems, DeleteFileSystem, UpdateFileSyst
 
 **Build result:** 0 warnings, 0 errors
 **Test result:** 1112 passed, 1 skipped (pre-existing), 0 failed (55 new Cognito tests)
+
+### 2026-04-12 - Port S3Files handler, Dockerfile, Multi-Tenancy and Unicode tests (Tasks 57, 59, 61, 63)
+
+**What was done:**
+- Created `src/MicroStack/Services/S3Files/S3FilesServiceHandler.cs` (~430 lines) — full port of `ministack/services/s3files.py` (379 lines Python)
+- Registered handler in `Program.cs` with `using MicroStack.Services.S3Files;` + `registry.Register(new S3FilesServiceHandler());`
+- Created `Dockerfile` at repo root — multi-stage build (SDK build → aspnet runtime, port 4566, healthcheck)
+- Created `.dockerignore` — excludes bin/, obj/, .vs/, .git/, etc.
+- Created `tests/MicroStack.Tests/MultiTenancyTests.cs` — 9 integration tests porting Python tests from `tests/test_multitenancy.py`
+- Created `tests/MicroStack.Tests/UnicodeTests.cs` — 7 integration tests porting Python tests from `tests/test_unicode.py`
+
+**S3Files handler (REST/JSON protocol with path-based routing):**
+Actions: CreateFileSystem, GetFileSystem, ListFileSystems, DeleteFileSystem, CreateMountTarget, GetMountTarget, ListMountTargets, UpdateMountTarget, DeleteMountTarget, CreateAccessPoint, GetAccessPoint, ListAccessPoints, DeleteAccessPoint, GetFileSystemPolicy, PutFileSystemPolicy, DeleteFileSystemPolicy, GetSynchronizationConfiguration, PutSynchronizationConfiguration, TagResource, UntagResource, ListTagsForResource
+
+**MultiTenancy tests (9):**
+- DefaultAccountId, TwelveDigitAccessKeyBecomesAccountId, DifferentTwelveDigitKeysGetDifferentAccounts, NonTwelveDigitNumericFallsBack
+- SqsQueueArnUsesDynamicAccount, SqsQueuesIsolatedByAccount
+- S3BucketsIsolatedByAccount, DynamoDbTablesIsolatedByAccount
+- ResetClearsAllAccounts
+
+**Unicode tests (7):**
+- UnicodeS3ObjectKey — Unicode key and body roundtrip (données/résumé/文件.txt)
+- UnicodeS3Metadata — percent-encoded metadata roundtrip (résumé.pdf, Ñoño)
+- UnicodeDynamoDbItem — Cyrillic/CJK/Arabic attribute values (ключ, значение 日本語 مرحبا)
+- UnicodeSqsMessage — CJK/Latin message body (こんにちは世界 héllo wörld)
+- UnicodeSecretsManager — Cyrillic/Chinese secret value (пароль: 密码)
+- UnicodeSsmParameter — Korean/Greek parameter value (값: τιμή)
+- UnicodeRoute53ZoneComment — Spanish/Latin zone comment (zona en español — Ünïcödé)
+
+**Dockerfile:**
+- Multi-stage: mcr.microsoft.com/dotnet/sdk:10.0-preview (build) → mcr.microsoft.com/dotnet/aspnet:10.0-preview (runtime)
+- ASPNETCORE_URLS=http://+:4566, EXPOSE 4566, HEALTHCHECK via curl
+- ENTRYPOINT ["dotnet", "MicroStack.dll"]
+
+**Bug fix:**
+- S3 `ListBuckets` returns null Buckets collection when account has no buckets → used null-coalescing `?? []` in test assertion
+
+**Build result:** 0 warnings, 0 errors
+**Test result:** 1160 passed, 1 skipped (pre-existing), 0 failed (16 new tests: 9 multi-tenancy + 7 unicode)
