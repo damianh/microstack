@@ -171,6 +171,7 @@ internal sealed class AwsRequestMiddleware
             || path.Equals("/BeginTransaction", StringComparison.OrdinalIgnoreCase)
             || path.Equals("/CommitTransaction", StringComparison.OrdinalIgnoreCase)
             || path.Equals("/RollbackTransaction", StringComparison.OrdinalIgnoreCase)
+            || path.Equals("/BatchExecute", StringComparison.OrdinalIgnoreCase)
             || path.StartsWith("/Execute/", StringComparison.OrdinalIgnoreCase))
         {
             await DispatchToService(context, serviceRequest, "rds-data");
