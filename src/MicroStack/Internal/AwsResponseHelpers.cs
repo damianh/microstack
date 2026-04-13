@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Xml.Linq;
 
 namespace MicroStack.Internal;
@@ -60,18 +61,21 @@ internal static class AwsResponseHelpers
 
     // ── JSON responses ─────────────────────────────────────────────────────────
 
-    /// <summary>Build an AWS-style JSON response.</summary>
-    internal static ServiceResponse JsonResponse(object data, int statusCode = 200)
+    /// <summary>Build an AWS-style JSON response from a dictionary.</summary>
+    internal static ServiceResponse JsonResponse(Dictionary<string, object?> data, int statusCode = 200)
     {
-        var json = JsonSerializer.SerializeToUtf8Bytes(data, JsonOpts);
-        return new ServiceResponse(statusCode, JsonHeaders, json);
+        using var ms     = new System.IO.MemoryStream();
+        using var writer = new Utf8JsonWriter(ms);
+        DictionaryObjectJsonConverter.WriteObject(writer, data);
+        writer.Flush();
+        return new ServiceResponse(statusCode, JsonHeaders, ms.ToArray());
     }
 
     /// <summary>Build an AWS-style JSON error response.</summary>
     internal static ServiceResponse ErrorResponseJson(string code, string message, int statusCode = 400)
     {
-        var data = new { __type = code, message };
-        return JsonResponse(data, statusCode);
+        var json = JsonSerializer.SerializeToUtf8Bytes(new AwsJsonError(code, message), MicroStackJsonContext.Default.AwsJsonError);
+        return new ServiceResponse(statusCode, JsonHeaders, json);
     }
 
     // ── Recursive XML builder ──────────────────────────────────────────────────
@@ -120,10 +124,9 @@ internal static class AwsResponseHelpers
         var element     = Encoding.UTF8.GetBytes(root.ToString(SaveOptions.DisableFormatting));
         return [.. declaration, .. element];
     }
-
-    private static readonly JsonSerializerOptions JsonOpts = new()
-    {
-        PropertyNamingPolicy = null,
-        WriteIndented        = false,
-    };
 }
+
+/// <summary>JSON body for AWS-style error responses.</summary>
+internal sealed record AwsJsonError(
+    [property: JsonPropertyName("__type")] string Type,
+    [property: JsonPropertyName("message")] string Message);

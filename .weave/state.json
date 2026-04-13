@@ -1,11 +1,11 @@
 {
-  "active_plan": "D:\\repos\\damianh\\microstack-worktrees\\port-ministack\\.weave\\plans\\port-ministack.md",
-  "started_at": "2026-04-10T18:55:51.317Z",
+  "active_plan": "D:\\repos\\damianh\\microstack-worktrees\\port-ministack\\.weave\\plans\\aot-migration.md",
+  "started_at": "2026-04-12T19:11:53.625Z",
   "session_ids": [
     "ses_287531f09ffeTLg2VQ70wS8qBS"
   ],
-  "plan_name": "port-ministack",
+  "plan_name": "aot-migration",
   "agent": "tapestry",
-  "start_sha": "33a768af978fd7c0ddba68066c7346ce111cc6e6",
+  "start_sha": "70e3ed5ab9d1731b528c47c90c89c37254a80607",
   "paused": true
 }

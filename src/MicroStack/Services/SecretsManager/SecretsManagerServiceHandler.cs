@@ -99,33 +99,31 @@ internal sealed class SecretsManagerServiceHandler : IServiceHandler
         }
     }
 
-    public object? GetState()
+    public JsonElement? GetState()
     {
         lock (_lock)
         {
-            return new Dictionary<string, object?>
-            {
-                ["secrets"] = _secrets.ToRaw(),
-                ["resourcePolicies"] = _resourcePolicies.ToRaw(),
-            };
+            var secrets = _secrets.ToRaw()
+                .Select(kv => new SmSecretsEntry(kv.Key.AccountId, kv.Key.Key, kv.Value))
+                .ToList();
+            var policies = _resourcePolicies.ToRaw()
+                .Select(kv => new SmPolicyEntry(kv.Key.AccountId, kv.Key.Key, kv.Value))
+                .ToList();
+            var state = new SecretsManagerState(secrets, policies);
+            return JsonSerializer.SerializeToElement(state, MicroStackJsonContext.Default.SecretsManagerState);
         }
     }
 
-    public void RestoreState(object state)
+    public void RestoreState(JsonElement state)
     {
-        if (state is not Dictionary<string, object?> dict) return;
+        var restored = JsonSerializer.Deserialize(state, MicroStackJsonContext.Default.SecretsManagerState);
+        if (restored is null) return;
         lock (_lock)
         {
-            if (dict.TryGetValue("secrets", out var s)
-                && s is IReadOnlyDictionary<(string, string), SmSecret> secrets)
-            {
-                _secrets.FromRaw(secrets);
-            }
-            if (dict.TryGetValue("resourcePolicies", out var rp)
-                && rp is IReadOnlyDictionary<(string, string), string> policies)
-            {
-                _resourcePolicies.FromRaw(policies);
-            }
+            _secrets.FromRaw(restored.Secrets.Select(e =>
+                new KeyValuePair<(string, string), SmSecret>((e.AccountId, e.Key), e.Value)));
+            _resourcePolicies.FromRaw(restored.Policies.Select(e =>
+                new KeyValuePair<(string, string), string>((e.AccountId, e.Key), e.Value)));
         }
     }
 
@@ -505,7 +503,7 @@ internal sealed class SecretsManagerServiceHandler : IServiceHandler
             foreach (var sid in targets)
             {
                 // Build a JsonElement for the internal call
-                var innerJson = JsonSerializer.SerializeToUtf8Bytes(new Dictionary<string, string> { ["SecretId"] = sid });
+                var innerJson = JsonSerializer.SerializeToUtf8Bytes(new Dictionary<string, string> { ["SecretId"] = sid }, MicroStackJsonContext.Default.DictionaryStringString);
                 using var innerDoc = JsonDocument.Parse(innerJson);
                 var innerData = innerDoc.RootElement.Clone();
 
@@ -1606,3 +1604,8 @@ internal sealed class SmReplicationStatus
     public required string Status { get; set; }
     public required string StatusMessage { get; set; }
 }
+
+// Persistence state records for SecretsManagerServiceHandler
+internal sealed record SmSecretsEntry(string AccountId, string Key, SmSecret Value);
+internal sealed record SmPolicyEntry(string AccountId, string Key, string Value);
+internal sealed record SecretsManagerState(List<SmSecretsEntry> Secrets, List<SmPolicyEntry> Policies);

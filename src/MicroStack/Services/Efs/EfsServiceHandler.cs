@@ -121,9 +121,9 @@ internal sealed partial class EfsServiceHandler : IServiceHandler
         }
     }
 
-    public object? GetState() => null;
+    public JsonElement? GetState() => null;
 
-    public void RestoreState(object state) { }
+    public void RestoreState(JsonElement state) { }
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Request router
@@ -787,17 +787,11 @@ internal sealed partial class EfsServiceHandler : IServiceHandler
     private static readonly Dictionary<string, string> JsonResponseHeaders = new()
         { ["Content-Type"] = "application/json" };
 
-    private static readonly JsonSerializerOptions JsonOpts = new()
-    {
-        PropertyNamingPolicy = null,
-        WriteIndented = false,
-    };
-
     private static ServiceResponse EfsJson(int status, object data)
     {
         if (status == 204)
             return new ServiceResponse(204, new Dictionary<string, string>(), []);
-        var json = JsonSerializer.SerializeToUtf8Bytes(data, JsonOpts);
+        var json = System.Text.Encoding.UTF8.GetBytes(DictionaryObjectJsonConverter.SerializeValue(data));
         return new ServiceResponse(status, JsonResponseHeaders, json);
     }
 
@@ -815,7 +809,7 @@ internal sealed partial class EfsServiceHandler : IServiceHandler
                 ["code"] = code,
             },
         };
-        var json = JsonSerializer.SerializeToUtf8Bytes(data, JsonOpts);
+        var json = DictionaryObjectJsonConverter.SerializeObject(data);
         var headers = new Dictionary<string, string>
         {
             ["Content-Type"] = "application/json",

@@ -79,9 +79,9 @@ internal sealed class EcrServiceHandler : IServiceHandler
         }
     }
 
-    public object? GetState() => null;
+    public JsonElement? GetState() => null;
 
-    public void RestoreState(object state) { }
+    public void RestoreState(JsonElement state) { }
 
     // ── Dispatch ──────────────────────────────────────────────────────────────
 
@@ -178,14 +178,14 @@ internal sealed class EcrServiceHandler : IServiceHandler
             }
         }
 
-        var scanConfig = new Dictionary<string, object> { ["scanOnPush"] = false };
+        var scanConfig = new Dictionary<string, object?> { ["scanOnPush"] = (object?)false };
         if (data.TryGetProperty("imageScanningConfiguration", out var scanEl)
             && scanEl.TryGetProperty("scanOnPush", out var scanOnPush))
         {
             scanConfig["scanOnPush"] = scanOnPush.ValueKind == JsonValueKind.True;
         }
 
-        var encConfig = new Dictionary<string, object> { ["encryptionType"] = "AES256" };
+        var encConfig = new Dictionary<string, object?> { ["encryptionType"] = "AES256" };
         if (data.TryGetProperty("encryptionConfiguration", out var encEl)
             && encEl.TryGetProperty("encryptionType", out var encType))
         {
@@ -208,7 +208,7 @@ internal sealed class EcrServiceHandler : IServiceHandler
         _repositories[name] = repo;
         _images[name] = [];
 
-        return JsonResp(new { repository = RepoShape(repo) });
+        return JsonResp(new Dictionary<string, object?> { ["repository"] = RepoShape(repo) });
     }
 
     private ServiceResponse DescribeRepositories(JsonElement data)
@@ -238,7 +238,7 @@ internal sealed class EcrServiceHandler : IServiceHandler
         }
 
         var result = repos.Take(maxResults).Select(RepoShape).ToList();
-        return JsonResp(new { repositories = result });
+        return JsonResp(new Dictionary<string, object?> { ["repositories"] = result });
     }
 
     private ServiceResponse DeleteRepository(JsonElement data)
@@ -256,7 +256,7 @@ internal sealed class EcrServiceHandler : IServiceHandler
         _images.TryRemove(name, out _);
         _lifecyclePolicies.TryRemove(name, out _);
         _repoPolicies.TryRemove(name, out _);
-        return JsonResp(new { repository = RepoShape(repo) });
+        return JsonResp(new Dictionary<string, object?> { ["repository"] = RepoShape(repo) });
     }
 
     // ── Image operations ──────────────────────────────────────────────────────
@@ -341,15 +341,15 @@ internal sealed class EcrServiceHandler : IServiceHandler
         }
 
         var respImageId = image.GetValueOrDefault("imageId") as Dictionary<string, object?>;
-        return JsonResp(new
+        return JsonResp(new Dictionary<string, object?>
         {
-            image = new
+            ["image"] = new Dictionary<string, object?>
             {
-                registryId = RegistryId(),
-                repositoryName = name,
-                imageId = respImageId,
-                imageManifest = manifest,
-                imageManifestMediaType = manifestType,
+                ["registryId"] = RegistryId(),
+                ["repositoryName"] = name,
+                ["imageId"] = respImageId,
+                ["imageManifest"] = manifest,
+                ["imageManifestMediaType"] = manifestType,
             },
         });
     }
@@ -367,7 +367,7 @@ internal sealed class EcrServiceHandler : IServiceHandler
         if (!_images.TryGetValue(name, out var images))
             images = [];
 
-        var result = new List<object>();
+        var result = new List<object?>();
         foreach (var img in images)
         {
             var tags = img.GetValueOrDefault("imageTags") as List<string>;
@@ -377,7 +377,7 @@ internal sealed class EcrServiceHandler : IServiceHandler
             result.Add(img.GetValueOrDefault("imageId")!);
         }
 
-        return JsonResp(new { imageIds = result });
+        return JsonResp(new Dictionary<string, object?> { ["imageIds"] = result });
     }
 
     private ServiceResponse DescribeImages(JsonElement data)
@@ -423,7 +423,7 @@ internal sealed class EcrServiceHandler : IServiceHandler
             };
         }).ToList();
 
-        return JsonResp(new { imageDetails = details });
+        return JsonResp(new Dictionary<string, object?> { ["imageDetails"] = details });
     }
 
     private ServiceResponse BatchGetImage(JsonElement data)
@@ -432,8 +432,8 @@ internal sealed class EcrServiceHandler : IServiceHandler
         if (!_repositories.ContainsKey(name))
             return ErrorJson("RepositoryNotFoundException", $"The repository with name '{name}' does not exist");
 
-        var found = new List<object>();
-        var failures = new List<object>();
+        var found = new List<object?>();
+        var failures = new List<object?>();
 
         if (data.TryGetProperty("imageIds", out var imageIdsEl) && imageIdsEl.ValueKind == JsonValueKind.Array)
         {
@@ -442,29 +442,29 @@ internal sealed class EcrServiceHandler : IServiceHandler
                 var match = FindImage(name, iid);
                 if (match is not null)
                 {
-                    found.Add(new
+                    found.Add(new Dictionary<string, object?>
                     {
-                        registryId = RegistryId(),
-                        repositoryName = name,
-                        imageId = match.GetValueOrDefault("imageId"),
-                        imageManifest = match.GetValueOrDefault("imageManifest")?.ToString() ?? "{}",
-                        imageManifestMediaType = match.GetValueOrDefault("imageManifestMediaType")
+                        ["registryId"] = RegistryId(),
+                        ["repositoryName"] = name,
+                        ["imageId"] = match.GetValueOrDefault("imageId"),
+                        ["imageManifest"] = match.GetValueOrDefault("imageManifest")?.ToString() ?? "{}",
+                        ["imageManifestMediaType"] = match.GetValueOrDefault("imageManifestMediaType")
                             ?? "application/vnd.docker.distribution.manifest.v2+json",
                     });
                 }
                 else
                 {
-                    failures.Add(new
+                    failures.Add(new Dictionary<string, object?>
                     {
-                        imageId = JsonElementToObj(iid),
-                        failureCode = "ImageNotFound",
-                        failureReason = "Requested image not found",
+                        ["imageId"] = JsonElementToObj(iid),
+                        ["failureCode"] = "ImageNotFound",
+                        ["failureReason"] = "Requested image not found",
                     });
                 }
             }
         }
 
-        return JsonResp(new { images = found, failures });
+        return JsonResp(new Dictionary<string, object?> { ["images"] = found, ["failures"] = failures });
     }
 
     private ServiceResponse BatchDeleteImage(JsonElement data)
@@ -473,8 +473,8 @@ internal sealed class EcrServiceHandler : IServiceHandler
         if (!_repositories.ContainsKey(name))
             return ErrorJson("RepositoryNotFoundException", $"The repository with name '{name}' does not exist");
 
-        var deleted = new List<object>();
-        var failures = new List<object>();
+        var deleted = new List<object?>();
+        var failures = new List<object?>();
 
         if (!_images.TryGetValue(name, out var images))
             images = [];
@@ -491,17 +491,17 @@ internal sealed class EcrServiceHandler : IServiceHandler
                 }
                 else
                 {
-                    failures.Add(new
+                    failures.Add(new Dictionary<string, object?>
                     {
-                        imageId = JsonElementToObj(iid),
-                        failureCode = "ImageNotFound",
-                        failureReason = "Requested image not found",
+                        ["imageId"] = JsonElementToObj(iid),
+                        ["failureCode"] = "ImageNotFound",
+                        ["failureReason"] = "Requested image not found",
                     });
                 }
             }
         }
 
-        return JsonResp(new { imageIds = deleted, failures });
+        return JsonResp(new Dictionary<string, object?> { ["imageIds"] = deleted, ["failures"] = failures });
     }
 
     // ── Authorization ─────────────────────────────────────────────────────────
@@ -509,17 +509,15 @@ internal sealed class EcrServiceHandler : IServiceHandler
     private ServiceResponse GetAuthorizationToken()
     {
         var token = Convert.ToBase64String("AWS:ministack-auth-token"u8.ToArray());
-        return JsonResp(new
+        var authEntry = new Dictionary<string, object?>
         {
-            authorizationData = new[]
-            {
-                new
-                {
-                    authorizationToken = token,
-                    expiresAt = TimeHelpers.NowEpoch() + 43200,
-                    proxyEndpoint = $"https://{AccountContext.GetAccountId()}.dkr.ecr.{Region}.amazonaws.com",
-                },
-            },
+            ["authorizationToken"] = token,
+            ["expiresAt"] = TimeHelpers.NowEpoch() + 43200,
+            ["proxyEndpoint"] = $"https://{AccountContext.GetAccountId()}.dkr.ecr.{Region}.amazonaws.com",
+        };
+        return JsonResp(new Dictionary<string, object?>
+        {
+            ["authorizationData"] = new List<object?> { authEntry },
         });
     }
 
@@ -532,7 +530,12 @@ internal sealed class EcrServiceHandler : IServiceHandler
             return ErrorJson("RepositoryNotFoundException", $"The repository with name '{name}' does not exist");
         if (!_repoPolicies.TryGetValue(name, out var policy))
             return ErrorJson("RepositoryPolicyNotFoundException", $"Repository policy does not exist for '{name}'");
-        return JsonResp(new { registryId = RegistryId(), repositoryName = name, policyText = policy });
+        return JsonResp(new Dictionary<string, object?>
+        {
+            ["registryId"] = RegistryId(),
+            ["repositoryName"] = name,
+            ["policyText"] = policy,
+        });
     }
 
     private ServiceResponse SetRepositoryPolicy(JsonElement data)
@@ -542,7 +545,12 @@ internal sealed class EcrServiceHandler : IServiceHandler
             return ErrorJson("RepositoryNotFoundException", $"The repository with name '{name}' does not exist");
         var policy = GetString(data, "policyText");
         _repoPolicies[name] = policy;
-        return JsonResp(new { registryId = RegistryId(), repositoryName = name, policyText = policy });
+        return JsonResp(new Dictionary<string, object?>
+        {
+            ["registryId"] = RegistryId(),
+            ["repositoryName"] = name,
+            ["policyText"] = policy,
+        });
     }
 
     private ServiceResponse DeleteRepositoryPolicy(JsonElement data)
@@ -553,7 +561,12 @@ internal sealed class EcrServiceHandler : IServiceHandler
         if (!_repoPolicies.TryGetValue(name, out var policy))
             return ErrorJson("RepositoryPolicyNotFoundException", $"Repository policy does not exist for '{name}'");
         _repoPolicies.TryRemove(name, out _);
-        return JsonResp(new { registryId = RegistryId(), repositoryName = name, policyText = policy });
+        return JsonResp(new Dictionary<string, object?>
+        {
+            ["registryId"] = RegistryId(),
+            ["repositoryName"] = name,
+            ["policyText"] = policy,
+        });
     }
 
     // ── Lifecycle Policy ──────────────────────────────────────────────────────
@@ -565,7 +578,12 @@ internal sealed class EcrServiceHandler : IServiceHandler
             return ErrorJson("RepositoryNotFoundException", $"The repository with name '{name}' does not exist");
         var policy = GetString(data, "lifecyclePolicyText");
         _lifecyclePolicies[name] = policy;
-        return JsonResp(new { registryId = RegistryId(), repositoryName = name, lifecyclePolicyText = policy });
+        return JsonResp(new Dictionary<string, object?>
+        {
+            ["registryId"] = RegistryId(),
+            ["repositoryName"] = name,
+            ["lifecyclePolicyText"] = policy,
+        });
     }
 
     private ServiceResponse GetLifecyclePolicy(JsonElement data)
@@ -575,10 +593,12 @@ internal sealed class EcrServiceHandler : IServiceHandler
             return ErrorJson("RepositoryNotFoundException", $"The repository with name '{name}' does not exist");
         if (!_lifecyclePolicies.TryGetValue(name, out var policy))
             return ErrorJson("LifecyclePolicyNotFoundException", $"Lifecycle policy does not exist for '{name}'");
-        return JsonResp(new
+        return JsonResp(new Dictionary<string, object?>
         {
-            registryId = RegistryId(), repositoryName = name,
-            lifecyclePolicyText = policy, lastEvaluatedAt = TimeHelpers.NowEpoch(),
+            ["registryId"] = RegistryId(),
+            ["repositoryName"] = name,
+            ["lifecyclePolicyText"] = policy,
+            ["lastEvaluatedAt"] = TimeHelpers.NowEpoch(),
         });
     }
 
@@ -590,10 +610,12 @@ internal sealed class EcrServiceHandler : IServiceHandler
         if (!_lifecyclePolicies.TryGetValue(name, out var policy))
             return ErrorJson("LifecyclePolicyNotFoundException", $"Lifecycle policy does not exist for '{name}'");
         _lifecyclePolicies.TryRemove(name, out _);
-        return JsonResp(new
+        return JsonResp(new Dictionary<string, object?>
         {
-            registryId = RegistryId(), repositoryName = name,
-            lifecyclePolicyText = policy, lastEvaluatedAt = TimeHelpers.NowEpoch(),
+            ["registryId"] = RegistryId(),
+            ["repositoryName"] = name,
+            ["lifecyclePolicyText"] = policy,
+            ["lastEvaluatedAt"] = TimeHelpers.NowEpoch(),
         });
     }
 
@@ -605,7 +627,10 @@ internal sealed class EcrServiceHandler : IServiceHandler
         var repo = FindRepoByArn(arn);
         if (repo is null)
             return ErrorJson("RepositoryNotFoundException", "Repository not found");
-        return JsonResp(new { tags = repo.GetValueOrDefault("tags") ?? new List<Dictionary<string, string>>() });
+        return JsonResp(new Dictionary<string, object?>
+        {
+            ["tags"] = repo.GetValueOrDefault("tags") ?? new List<Dictionary<string, string>>(),
+        });
     }
 
     private ServiceResponse TagResource(JsonElement data)
@@ -630,7 +655,7 @@ internal sealed class EcrServiceHandler : IServiceHandler
             }
         }
         repo["tags"] = existingMap.Values.ToList();
-        return JsonResp(new { });
+        return JsonResp(new Dictionary<string, object?>());
     }
 
     private ServiceResponse UntagResource(JsonElement data)
@@ -649,7 +674,7 @@ internal sealed class EcrServiceHandler : IServiceHandler
 
         var existingTags = repo.GetValueOrDefault("tags") as List<Dictionary<string, string>> ?? [];
         repo["tags"] = existingTags.Where(t => !keys.Contains(t["Key"])).ToList();
-        return JsonResp(new { });
+        return JsonResp(new Dictionary<string, object?>());
     }
 
     // ── Mutability / Scanning ─────────────────────────────────────────────────
@@ -662,7 +687,12 @@ internal sealed class EcrServiceHandler : IServiceHandler
         var mutability = data.TryGetProperty("imageTagMutability", out var mutEl)
             ? mutEl.GetString() ?? "MUTABLE" : "MUTABLE";
         repo["imageTagMutability"] = mutability;
-        return JsonResp(new { registryId = RegistryId(), repositoryName = name, imageTagMutability = mutability });
+        return JsonResp(new Dictionary<string, object?>
+        {
+            ["registryId"] = RegistryId(),
+            ["repositoryName"] = name,
+            ["imageTagMutability"] = mutability,
+        });
     }
 
     private ServiceResponse PutImageScanningConfiguration(JsonElement data)
@@ -671,24 +701,32 @@ internal sealed class EcrServiceHandler : IServiceHandler
         if (!_repositories.TryGetValue(name, out var repo))
             return ErrorJson("RepositoryNotFoundException", $"The repository with name '{name}' does not exist");
 
-        var scanConfig = new Dictionary<string, object> { ["scanOnPush"] = false };
+        var scanConfig = new Dictionary<string, object?> { ["scanOnPush"] = (object?)false };
         if (data.TryGetProperty("imageScanningConfiguration", out var scanEl)
             && scanEl.TryGetProperty("scanOnPush", out var scanOnPush))
         {
             scanConfig["scanOnPush"] = scanOnPush.ValueKind == JsonValueKind.True;
         }
         repo["imageScanningConfiguration"] = scanConfig;
-        return JsonResp(new { registryId = RegistryId(), repositoryName = name, imageScanningConfiguration = scanConfig });
+        return JsonResp(new Dictionary<string, object?>
+        {
+            ["registryId"] = RegistryId(),
+            ["repositoryName"] = name,
+            ["imageScanningConfiguration"] = scanConfig,
+        });
     }
 
     // ── Registry ──────────────────────────────────────────────────────────────
 
     private ServiceResponse DescribeRegistry()
     {
-        return JsonResp(new
+        return JsonResp(new Dictionary<string, object?>
         {
-            registryId = RegistryId(),
-            replicationConfiguration = new { rules = Array.Empty<object>() },
+            ["registryId"] = RegistryId(),
+            ["replicationConfiguration"] = new Dictionary<string, object?>
+            {
+                ["rules"] = new List<object?>(),
+            },
         });
     }
 
@@ -700,10 +738,10 @@ internal sealed class EcrServiceHandler : IServiceHandler
         if (!_repositories.ContainsKey(name))
             return ErrorJson("RepositoryNotFoundException", $"The repository with name '{name}' does not exist");
         var layerDigest = GetString(data, "layerDigest");
-        return JsonResp(new
+        return JsonResp(new Dictionary<string, object?>
         {
-            downloadUrl = $"https://{AccountContext.GetAccountId()}.dkr.ecr.{Region}.amazonaws.com/v2/{name}/blobs/{layerDigest}",
-            layerDigest,
+            ["downloadUrl"] = $"https://{AccountContext.GetAccountId()}.dkr.ecr.{Region}.amazonaws.com/v2/{name}/blobs/{layerDigest}",
+            ["layerDigest"] = layerDigest,
         });
     }
 
@@ -713,15 +751,20 @@ internal sealed class EcrServiceHandler : IServiceHandler
         if (!_repositories.ContainsKey(name))
             return ErrorJson("RepositoryNotFoundException", $"The repository with name '{name}' does not exist");
 
-        var layers = new List<object>();
+        var layers = new List<object?>();
         if (data.TryGetProperty("layerDigests", out var digestsEl) && digestsEl.ValueKind == JsonValueKind.Array)
         {
             foreach (var d in digestsEl.EnumerateArray())
             {
-                layers.Add(new { layerDigest = d.GetString(), layerAvailability = "UNAVAILABLE", layerSize = 0 });
+                layers.Add(new Dictionary<string, object?>
+                {
+                    ["layerDigest"] = d.GetString(),
+                    ["layerAvailability"] = "UNAVAILABLE",
+                    ["layerSize"] = (long)0,
+                });
             }
         }
-        return JsonResp(new { layers, failures = Array.Empty<object>() });
+        return JsonResp(new Dictionary<string, object?> { ["layers"] = layers, ["failures"] = new List<object?>() });
     }
 
     private ServiceResponse InitiateLayerUpload(JsonElement data)
@@ -729,23 +772,23 @@ internal sealed class EcrServiceHandler : IServiceHandler
         var name = GetString(data, "repositoryName");
         if (!_repositories.ContainsKey(name))
             return ErrorJson("RepositoryNotFoundException", $"The repository with name '{name}' does not exist");
-        return JsonResp(new
+        return JsonResp(new Dictionary<string, object?>
         {
-            registryId = RegistryId(),
-            repositoryName = name,
-            uploadId = Guid.NewGuid().ToString(),
-            partSize = 10485760,
+            ["registryId"] = RegistryId(),
+            ["repositoryName"] = name,
+            ["uploadId"] = Guid.NewGuid().ToString(),
+            ["partSize"] = (long)10485760,
         });
     }
 
     private ServiceResponse UploadLayerPart(JsonElement data)
     {
-        return JsonResp(new
+        return JsonResp(new Dictionary<string, object?>
         {
-            registryId = RegistryId(),
-            repositoryName = GetString(data, "repositoryName"),
-            uploadId = GetString(data, "uploadId"),
-            lastByteReceived = 0,
+            ["registryId"] = RegistryId(),
+            ["repositoryName"] = GetString(data, "repositoryName"),
+            ["uploadId"] = GetString(data, "uploadId"),
+            ["lastByteReceived"] = (long)0,
         });
     }
 
@@ -759,12 +802,12 @@ internal sealed class EcrServiceHandler : IServiceHandler
             if (first.ValueKind == JsonValueKind.String)
                 layerDigest = first.GetString() ?? layerDigest;
         }
-        return JsonResp(new
+        return JsonResp(new Dictionary<string, object?>
         {
-            registryId = RegistryId(),
-            repositoryName = name,
-            uploadId = GetString(data, "uploadId"),
-            layerDigest,
+            ["registryId"] = RegistryId(),
+            ["repositoryName"] = name,
+            ["uploadId"] = GetString(data, "uploadId"),
+            ["layerDigest"] = layerDigest,
         });
     }
 
@@ -813,9 +856,9 @@ internal sealed class EcrServiceHandler : IServiceHandler
             ["createdAt"] = repo.GetValueOrDefault("createdAt"),
             ["imageTagMutability"] = repo.GetValueOrDefault("imageTagMutability") ?? "MUTABLE",
             ["imageScanningConfiguration"] = repo.GetValueOrDefault("imageScanningConfiguration")
-                ?? new Dictionary<string, object> { ["scanOnPush"] = false },
+                ?? new Dictionary<string, object?> { ["scanOnPush"] = (object?)false },
             ["encryptionConfiguration"] = repo.GetValueOrDefault("encryptionConfiguration")
-                ?? new Dictionary<string, object> { ["encryptionType"] = "AES256" },
+                ?? new Dictionary<string, object?> { ["encryptionType"] = "AES256" },
         };
     }
 
@@ -834,7 +877,7 @@ internal sealed class EcrServiceHandler : IServiceHandler
         };
     }
 
-    private static ServiceResponse JsonResp(object data) =>
+    private static ServiceResponse JsonResp(Dictionary<string, object?> data) =>
         AwsResponseHelpers.JsonResponse(data);
 
     private static ServiceResponse ErrorJson(string code, string message) =>

@@ -152,9 +152,9 @@ internal sealed class GlueServiceHandler : IServiceHandler
         }
     }
 
-    public object? GetState() => null;
+    public JsonElement? GetState() => null;
 
-    public void RestoreState(object state) { }
+    public void RestoreState(JsonElement state) { }
 
     // -- JSON helpers ----------------------------------------------------------
 

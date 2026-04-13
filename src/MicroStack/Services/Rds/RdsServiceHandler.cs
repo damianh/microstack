@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Web;
@@ -63,9 +64,9 @@ internal sealed class RdsServiceHandler : IServiceHandler
         }
     }
 
-    public object? GetState() => null;
+    public JsonElement? GetState() => null;
 
-    public void RestoreState(object state) { }
+    public void RestoreState(JsonElement state) { }
 
     // ── Action dispatch ───────────────────────────────────────────────────────
 

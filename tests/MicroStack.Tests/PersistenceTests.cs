@@ -157,7 +157,7 @@ public sealed class PersistenceTests : IClassFixture<MicroStackFixture>, IAsyncL
             () => _sqs.GetQueueUrlAsync("persist-sqs-q"));
 
         // Restore and verify queue is back
-        handler.RestoreState(state);
+        handler.RestoreState(state.Value);
         var restored = await _sqs.GetQueueUrlAsync("persist-sqs-q");
         Assert.Equal(created.QueueUrl, restored.QueueUrl);
     }
@@ -182,7 +182,7 @@ public sealed class PersistenceTests : IClassFixture<MicroStackFixture>, IAsyncL
         Assert.DoesNotContain(topics.Topics ?? [], t => t.TopicArn == created.TopicArn);
 
         // Restore and verify topic is back
-        handler.RestoreState(state);
+        handler.RestoreState(state.Value);
         var restoredTopics = await _sns.ListTopicsAsync();
         Assert.Contains(restoredTopics.Topics ?? [], t => t.TopicArn == created.TopicArn);
     }
@@ -215,7 +215,7 @@ public sealed class PersistenceTests : IClassFixture<MicroStackFixture>, IAsyncL
             () => _ssm.GetParameterAsync(new GetParameterRequest { Name = "/persist/ssm-key" }));
 
         // Restore and verify parameter is back
-        handler.RestoreState(state);
+        handler.RestoreState(state.Value);
         var restored = await _ssm.GetParameterAsync(new GetParameterRequest { Name = "/persist/ssm-key" });
         Assert.Equal("persist-val", restored.Parameter.Value);
     }
@@ -253,7 +253,7 @@ public sealed class PersistenceTests : IClassFixture<MicroStackFixture>, IAsyncL
             }));
 
         // Restore and verify secret is back
-        handler.RestoreState(state);
+        handler.RestoreState(state.Value);
         var restored = await _sm.GetSecretValueAsync(new GetSecretValueRequest
         {
             SecretId = "persist-sm-secret",
@@ -321,10 +321,10 @@ public sealed class PersistenceTests : IClassFixture<MicroStackFixture>, IAsyncL
         var state = handler.GetState();
         Assert.NotNull(state);
 
-        // State should be a dict with "queues" and "queueNameToUrl" keys
-        var dict = Assert.IsType<Dictionary<string, object?>>(state);
-        Assert.True(dict.ContainsKey("queues"));
-        Assert.True(dict.ContainsKey("queueNameToUrl"));
+        // State should be a JsonElement with "Queues" and "Names" keys
+        Assert.Equal(System.Text.Json.JsonValueKind.Object, state.Value.ValueKind);
+        Assert.True(state.Value.TryGetProperty("Queues", out _));
+        Assert.True(state.Value.TryGetProperty("Names", out _));
     }
 
     // ── SNS state includes topics key ───────────────────────────────────────────
@@ -338,8 +338,8 @@ public sealed class PersistenceTests : IClassFixture<MicroStackFixture>, IAsyncL
         var state = handler.GetState();
         Assert.NotNull(state);
 
-        var dict = Assert.IsType<Dictionary<string, object?>>(state);
-        Assert.True(dict.ContainsKey("topics"));
+        Assert.Equal(System.Text.Json.JsonValueKind.Object, state.Value.ValueKind);
+        Assert.True(state.Value.TryGetProperty("Topics", out _));
     }
 
     // ── SSM state includes parameters key ───────────────────────────────────────
@@ -358,8 +358,8 @@ public sealed class PersistenceTests : IClassFixture<MicroStackFixture>, IAsyncL
         var state = handler.GetState();
         Assert.NotNull(state);
 
-        var dict = Assert.IsType<Dictionary<string, object?>>(state);
-        Assert.True(dict.ContainsKey("parameters"));
+        Assert.Equal(System.Text.Json.JsonValueKind.Object, state.Value.ValueKind);
+        Assert.True(state.Value.TryGetProperty("Parameters", out _));
     }
 
     // ── SecretsManager state includes secrets key ───────────────────────────────
@@ -377,7 +377,7 @@ public sealed class PersistenceTests : IClassFixture<MicroStackFixture>, IAsyncL
         var state = handler.GetState();
         Assert.NotNull(state);
 
-        var dict = Assert.IsType<Dictionary<string, object?>>(state);
-        Assert.True(dict.ContainsKey("secrets"));
+        Assert.Equal(System.Text.Json.JsonValueKind.Object, state.Value.ValueKind);
+        Assert.True(state.Value.TryGetProperty("Secrets", out _));
     }
 }

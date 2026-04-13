@@ -60,9 +60,9 @@ internal sealed partial class AppSyncServiceHandler : IServiceHandler
         }
     }
 
-    public object? GetState() => null;
+    public JsonElement? GetState() => null;
 
-    public void RestoreState(object state) { }
+    public void RestoreState(JsonElement state) { }
 
     // ── Helpers ──────────────────────────────────────────────────────────────
 

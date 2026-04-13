@@ -5,9 +5,18 @@
     <RootNamespace>MicroStack</RootNamespace>
   </PropertyGroup>
 
-  <!-- OCI container image publishing via 'dotnet publish /t:PublishContainer' -->
+  <!-- Native AOT publishing -->
   <PropertyGroup>
-    <ContainerBaseImage>mcr.microsoft.com/dotnet/aspnet:10.0-alpine</ContainerBaseImage>
+    <PublishAot>true</PublishAot>
+    <TrimMode>full</TrimMode>
+    <InvariantGlobalization>false</InvariantGlobalization>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <!-- OCI container image publishing via 'dotnet publish /t:PublishContainer' -->
+  <!-- Uses runtime-deps (not aspnet) because AOT produces a self-contained native binary -->
+  <PropertyGroup>
+    <ContainerBaseImage>mcr.microsoft.com/dotnet/runtime-deps:10.0-alpine</ContainerBaseImage>
     <ContainerRepository>microstack</ContainerRepository>
     <ContainerImageTag>latest</ContainerImageTag>
     <!-- Multi-arch: amd64 + arm64 -->

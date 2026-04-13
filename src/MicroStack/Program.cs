@@ -122,12 +122,7 @@ foreach (var healthPath in new[] { "/_ministack/health", "/health", "/_localstac
     app.MapGet(healthPath, () =>
     {
         var services = registry.GetServiceStatus();
-        return Results.Ok(new
-        {
-            services,
-            edition = "light",
-            version = "0.1.0"
-        });
+        return Results.Ok(new HealthResponse(services, "light", "0.1.0"));
     });
 }
 
@@ -136,7 +131,7 @@ app.MapPost("/_ministack/reset", () =>
 {
     registry.ResetAll();
     persistence.DeleteAll();
-    return Results.Ok(new { reset = "ok" });
+    return Results.Ok(new ResetResponse("ok"));
 });
 
 // Config endpoint (stub — populated when services implement it)
@@ -144,7 +139,7 @@ app.MapPost("/_ministack/config", async (HttpContext ctx) =>
 {
     using var reader = new StreamReader(ctx.Request.Body);
     var bodyText = await reader.ReadToEndAsync();
-    var applied = new Dictionary<string, object>();
+    var applied = new Dictionary<string, string>();
     if (!string.IsNullOrEmpty(bodyText))
     {
         try
@@ -154,7 +149,7 @@ app.MapPost("/_ministack/config", async (HttpContext ctx) =>
                 && sfnEl.ValueKind == System.Text.Json.JsonValueKind.Object
                 && sfnEl.TryGetProperty("_sfn_mock_config", out var mockEl))
             {
-                var mockConfig = JsonElementToDict(mockEl);
+                var mockConfig = DictionaryObjectJsonConverter.DeserializeElementDeep(mockEl);
                 sfnHandler.SetMockConfig(mockConfig);
                 applied["stepfunctions._sfn_mock_config"] = "applied";
             }
@@ -165,38 +160,8 @@ app.MapPost("/_ministack/config", async (HttpContext ctx) =>
         }
     }
 
-    return Results.Ok(new { applied });
+    return Results.Ok(new ConfigResponse(applied));
 });
-
-static Dictionary<string, object?> JsonElementToDict(System.Text.Json.JsonElement element)
-{
-    var dict = new Dictionary<string, object?>(StringComparer.Ordinal);
-    if (element.ValueKind != System.Text.Json.JsonValueKind.Object)
-    {
-        return dict;
-    }
-
-    foreach (var prop in element.EnumerateObject())
-    {
-        dict[prop.Name] = JsonElementToObject(prop.Value);
-    }
-
-    return dict;
-}
-
-static object? JsonElementToObject(System.Text.Json.JsonElement element)
-{
-    return element.ValueKind switch
-    {
-        System.Text.Json.JsonValueKind.Object => JsonElementToDict(element),
-        System.Text.Json.JsonValueKind.Array => element.EnumerateArray().Select(JsonElementToObject).ToList(),
-        System.Text.Json.JsonValueKind.String => element.GetString(),
-        System.Text.Json.JsonValueKind.Number => element.TryGetInt64(out var l) ? l : element.GetDouble(),
-        System.Text.Json.JsonValueKind.True => true,
-        System.Text.Json.JsonValueKind.False => false,
-        _ => null,
-    };
-}
 
 // Enable routing so endpoint matching runs before our AWS middleware.
 // This ensures admin endpoints (health, reset, config) take priority.
@@ -232,3 +197,8 @@ app.Run();
 
 // Expose Program for WebApplicationFactory in tests
 public partial class Program { }
+
+// Named record types replacing anonymous types (AOT-safe)
+internal sealed record HealthResponse(Dictionary<string, string> Services, string Edition, string Version);
+internal sealed record ResetResponse(string Reset);
+internal sealed record ConfigResponse(Dictionary<string, string> Applied);

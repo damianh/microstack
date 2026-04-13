@@ -123,8 +123,8 @@ internal sealed partial class CloudFormationServiceHandler : IServiceHandler
         }
     }
 
-    public object? GetState() => null;
-    public void RestoreState(object state) { }
+    public JsonElement? GetState() => null;
+    public void RestoreState(JsonElement state) { }
 
     // ══════════════════════════════════════════════════════════════════════════
     // Stack Events
@@ -1390,7 +1390,7 @@ internal sealed partial class CloudFormationServiceHandler : IServiceHandler
                     var otherTemplate = otherStack.GetValueOrDefault("_template");
                     if (otherTemplate is not null)
                     {
-                        var json = JsonSerializer.Serialize(otherTemplate);
+                        var json = DictionaryObjectJsonConverter.SerializeValue(otherTemplate);
                         if (json.Contains(exportName, StringComparison.Ordinal))
                             return Error("ValidationError",
                                 $"Export {exportName} is imported by stack {otherName}", 400);
@@ -1983,7 +1983,7 @@ internal sealed partial class CloudFormationServiceHandler : IServiceHandler
             {
                 var oldProps = GetDict(GetDict(oldRes[key]).GetValueOrDefault("Properties"));
                 var newProps = GetDict(GetDict(newRes[key]).GetValueOrDefault("Properties"));
-                if (JsonSerializer.Serialize(oldProps) != JsonSerializer.Serialize(newProps))
+                if (DictionaryObjectJsonConverter.SerializeValue(oldProps) != DictionaryObjectJsonConverter.SerializeValue(newProps))
                 {
                     changes.Add(new Dictionary<string, object?>(StringComparer.Ordinal)
                     {

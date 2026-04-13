@@ -100,9 +100,9 @@ internal sealed class KmsServiceHandler : IServiceHandler
         }
     }
 
-    public object? GetState() => null;
+    public JsonElement? GetState() => null;
 
-    public void RestoreState(object state) { }
+    public void RestoreState(JsonElement state) { }
 
     // -- Helpers ---------------------------------------------------------------
 
@@ -211,7 +211,7 @@ internal sealed class KmsServiceHandler : IServiceHandler
         var sorted = encContext
             .OrderBy(kv => kv.Key, StringComparer.Ordinal)
             .ToDictionary(kv => kv.Key, kv => kv.Value);
-        var ctxJson = JsonSerializer.SerializeToUtf8Bytes(sorted);
+        var ctxJson = JsonSerializer.SerializeToUtf8Bytes(sorted, MicroStackJsonContext.Default.DictionaryStringString);
         var combined = new byte[keyBytes.Length + ctxJson.Length];
         Buffer.BlockCopy(keyBytes, 0, combined, 0, keyBytes.Length);
         Buffer.BlockCopy(ctxJson, 0, combined, keyBytes.Length, ctxJson.Length);
@@ -278,25 +278,7 @@ internal sealed class KmsServiceHandler : IServiceHandler
             var keyUsage = GetString(data, "KeyUsage") ?? "ENCRYPT_DECRYPT";
             var description = GetString(data, "Description") ?? "";
 
-            var defaultPolicy = JsonSerializer.Serialize(new Dictionary<string, object>
-            {
-                ["Version"] = "2012-10-17",
-                ["Id"] = "key-default-1",
-                ["Statement"] = new[]
-                {
-                    new Dictionary<string, object>
-                    {
-                        ["Sid"] = "Enable IAM User Permissions",
-                        ["Effect"] = "Allow",
-                        ["Principal"] = new Dictionary<string, string>
-                        {
-                            ["AWS"] = $"arn:aws:iam::{AccountContext.GetAccountId()}:root",
-                        },
-                        ["Action"] = "kms:*",
-                        ["Resource"] = "*",
-                    },
-                },
-            });
+            var defaultPolicy = $$"""{"Version":"2012-10-17","Id":"key-default-1","Statement":[{"Sid":"Enable IAM User Permissions","Effect":"Allow","Principal":{"AWS":"arn:aws:iam::{{AccountContext.GetAccountId()}}:root"},"Action":"kms:*","Resource":"*"}]}""";
 
             var policy = GetString(data, "Policy") ?? defaultPolicy;
 
@@ -565,7 +547,8 @@ internal sealed class KmsServiceHandler : IServiceHandler
                 var ctxHash = SHA256.HashData(
                     JsonSerializer.SerializeToUtf8Bytes(
                         encContext.OrderBy(kv => kv.Key, StringComparer.Ordinal)
-                                  .ToDictionary(kv => kv.Key, kv => kv.Value)));
+                                  .ToDictionary(kv => kv.Key, kv => kv.Value),
+                        MicroStackJsonContext.Default.DictionaryStringString));
                 var keyIdBytes = Encoding.UTF8.GetBytes(rec.KeyId);
                 ciphertext = new byte[keyIdBytes.Length + ctxHash.Length + encrypted.Length];
                 Buffer.BlockCopy(keyIdBytes, 0, ciphertext, 0, keyIdBytes.Length);
@@ -642,7 +625,8 @@ internal sealed class KmsServiceHandler : IServiceHandler
                 var providedCtxHash = SHA256.HashData(
                     JsonSerializer.SerializeToUtf8Bytes(
                         encContext.OrderBy(kv => kv.Key, StringComparer.Ordinal)
-                                  .ToDictionary(kv => kv.Key, kv => kv.Value)));
+                                  .ToDictionary(kv => kv.Key, kv => kv.Value),
+                        MicroStackJsonContext.Default.DictionaryStringString));
 
                 if (!storedCtxHash.AsSpan().SequenceEqual(providedCtxHash))
                 {
@@ -738,7 +722,8 @@ internal sealed class KmsServiceHandler : IServiceHandler
         var ctxHash = SHA256.HashData(
             JsonSerializer.SerializeToUtf8Bytes(
                 encContext.OrderBy(kv => kv.Key, StringComparer.Ordinal)
-                          .ToDictionary(kv => kv.Key, kv => kv.Value)));
+                          .ToDictionary(kv => kv.Key, kv => kv.Value),
+                MicroStackJsonContext.Default.DictionaryStringString));
 
         var keyIdBytes = Encoding.UTF8.GetBytes(rec.KeyId);
         var ciphertext = new byte[keyIdBytes.Length + ctxHash.Length + encrypted.Length];

@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using MicroStack.Internal;
@@ -104,13 +105,13 @@ internal sealed partial class S3ServiceHandler : IServiceHandler
         _objectLegalHold.Clear();
     }
 
-    public object? GetState()
+    public JsonElement? GetState()
     {
         // Persist bucket metadata without object bodies.
         return null;
     }
 
-    public void RestoreState(object state)
+    public void RestoreState(JsonElement state)
     {
         // Not implementing restore in Phase 1.
     }

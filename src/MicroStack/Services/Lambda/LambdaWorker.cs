@@ -3,6 +3,7 @@ using System.IO.Compression;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
+using MicroStack.Internal;
 
 namespace MicroStack.Services.Lambda;
 
@@ -244,7 +245,7 @@ internal sealed class LambdaWorker : IDisposable
             ["arn"] = functionArn,
         };
 
-        var initJson = JsonSerializer.Serialize(initPayload);
+        var initJson = DictionaryObjectJsonConverter.SerializeValue(initPayload);
         _process.StandardInput.WriteLine(initJson);
         _process.StandardInput.Flush();
 
@@ -415,7 +416,7 @@ internal sealed class LambdaWorker : IDisposable
     {
         if (eventPayload.Length == 0)
         {
-            return JsonSerializer.Serialize(new Dictionary<string, object?> { ["_request_id"] = requestId });
+            return DictionaryObjectJsonConverter.SerializeValue(new Dictionary<string, object?> { ["_request_id"] = requestId });
         }
 
         try
@@ -432,11 +433,11 @@ internal sealed class LambdaWorker : IDisposable
                 }
 
                 dict["_request_id"] = requestId;
-                return JsonSerializer.Serialize(dict);
+                return DictionaryObjectJsonConverter.SerializeValue(dict);
             }
 
             // Non-object payload — wrap it
-            return JsonSerializer.Serialize(new Dictionary<string, object?>
+            return DictionaryObjectJsonConverter.SerializeValue(new Dictionary<string, object?>
             {
                 ["_payload"] = DeserializeJsonElement(root),
                 ["_request_id"] = requestId,
@@ -446,7 +447,7 @@ internal sealed class LambdaWorker : IDisposable
         {
             // Not valid JSON — send as string
             var text = Encoding.UTF8.GetString(eventPayload);
-            return JsonSerializer.Serialize(new Dictionary<string, object?>
+            return DictionaryObjectJsonConverter.SerializeValue(new Dictionary<string, object?>
             {
                 ["_payload"] = text,
                 ["_request_id"] = requestId,

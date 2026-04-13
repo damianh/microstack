@@ -106,9 +106,9 @@ internal sealed class WafServiceHandler : IServiceHandler
         }
     }
 
-    public object? GetState() => null;
+    public JsonElement? GetState() => null;
 
-    public void RestoreState(object state) { }
+    public void RestoreState(JsonElement state) { }
 
     // ═══════════════════════════════════════════════════════════════════════════
     // WebACL
@@ -144,15 +144,15 @@ internal sealed class WafServiceHandler : IServiceHandler
             _wafTags[arn] = ParseTagsList(tagsEl);
         }
 
-        return AwsResponseHelpers.JsonResponse(new
+        return AwsResponseHelpers.JsonResponse(new Dictionary<string, object?>(StringComparer.Ordinal)
         {
-            Summary = new
+            ["Summary"] = new Dictionary<string, object?>(StringComparer.Ordinal)
             {
-                ARN = arn,
-                Id = uid,
-                Name = name,
-                Description = description,
-                LockToken = lockToken,
+                ["ARN"] = arn,
+                ["Id"] = uid,
+                ["Name"] = name,
+                ["Description"] = description,
+                ["LockToken"] = lockToken,
             },
         });
     }
@@ -188,7 +188,10 @@ internal sealed class WafServiceHandler : IServiceHandler
             acl["VisibilityConfig"] = GetJsonElement(data, "VisibilityConfig");
         acl["LockToken"] = HashHelpers.NewUuid();
 
-        return AwsResponseHelpers.JsonResponse(new { NextLockToken = (string)acl["LockToken"]! });
+        return AwsResponseHelpers.JsonResponse(new Dictionary<string, object?>(StringComparer.Ordinal)
+        {
+            ["NextLockToken"] = (string)acl["LockToken"]!,
+        });
     }
 
     private ServiceResponse ActDeleteWebAcl(JsonElement data)
@@ -200,7 +203,7 @@ internal sealed class WafServiceHandler : IServiceHandler
         var arn = (string)acl["ARN"]!;
         _webAcls.TryRemove(uid, out _);
         _wafTags.TryRemove(arn, out _);
-        return AwsResponseHelpers.JsonResponse(new { });
+        return AwsResponseHelpers.JsonResponse(new Dictionary<string, object?>(StringComparer.Ordinal));
     }
 
     private ServiceResponse ActListWebAcls(JsonElement data)
@@ -208,16 +211,20 @@ internal sealed class WafServiceHandler : IServiceHandler
         var scope = GetStr(data, "Scope") ?? "REGIONAL";
         var acls = _webAcls.Values
             .Where(a => (string?)a["Scope"] == scope)
-            .Select(a => new
+            .Select(a => new Dictionary<string, object?>(StringComparer.Ordinal)
             {
-                ARN = (string?)a["ARN"],
-                Id = (string?)a["Id"],
-                Name = (string?)a["Name"],
-                Description = (string?)a["Description"] ?? "",
-                LockToken = (string?)a["LockToken"],
+                ["ARN"] = (string?)a["ARN"],
+                ["Id"] = (string?)a["Id"],
+                ["Name"] = (string?)a["Name"],
+                ["Description"] = (string?)a["Description"] ?? "",
+                ["LockToken"] = (string?)a["LockToken"],
             })
             .ToList();
-        return AwsResponseHelpers.JsonResponse(new { WebACLs = acls, NextMarker = (string?)null });
+        return AwsResponseHelpers.JsonResponse(new Dictionary<string, object?>(StringComparer.Ordinal)
+        {
+            ["WebACLs"] = acls,
+            ["NextMarker"] = null,
+        });
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -229,14 +236,14 @@ internal sealed class WafServiceHandler : IServiceHandler
         var webAclArn = GetStr(data, "WebACLArn") ?? "";
         var resourceArn = GetStr(data, "ResourceArn") ?? "";
         _associations[resourceArn] = webAclArn;
-        return AwsResponseHelpers.JsonResponse(new { });
+        return AwsResponseHelpers.JsonResponse(new Dictionary<string, object?>(StringComparer.Ordinal));
     }
 
     private ServiceResponse ActDisassociateWebAcl(JsonElement data)
     {
         var resourceArn = GetStr(data, "ResourceArn") ?? "";
         _associations.TryRemove(resourceArn, out _);
-        return AwsResponseHelpers.JsonResponse(new { });
+        return AwsResponseHelpers.JsonResponse(new Dictionary<string, object?>(StringComparer.Ordinal));
     }
 
     private ServiceResponse ActGetWebAclForResource(JsonElement data)
@@ -269,7 +276,10 @@ internal sealed class WafServiceHandler : IServiceHandler
             .Where(kv => kv.Value == webAclArn)
             .Select(kv => kv.Key)
             .ToList();
-        return AwsResponseHelpers.JsonResponse(new { ResourceArns = arns });
+        return AwsResponseHelpers.JsonResponse(new Dictionary<string, object?>(StringComparer.Ordinal)
+        {
+            ["ResourceArns"] = arns,
+        });
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -300,9 +310,15 @@ internal sealed class WafServiceHandler : IServiceHandler
             _wafTags[arn] = ParseTagsList(tagsEl);
         }
 
-        return AwsResponseHelpers.JsonResponse(new
+        return AwsResponseHelpers.JsonResponse(new Dictionary<string, object?>(StringComparer.Ordinal)
         {
-            Summary = new { ARN = arn, Id = uid, Name = name, LockToken = lockToken },
+            ["Summary"] = new Dictionary<string, object?>(StringComparer.Ordinal)
+            {
+                ["ARN"] = arn,
+                ["Id"] = uid,
+                ["Name"] = name,
+                ["LockToken"] = lockToken,
+            },
         });
     }
 
@@ -331,7 +347,10 @@ internal sealed class WafServiceHandler : IServiceHandler
         if (data.TryGetProperty("Addresses", out _))
             ipset["Addresses"] = GetJsonElement(data, "Addresses");
         ipset["LockToken"] = HashHelpers.NewUuid();
-        return AwsResponseHelpers.JsonResponse(new { NextLockToken = (string)ipset["LockToken"]! });
+        return AwsResponseHelpers.JsonResponse(new Dictionary<string, object?>(StringComparer.Ordinal)
+        {
+            ["NextLockToken"] = (string)ipset["LockToken"]!,
+        });
     }
 
     private ServiceResponse ActDeleteIpSet(JsonElement data)
@@ -343,7 +362,7 @@ internal sealed class WafServiceHandler : IServiceHandler
         var arn = (string)ipset["ARN"]!;
         _ipSets.TryRemove(uid, out _);
         _wafTags.TryRemove(arn, out _);
-        return AwsResponseHelpers.JsonResponse(new { });
+        return AwsResponseHelpers.JsonResponse(new Dictionary<string, object?>(StringComparer.Ordinal));
     }
 
     private ServiceResponse ActListIpSets(JsonElement data)
@@ -351,16 +370,20 @@ internal sealed class WafServiceHandler : IServiceHandler
         var scope = GetStr(data, "Scope") ?? "REGIONAL";
         var sets = _ipSets.Values
             .Where(s => (string?)s["Scope"] == scope)
-            .Select(s => new
+            .Select(s => new Dictionary<string, object?>(StringComparer.Ordinal)
             {
-                ARN = (string?)s["ARN"],
-                Id = (string?)s["Id"],
-                Name = (string?)s["Name"],
-                Description = (string?)s["Description"] ?? "",
-                LockToken = (string?)s["LockToken"],
+                ["ARN"] = (string?)s["ARN"],
+                ["Id"] = (string?)s["Id"],
+                ["Name"] = (string?)s["Name"],
+                ["Description"] = (string?)s["Description"] ?? "",
+                ["LockToken"] = (string?)s["LockToken"],
             })
             .ToList();
-        return AwsResponseHelpers.JsonResponse(new { IPSets = sets, NextMarker = (string?)null });
+        return AwsResponseHelpers.JsonResponse(new Dictionary<string, object?>(StringComparer.Ordinal)
+        {
+            ["IPSets"] = sets,
+            ["NextMarker"] = null,
+        });
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -392,9 +415,15 @@ internal sealed class WafServiceHandler : IServiceHandler
             _wafTags[arn] = ParseTagsList(tagsEl);
         }
 
-        return AwsResponseHelpers.JsonResponse(new
+        return AwsResponseHelpers.JsonResponse(new Dictionary<string, object?>(StringComparer.Ordinal)
         {
-            Summary = new { ARN = arn, Id = uid, Name = name, LockToken = lockToken },
+            ["Summary"] = new Dictionary<string, object?>(StringComparer.Ordinal)
+            {
+                ["ARN"] = arn,
+                ["Id"] = uid,
+                ["Name"] = name,
+                ["LockToken"] = lockToken,
+            },
         });
     }
 
@@ -425,7 +454,10 @@ internal sealed class WafServiceHandler : IServiceHandler
         if (data.TryGetProperty("VisibilityConfig", out _))
             rg["VisibilityConfig"] = GetJsonElement(data, "VisibilityConfig");
         rg["LockToken"] = HashHelpers.NewUuid();
-        return AwsResponseHelpers.JsonResponse(new { NextLockToken = (string)rg["LockToken"]! });
+        return AwsResponseHelpers.JsonResponse(new Dictionary<string, object?>(StringComparer.Ordinal)
+        {
+            ["NextLockToken"] = (string)rg["LockToken"]!,
+        });
     }
 
     private ServiceResponse ActDeleteRuleGroup(JsonElement data)
@@ -437,7 +469,7 @@ internal sealed class WafServiceHandler : IServiceHandler
         var arn = (string)rg["ARN"]!;
         _ruleGroups.TryRemove(uid, out _);
         _wafTags.TryRemove(arn, out _);
-        return AwsResponseHelpers.JsonResponse(new { });
+        return AwsResponseHelpers.JsonResponse(new Dictionary<string, object?>(StringComparer.Ordinal));
     }
 
     private ServiceResponse ActListRuleGroups(JsonElement data)
@@ -445,16 +477,20 @@ internal sealed class WafServiceHandler : IServiceHandler
         var scope = GetStr(data, "Scope") ?? "REGIONAL";
         var groups = _ruleGroups.Values
             .Where(r => (string?)r["Scope"] == scope)
-            .Select(r => new
+            .Select(r => new Dictionary<string, object?>(StringComparer.Ordinal)
             {
-                ARN = (string?)r["ARN"],
-                Id = (string?)r["Id"],
-                Name = (string?)r["Name"],
-                Description = (string?)r["Description"] ?? "",
-                LockToken = (string?)r["LockToken"],
+                ["ARN"] = (string?)r["ARN"],
+                ["Id"] = (string?)r["Id"],
+                ["Name"] = (string?)r["Name"],
+                ["Description"] = (string?)r["Description"] ?? "",
+                ["LockToken"] = (string?)r["LockToken"],
             })
             .ToList();
-        return AwsResponseHelpers.JsonResponse(new { RuleGroups = groups, NextMarker = (string?)null });
+        return AwsResponseHelpers.JsonResponse(new Dictionary<string, object?>(StringComparer.Ordinal)
+        {
+            ["RuleGroups"] = groups,
+            ["NextMarker"] = null,
+        });
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -480,7 +516,7 @@ internal sealed class WafServiceHandler : IServiceHandler
             }
         }
         _wafTags[arn] = existingMap.Values.ToList();
-        return AwsResponseHelpers.JsonResponse(new { });
+        return AwsResponseHelpers.JsonResponse(new Dictionary<string, object?>(StringComparer.Ordinal));
     }
 
     private ServiceResponse ActUntagResource(JsonElement data)
@@ -499,19 +535,19 @@ internal sealed class WafServiceHandler : IServiceHandler
             }
             _wafTags[arn] = existing.Where(t => !removeKeys.Contains(t["Key"])).ToList();
         }
-        return AwsResponseHelpers.JsonResponse(new { });
+        return AwsResponseHelpers.JsonResponse(new Dictionary<string, object?>(StringComparer.Ordinal));
     }
 
     private ServiceResponse ActListTagsForResource(JsonElement data)
     {
         var arn = GetStr(data, "ResourceARN") ?? "";
         var tags = _wafTags.TryGetValue(arn, out var t) ? t : [];
-        return AwsResponseHelpers.JsonResponse(new
+        return AwsResponseHelpers.JsonResponse(new Dictionary<string, object?>(StringComparer.Ordinal)
         {
-            TagInfoForResource = new
+            ["TagInfoForResource"] = new Dictionary<string, object?>(StringComparer.Ordinal)
             {
-                ResourceARN = arn,
-                TagList = tags,
+                ["ResourceARN"] = arn,
+                ["TagList"] = tags,
             },
         });
     }
@@ -522,22 +558,25 @@ internal sealed class WafServiceHandler : IServiceHandler
 
     private static ServiceResponse ActCheckCapacity()
     {
-        return AwsResponseHelpers.JsonResponse(new { Capacity = 1 });
+        return AwsResponseHelpers.JsonResponse(new Dictionary<string, object?>(StringComparer.Ordinal)
+        {
+            ["Capacity"] = (long)1,
+        });
     }
 
     private static ServiceResponse ActDescribeManagedRuleGroup(JsonElement data)
     {
         var vendorName = GetStr(data, "VendorName") ?? "AWS";
         var name = GetStr(data, "Name") ?? "";
-        return AwsResponseHelpers.JsonResponse(new
+        return AwsResponseHelpers.JsonResponse(new Dictionary<string, object?>(StringComparer.Ordinal)
         {
-            VersionName = "Version_1.0",
-            SnsTopicArn = "",
-            Capacity = 700,
-            Rules = Array.Empty<object>(),
-            LabelNamespace = $"awswaf:managed:{vendorName}:{name}:",
-            AvailableLabels = Array.Empty<object>(),
-            ConsumedLabels = Array.Empty<object>(),
+            ["VersionName"] = "Version_1.0",
+            ["SnsTopicArn"] = "",
+            ["Capacity"] = (long)700,
+            ["Rules"] = new List<object?>(),
+            ["LabelNamespace"] = $"awswaf:managed:{vendorName}:{name}:",
+            ["AvailableLabels"] = new List<object?>(),
+            ["ConsumedLabels"] = new List<object?>(),
         });
     }
 

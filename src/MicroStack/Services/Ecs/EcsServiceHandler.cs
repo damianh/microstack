@@ -179,9 +179,9 @@ internal sealed class EcsServiceHandler : IServiceHandler
         }
     }
 
-    public object? GetState() => null;
+    public JsonElement? GetState() => null;
 
-    public void RestoreState(object state) { }
+    public void RestoreState(JsonElement state) { }
 
     // -- Timestamp normalization -----------------------------------------------
 
@@ -204,7 +204,7 @@ internal sealed class EcsServiceHandler : IServiceHandler
         {
             using var doc = JsonDocument.Parse(response.Body);
             var normalized = NormalizeElement(doc.RootElement, null);
-            var bytes = JsonSerializer.SerializeToUtf8Bytes(normalized, JsonOpts);
+            var bytes = System.Text.Encoding.UTF8.GetBytes(DictionaryObjectJsonConverter.SerializeValue(normalized));
             return new ServiceResponse(response.StatusCode, response.Headers, bytes);
         }
         catch (JsonException)
@@ -380,12 +380,6 @@ internal sealed class EcsServiceHandler : IServiceHandler
 
         return list;
     }
-
-    private static readonly JsonSerializerOptions JsonOpts = new()
-    {
-        PropertyNamingPolicy = null,
-        WriteIndented = false,
-    };
 
     // -- Resolve helpers -------------------------------------------------------
 

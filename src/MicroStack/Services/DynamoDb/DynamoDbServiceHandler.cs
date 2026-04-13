@@ -102,9 +102,9 @@ internal sealed class DynamoDbServiceHandler : IServiceHandler
         }
     }
 
-    public object? GetState() => null;   // persistence not implemented in Phase 1
+    public JsonElement? GetState() => null;   // persistence not implemented in Phase 1
 
-    public void RestoreState(object state) { }  // persistence not implemented in Phase 1
+    public void RestoreState(JsonElement state) { }  // persistence not implemented in Phase 1
 
     // ── Internal stream record access (used by Lambda ESM) ──────────────────────
 
@@ -238,7 +238,7 @@ internal sealed class DynamoDbServiceHandler : IServiceHandler
             var arr    = new JsonArray();
             var hasMore = names.Count > limit;
             var page   = hasMore ? names[..limit] : names;
-            foreach (var n in page) arr.Add(n);
+            foreach (var n in page) ((IList<JsonNode?>)arr).Add(JsonValue.Create(n));
             result["TableNames"] = arr;
             if (hasMore)
                 result["LastEvaluatedTableName"] = page[^1];
@@ -273,7 +273,7 @@ internal sealed class DynamoDbServiceHandler : IServiceHandler
                     gsi["IndexArn"]              = $"arn:aws:dynamodb:{_region}:{AccountContext.GetAccountId()}:table/{name}/index/{gsi["IndexName"]?.GetValue<string>()}";
                     gsi["IndexSizeBytes"]        = 0;
                     gsi["ItemCount"]             = 0;
-                    table.Gsis.Add(gsi);
+                    table.Gsis.Add((JsonNode)gsi);
                 }
                 else if (upd["Delete"] is JsonObject del)
                 {
@@ -721,7 +721,7 @@ internal sealed class DynamoDbServiceHandler : IServiceHandler
                         }
                         entry["GlobalSecondaryIndexes"] = gsiCap;
                     }
-                    consumed.Add(entry);
+                    consumed.Add((JsonNode)entry);
                 }
             }
             result["ConsumedCapacity"] = consumed;
@@ -761,7 +761,7 @@ internal sealed class DynamoDbServiceHandler : IServiceHandler
                         var projected = proj is not null
                             ? ProjectItem(item, proj, cfgEan)
                             : (JsonObject)item.DeepClone();
-                        arr.Add(projected);
+                        arr.Add((JsonNode)projected);
                     }
                 }
                 responses[tableName] = arr;
@@ -874,7 +874,7 @@ internal sealed class DynamoDbServiceHandler : IServiceHandler
                 var tableName = getOp["TableName"]?.GetValue<string>() ?? "";
                 if (!_tables.TryGetValue(tableName, out var t))
                 {
-                    responses.Add(new JsonObject());
+                    responses.Add((JsonNode)new JsonObject());
                     continue;
                 }
                 var key = getOp["Key"]?.AsObject() ?? new JsonObject();
@@ -885,11 +885,11 @@ internal sealed class DynamoDbServiceHandler : IServiceHandler
                     var proj = getOp["ProjectionExpression"]?.GetValue<string>();
                     var ean  = getOp["ExpressionAttributeNames"]?.AsObject() ?? new JsonObject();
                     var projected = proj is not null ? ProjectItem(item, proj, ean) : (JsonObject)item.DeepClone();
-                    responses.Add(new JsonObject { ["Item"] = projected });
+                    responses.Add((JsonNode)new JsonObject { ["Item"] = projected });
                 }
                 else
                 {
-                    responses.Add(new JsonObject());
+                    responses.Add((JsonNode)new JsonObject());
                 }
             }
             return new JsonObject { ["Responses"] = responses };
@@ -907,9 +907,7 @@ internal sealed class DynamoDbServiceHandler : IServiceHandler
     {
         var reasons = new JsonArray();
         for (var i = 0; i < total; i++)
-            reasons.Add(i == failedIdx
-                ? new JsonObject { ["Code"] = reason, ["Message"] = "The conditional request failed" }
-                : new JsonObject { ["Code"] = "None" });
+            reasons.Add((JsonNode)(i == failedIdx ? new JsonObject { ["Code"] = reason, ["Message"] = "The conditional request failed" } : new JsonObject { ["Code"] = "None" }));
 
         var codes = string.Join(", ", Enumerable.Range(0, total)
             .Select(i => i == failedIdx ? reason : "None"));
@@ -1016,7 +1014,7 @@ internal sealed class DynamoDbServiceHandler : IServiceHandler
         {
             ["Endpoints"] = new JsonArray
             {
-                new JsonObject { ["Address"] = "dynamodb.us-east-1.amazonaws.com", ["CachePeriodInMinutes"] = 1440 },
+                (JsonNode)new JsonObject { ["Address"] = "dynamodb.us-east-1.amazonaws.com", ["CachePeriodInMinutes"] = 1440 },
             },
         };
 
@@ -1677,7 +1675,7 @@ internal sealed class DynamoDbServiceHandler : IServiceHandler
             {
                 if (item.TryGetPropertyValue("L", out var lst) && lst is JsonArray la)
                 {
-                    while (la.Count <= idx) la.Add(new JsonObject { ["NULL"] = true });
+                    while (la.Count <= idx) la.Add((JsonNode)new JsonObject { ["NULL"] = true });
                     la[idx] = value.DeepClone();
                 }
             }
@@ -1698,7 +1696,7 @@ internal sealed class DynamoDbServiceHandler : IServiceHandler
         {
             if (item.TryGetPropertyValue("L", out var lst) && lst is JsonArray la)
             {
-                while (la.Count <= fi) la.Add(new JsonObject { ["NULL"] = true });
+                while (la.Count <= fi) la.Add((JsonNode)new JsonObject { ["NULL"] = true });
                 if (la[fi] is not JsonObject child)
                 {
                     child = rest[0] is string ? new JsonObject { ["M"] = new JsonObject() } : new JsonObject { ["L"] = new JsonArray() };
@@ -1975,7 +1973,7 @@ internal sealed class DynamoDbServiceHandler : IServiceHandler
     private static ServiceResponse JsonError(string code, string message, int status)
     {
         var body = Encoding.UTF8.GetBytes(
-            JsonSerializer.Serialize(new { __type = code, message }));
+            JsonSerializer.Serialize(new AwsJsonError(code, message), MicroStackJsonContext.Default.AwsJsonError));
         return new ServiceResponse(status,
             new Dictionary<string, string> { ["Content-Type"] = "application/x-amz-json-1.0" },
             body);
@@ -1996,7 +1994,7 @@ internal sealed class DynamoDbServiceHandler : IServiceHandler
     private static JsonArray ArrayFromStrings(IEnumerable<string> strings)
     {
         var arr = new JsonArray();
-        foreach (var s in strings) arr.Add(s);
+        foreach (var s in strings) ((IList<JsonNode?>)arr).Add(JsonValue.Create(s));
         return arr;
     }
 

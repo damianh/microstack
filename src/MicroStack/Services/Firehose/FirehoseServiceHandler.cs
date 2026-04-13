@@ -87,9 +87,9 @@ internal sealed class FirehoseServiceHandler : IServiceHandler
         }
     }
 
-    public object? GetState() => null;
+    public JsonElement? GetState() => null;
 
-    public void RestoreState(object state) { }
+    public void RestoreState(JsonElement state) { }
 
     // -- Helpers ---------------------------------------------------------------
 
@@ -711,7 +711,7 @@ internal sealed class FirehoseServiceHandler : IServiceHandler
                     }
 
                     // Re-serialize to JsonElement for storage
-                    var mergedBytes = JsonSerializer.SerializeToUtf8Bytes(merged);
+                    var mergedBytes = DictionaryObjectJsonConverter.SerializeObject(merged);
                     using var mergedDoc = JsonDocument.Parse(mergedBytes);
                     dest.Config = mergedDoc.RootElement.Clone();
                     dest.ConfigAsObject = merged;

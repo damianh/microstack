@@ -85,39 +85,36 @@ internal sealed class SsmServiceHandler : IServiceHandler
         }
     }
 
-    public object? GetState()
+    public JsonElement? GetState()
     {
         lock (_lock)
         {
-            return new Dictionary<string, object?>
-            {
-                ["parameters"] = _parameters.ToRaw(),
-                ["parameterHistory"] = _parameterHistory.ToRaw(),
-                ["tags"] = _tags.ToRaw(),
-            };
+            var parameters = _parameters.ToRaw()
+                .Select(kv => new SsmParameterEntry(kv.Key.AccountId, kv.Key.Key, kv.Value))
+                .ToList();
+            var history = _parameterHistory.ToRaw()
+                .Select(kv => new SsmHistoryEntry2(kv.Key.AccountId, kv.Key.Key, kv.Value))
+                .ToList();
+            var tags = _tags.ToRaw()
+                .Select(kv => new SsmTagEntry(kv.Key.AccountId, kv.Key.Key, kv.Value))
+                .ToList();
+            var state = new SsmState(parameters, history, tags);
+            return JsonSerializer.SerializeToElement(state, MicroStackJsonContext.Default.SsmState);
         }
     }
 
-    public void RestoreState(object state)
+    public void RestoreState(JsonElement state)
     {
-        if (state is not Dictionary<string, object?> dict) return;
+        var restored = JsonSerializer.Deserialize(state, MicroStackJsonContext.Default.SsmState);
+        if (restored is null) return;
         lock (_lock)
         {
-            if (dict.TryGetValue("parameters", out var p)
-                && p is IReadOnlyDictionary<(string, string), SsmParameter> parameters)
-            {
-                _parameters.FromRaw(parameters);
-            }
-            if (dict.TryGetValue("parameterHistory", out var h)
-                && h is IReadOnlyDictionary<(string, string), List<SsmHistoryEntry>> history)
-            {
-                _parameterHistory.FromRaw(history);
-            }
-            if (dict.TryGetValue("tags", out var t)
-                && t is IReadOnlyDictionary<(string, string), Dictionary<string, string>> tags)
-            {
-                _tags.FromRaw(tags);
-            }
+            _parameters.FromRaw(restored.Parameters.Select(e =>
+                new KeyValuePair<(string, string), SsmParameter>((e.AccountId, e.Key), e.Value)));
+            _parameterHistory.FromRaw(restored.History.Select(e =>
+                new KeyValuePair<(string, string), List<SsmHistoryEntry>>((e.AccountId, e.Key), e.Value)));
+            _tags.FromRaw(restored.Tags.Select(e =>
+                new KeyValuePair<(string, string), Dictionary<string, string>>((e.AccountId, e.Key), e.Value)));
         }
     }
 
@@ -947,7 +944,7 @@ internal sealed class SsmParameter
     public string Description { get; set; } = "";
     public string Tier { get; set; } = "Standard";
     public string AllowedPattern { get; set; } = "";
-    public List<object> Policies { get; set; } = [];
+    public List<string> Policies { get; set; } = [];
     public List<string> Labels { get; set; } = [];
 }
 
@@ -964,7 +961,13 @@ internal sealed class SsmHistoryEntry
     public string Description { get; set; } = "";
     public string AllowedPattern { get; set; } = "";
     public string Tier { get; set; } = "Standard";
-    public List<object> Policies { get; set; } = [];
+    public List<string> Policies { get; set; } = [];
     public string DataType { get; set; } = "text";
     public List<string> Labels { get; set; } = [];
 }
+
+// Persistence state records for SsmServiceHandler
+internal sealed record SsmParameterEntry(string AccountId, string Key, SsmParameter Value);
+internal sealed record SsmHistoryEntry2(string AccountId, string Key, List<SsmHistoryEntry> Value);
+internal sealed record SsmTagEntry(string AccountId, string Key, Dictionary<string, string> Value);
+internal sealed record SsmState(List<SsmParameterEntry> Parameters, List<SsmHistoryEntry2> History, List<SsmTagEntry> Tags);
