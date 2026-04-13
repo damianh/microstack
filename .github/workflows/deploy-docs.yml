@@ -27,7 +27,7 @@ jobs:
           dotnet-quality: 'preview'
 
       - name: Install Atoll CLI
-        run: dotnet tool install --global Atoll.Cli --version 0.7.0
+        run: dotnet tool install --global Atoll.Cli --version 0.7.5
 
       - name: Restore docs
         run: dotnet restore docs/Docs/Docs.csproj
