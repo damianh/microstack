@@ -60,7 +60,7 @@ internal sealed class StsServiceHandler : IServiceHandler
                     foreach (var prop in jsonDoc.RootElement.EnumerateObject())
                     {
                         formParams[prop.Name] = prop.Value.ValueKind == JsonValueKind.Array
-                            ? prop.Value[0].ToString()
+                            ? prop.Value[0].GetString() ?? ""
                             : prop.Value.ToString();
                     }
                 }
@@ -102,9 +102,9 @@ internal sealed class StsServiceHandler : IServiceHandler
         // STS is stateless — nothing to reset.
     }
 
-    public object? GetState() => null;
+    public JsonElement? GetState() => null;
 
-    public void RestoreState(object state) { }
+    public void RestoreState(JsonElement state) { }
 
     // ── Actions ─────────────────────────────────────────────────────────────────
 
@@ -113,11 +113,11 @@ internal sealed class StsServiceHandler : IServiceHandler
         var accountId = AccountContext.GetAccountId();
         if (useJson)
         {
-            return AwsResponseHelpers.JsonResponse(new
+            return AwsResponseHelpers.JsonResponse(new Dictionary<string, object?>
             {
-                Account = accountId,
-                Arn = $"arn:aws:iam::{accountId}:root",
-                UserId = accountId,
+                ["Account"] = accountId,
+                ["Arn"] = $"arn:aws:iam::{accountId}:root",
+                ["UserId"] = accountId,
             });
         }
 
@@ -150,21 +150,21 @@ internal sealed class StsServiceHandler : IServiceHandler
         if (useJson)
         {
             var expiration = DateTimeOffset.UtcNow.ToUnixTimeSeconds() + duration;
-            return AwsResponseHelpers.JsonResponse(new
+            return AwsResponseHelpers.JsonResponse(new Dictionary<string, object?>
             {
-                Credentials = new
+                ["Credentials"] = new Dictionary<string, object?>
                 {
-                    AccessKeyId = accessKey,
-                    SecretAccessKey = secretKey,
-                    SessionToken = sessionToken,
-                    Expiration = expiration,
+                    ["AccessKeyId"] = accessKey,
+                    ["SecretAccessKey"] = secretKey,
+                    ["SessionToken"] = sessionToken,
+                    ["Expiration"] = expiration,
                 },
-                AssumedRoleUser = new
+                ["AssumedRoleUser"] = new Dictionary<string, object?>
                 {
-                    AssumedRoleId = $"{roleId}:{sessionName}",
-                    Arn = assumedArn,
+                    ["AssumedRoleId"] = $"{roleId}:{sessionName}",
+                    ["Arn"] = assumedArn,
                 },
-                PackedPolicySize = 0,
+                ["PackedPolicySize"] = (object?)0L,
             });
         }
 
@@ -212,23 +212,23 @@ internal sealed class StsServiceHandler : IServiceHandler
         if (useJson)
         {
             var expiration = DateTimeOffset.UtcNow.ToUnixTimeSeconds() + duration;
-            return AwsResponseHelpers.JsonResponse(new
+            return AwsResponseHelpers.JsonResponse(new Dictionary<string, object?>
             {
-                Credentials = new
+                ["Credentials"] = new Dictionary<string, object?>
                 {
-                    AccessKeyId = accessKey,
-                    SecretAccessKey = secretKey,
-                    SessionToken = sessionToken,
-                    Expiration = expiration,
+                    ["AccessKeyId"] = accessKey,
+                    ["SecretAccessKey"] = secretKey,
+                    ["SessionToken"] = sessionToken,
+                    ["Expiration"] = expiration,
                 },
-                AssumedRoleUser = new
+                ["AssumedRoleUser"] = new Dictionary<string, object?>
                 {
-                    AssumedRoleId = $"{roleId}:{session}",
-                    Arn = assumedArn,
+                    ["AssumedRoleId"] = $"{roleId}:{session}",
+                    ["Arn"] = assumedArn,
                 },
-                SubjectFromWebIdentityToken = "test-subject",
-                Audience = "sts.amazonaws.com",
-                Provider = "accounts.google.com",
+                ["SubjectFromWebIdentityToken"] = "test-subject",
+                ["Audience"] = "sts.amazonaws.com",
+                ["Provider"] = "accounts.google.com",
             });
         }
 
@@ -263,14 +263,14 @@ internal sealed class StsServiceHandler : IServiceHandler
         if (useJson)
         {
             var expiration = DateTimeOffset.UtcNow.ToUnixTimeSeconds() + duration;
-            return AwsResponseHelpers.JsonResponse(new
+            return AwsResponseHelpers.JsonResponse(new Dictionary<string, object?>
             {
-                Credentials = new
+                ["Credentials"] = new Dictionary<string, object?>
                 {
-                    AccessKeyId = accessKey,
-                    SecretAccessKey = secretKey,
-                    SessionToken = sessionToken,
-                    Expiration = expiration,
+                    ["AccessKeyId"] = accessKey,
+                    ["SecretAccessKey"] = secretKey,
+                    ["SessionToken"] = sessionToken,
+                    ["Expiration"] = expiration,
                 },
             });
         }
@@ -292,7 +292,10 @@ internal sealed class StsServiceHandler : IServiceHandler
         var accountId = AccountContext.GetAccountId();
         if (useJson)
         {
-            return AwsResponseHelpers.JsonResponse(new { Account = accountId });
+            return AwsResponseHelpers.JsonResponse(new Dictionary<string, object?>
+            {
+                ["Account"] = accountId,
+            });
         }
 
         return XmlOk("GetAccessKeyInfoResponse",

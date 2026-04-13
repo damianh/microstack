@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using MicroStack.Internal;
@@ -83,9 +84,9 @@ internal sealed partial class Route53ServiceHandler : IServiceHandler
         }
     }
 
-    public object? GetState() => null;
+    public JsonElement? GetState() => null;
 
-    public void RestoreState(object state)
+    public void RestoreState(JsonElement state)
     {
         // Not implementing restore in Phase 1.
     }

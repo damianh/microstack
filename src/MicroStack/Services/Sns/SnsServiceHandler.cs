@@ -105,45 +105,41 @@ internal sealed class SnsServiceHandler : IServiceHandler
         }
     }
 
-    public object? GetState()
+    public JsonElement? GetState()
     {
         lock (_lock)
         {
-            return new Dictionary<string, object?>
-            {
-                ["topics"] = _topics.ToRaw(),
-                ["subArnToTopic"] = _subArnToTopic.ToRaw(),
-                ["platformApps"] = _platformApps.ToRaw(),
-                ["platformEndpoints"] = _platformEndpoints.ToRaw(),
-            };
+            var topics = _topics.ToRaw()
+                .Select(kv => new SnsTopicEntry(kv.Key.AccountId, kv.Key.Key, kv.Value))
+                .ToList();
+            var subs = _subArnToTopic.ToRaw()
+                .Select(kv => new SnsSubEntry(kv.Key.AccountId, kv.Key.Key, kv.Value))
+                .ToList();
+            var apps = _platformApps.ToRaw()
+                .Select(kv => new SnsAppEntry(kv.Key.AccountId, kv.Key.Key, kv.Value))
+                .ToList();
+            var endpoints = _platformEndpoints.ToRaw()
+                .Select(kv => new SnsEndpointEntry(kv.Key.AccountId, kv.Key.Key, kv.Value))
+                .ToList();
+            var state = new SnsState(topics, subs, apps, endpoints);
+            return JsonSerializer.SerializeToElement(state, MicroStackJsonContext.Default.SnsState);
         }
     }
 
-    public void RestoreState(object state)
+    public void RestoreState(JsonElement state)
     {
-        if (state is not Dictionary<string, object?> dict) return;
+        var restored = JsonSerializer.Deserialize(state, MicroStackJsonContext.Default.SnsState);
+        if (restored is null) return;
         lock (_lock)
         {
-            if (dict.TryGetValue("topics", out var t)
-                && t is IReadOnlyDictionary<(string, string), SnsTopic> topics)
-            {
-                _topics.FromRaw(topics);
-            }
-            if (dict.TryGetValue("subArnToTopic", out var s)
-                && s is IReadOnlyDictionary<(string, string), string> subs)
-            {
-                _subArnToTopic.FromRaw(subs);
-            }
-            if (dict.TryGetValue("platformApps", out var pa)
-                && pa is IReadOnlyDictionary<(string, string), SnsPlatformApp> apps)
-            {
-                _platformApps.FromRaw(apps);
-            }
-            if (dict.TryGetValue("platformEndpoints", out var pe)
-                && pe is IReadOnlyDictionary<(string, string), SnsPlatformEndpoint> endpoints)
-            {
-                _platformEndpoints.FromRaw(endpoints);
-            }
+            _topics.FromRaw(restored.Topics.Select(e =>
+                new KeyValuePair<(string, string), SnsTopic>((e.AccountId, e.Key), e.Value)));
+            _subArnToTopic.FromRaw(restored.Subs.Select(e =>
+                new KeyValuePair<(string, string), string>((e.AccountId, e.Key), e.Value)));
+            _platformApps.FromRaw(restored.Apps.Select(e =>
+                new KeyValuePair<(string, string), SnsPlatformApp>((e.AccountId, e.Key), e.Value)));
+            _platformEndpoints.FromRaw(restored.Endpoints.Select(e =>
+                new KeyValuePair<(string, string), SnsPlatformEndpoint>((e.AccountId, e.Key), e.Value)));
         }
     }
 
@@ -162,36 +158,17 @@ internal sealed class SnsServiceHandler : IServiceHandler
         {
             if (!_topics.ContainsKey(arn))
             {
-                var defaultPolicy = JsonSerializer.Serialize(new
-                {
-                    Version = "2008-10-17",
-                    Id = "__default_policy_ID",
-                    Statement = new[]
-                    {
-                        new
-                        {
-                            Sid = "__default_statement_ID",
-                            Effect = "Allow",
-                            Principal = new { AWS = "*" },
-                            Action = new[] { "SNS:Publish", "SNS:Subscribe", "SNS:Receive" },
-                            Resource = arn,
-                            Condition = new { StringEquals = new Dictionary<string, string> { ["AWS:SourceOwner"] = accountId } },
-                        },
-                    },
-                });
+                var defaultPolicy =
+                    $"{{\"Version\":\"2008-10-17\",\"Id\":\"__default_policy_ID\",\"Statement\":[{{" +
+                    $"\"Sid\":\"__default_statement_ID\",\"Effect\":\"Allow\"," +
+                    $"\"Principal\":{{\"AWS\":\"*\"}}," +
+                    $"\"Action\":[\"SNS:Publish\",\"SNS:Subscribe\",\"SNS:Receive\"]," +
+                    $"\"Resource\":\"{arn}\"," +
+                    $"\"Condition\":{{\"StringEquals\":{{\"AWS:SourceOwner\":\"{accountId}\"}}}}}}]}}";
 
-                var effectivePolicy = JsonSerializer.Serialize(new
-                {
-                    http = new
-                    {
-                        defaultHealthyRetryPolicy = new
-                        {
-                            minDelayTarget = 20,
-                            maxDelayTarget = 20,
-                            numRetries = 3,
-                        },
-                    },
-                });
+                const string effectivePolicy =
+                    "{\"http\":{\"defaultHealthyRetryPolicy\":{" +
+                    "\"minDelayTarget\":20,\"maxDelayTarget\":20,\"numRetries\":3}}}";
 
                 var topic = new SnsTopic
                 {
@@ -964,7 +941,7 @@ internal sealed class SnsServiceHandler : IServiceHandler
         Dictionary<string, JsonElement> policy;
         try
         {
-            policy = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(policyJson)
+            policy = JsonSerializer.Deserialize(policyJson, MicroStackJsonContext.Default.DictionaryStringJsonElement)
                      ?? new Dictionary<string, JsonElement>();
         }
         catch (JsonException)
@@ -1093,26 +1070,26 @@ internal sealed class SnsServiceHandler : IServiceHandler
 
         if (messageAttributes.Count > 0)
         {
-            var formatted = new Dictionary<string, object>(StringComparer.Ordinal);
+            var formatted = new Dictionary<string, object?>(StringComparer.Ordinal);
             foreach (var (name, attr) in messageAttributes)
             {
-                formatted[name] = new
+                formatted[name] = new Dictionary<string, string>
                 {
-                    Type = attr.DataType ?? "String",
-                    Value = attr.StringValue ?? "",
+                    ["Type"] = attr.DataType ?? "String",
+                    ["Value"] = attr.StringValue ?? "",
                 };
             }
             envelope["MessageAttributes"] = formatted;
         }
 
         // Remove null values and serialize
-        var clean = new Dictionary<string, object>(StringComparer.Ordinal);
+        var clean = new Dictionary<string, object?>(StringComparer.Ordinal);
         foreach (var (k, v) in envelope)
         {
             if (v is not null) clean[k] = v;
         }
 
-        return JsonSerializer.Serialize(clean);
+        return DictionaryObjectJsonConverter.SerializeValue(clean);
     }
 
     // ── XML response helpers ────────────────────────────────────────────────────
@@ -1220,3 +1197,14 @@ internal sealed class SnsPlatformEndpoint
     public required string ApplicationArn { get; set; }
     public Dictionary<string, string> Attributes { get; set; } = new(StringComparer.Ordinal);
 }
+
+// Persistence state records for SnsServiceHandler
+internal sealed record SnsTopicEntry(string AccountId, string Key, SnsTopic Value);
+internal sealed record SnsSubEntry(string AccountId, string Key, string Value);
+internal sealed record SnsAppEntry(string AccountId, string Key, SnsPlatformApp Value);
+internal sealed record SnsEndpointEntry(string AccountId, string Key, SnsPlatformEndpoint Value);
+internal sealed record SnsState(
+    List<SnsTopicEntry> Topics,
+    List<SnsSubEntry> Subs,
+    List<SnsAppEntry> Apps,
+    List<SnsEndpointEntry> Endpoints);

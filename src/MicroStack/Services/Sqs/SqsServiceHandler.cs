@@ -116,33 +116,31 @@ internal sealed class SqsServiceHandler : IServiceHandler
         }
     }
 
-    public object? GetState()
+    public JsonElement? GetState()
     {
         lock (_lock)
         {
-            return new Dictionary<string, object?>
-            {
-                ["queues"] = _queues.ToRaw(),
-                ["queueNameToUrl"] = _queueNameToUrl.ToRaw(),
-            };
+            var queues = _queues.ToRaw()
+                .Select(kv => new SqsQueueEntry(kv.Key.AccountId, kv.Key.Key, kv.Value))
+                .ToList();
+            var names = _queueNameToUrl.ToRaw()
+                .Select(kv => new SqsNameEntry(kv.Key.AccountId, kv.Key.Key, kv.Value))
+                .ToList();
+            var state = new SqsState(queues, names);
+            return JsonSerializer.SerializeToElement(state, MicroStackJsonContext.Default.SqsState);
         }
     }
 
-    public void RestoreState(object state)
+    public void RestoreState(JsonElement state)
     {
-        if (state is not Dictionary<string, object?> dict) return;
+        var restored = JsonSerializer.Deserialize(state, MicroStackJsonContext.Default.SqsState);
+        if (restored is null) return;
         lock (_lock)
         {
-            if (dict.TryGetValue("queues", out var q)
-                && q is IReadOnlyDictionary<(string, string), SqsQueue> queues)
-            {
-                _queues.FromRaw(queues);
-            }
-            if (dict.TryGetValue("queueNameToUrl", out var n)
-                && n is IReadOnlyDictionary<(string, string), string> names)
-            {
-                _queueNameToUrl.FromRaw(names);
-            }
+            _queues.FromRaw(restored.Queues.Select(e =>
+                new KeyValuePair<(string, string), SqsQueue>((e.AccountId, e.Key), e.Value)));
+            _queueNameToUrl.FromRaw(restored.Names.Select(e =>
+                new KeyValuePair<(string, string), string>((e.AccountId, e.Key), e.Value)));
         }
     }
 
@@ -308,7 +306,7 @@ internal sealed class SqsServiceHandler : IServiceHandler
                 if (count >= max) break;
                 if (string.IsNullOrEmpty(pfx) || q.Name.StartsWith(pfx, StringComparison.Ordinal))
                 {
-                    urls.Add(url);
+                    ((IList<JsonNode?>)urls).Add(JsonValue.Create(url));
                     count++;
                 }
             }
@@ -507,7 +505,7 @@ internal sealed class SqsServiceHandler : IServiceHandler
                     entry["MD5OfMessageAttributes"] = m.Md5Attrs;
             }
 
-            out_.Add(entry);
+            out_.Add((JsonNode)entry);
         }
 
         return out_.Count > 0
@@ -594,9 +592,9 @@ internal sealed class SqsServiceHandler : IServiceHandler
                 }
 
                 if (found)
-                    ok.Add(new JsonObject { ["Id"] = eid });
+                    ok.Add((JsonNode)new JsonObject { ["Id"] = eid });
                 else
-                    fail.Add(new JsonObject
+                    fail.Add((JsonNode)new JsonObject
                     {
                         ["Id"]          = eid,
                         ["Code"]        = "ReceiptHandleIsInvalid",
@@ -695,11 +693,11 @@ internal sealed class SqsServiceHandler : IServiceHandler
 
                 var r = ActSendMessage(sub, url);
                 r["Id"] = eid;
-                ok.Add(r);
+                ok.Add((JsonNode)r);
             }
             catch (SqsException ex)
             {
-                fail.Add(new JsonObject
+                fail.Add((JsonNode)new JsonObject
                 {
                     ["Id"]          = eid,
                     ["Code"]        = ex.Code,
@@ -740,9 +738,9 @@ internal sealed class SqsServiceHandler : IServiceHandler
                 });
 
                 if (q.Messages.Count < before)
-                    ok.Add(new JsonObject { ["Id"] = eid });
+                    ok.Add((JsonNode)new JsonObject { ["Id"] = eid });
                 else
-                    fail.Add(new JsonObject
+                    fail.Add((JsonNode)new JsonObject
                     {
                         ["Id"]          = eid,
                         ["Code"]        = "ReceiptHandleIsInvalid",
@@ -1100,13 +1098,13 @@ internal sealed class SqsServiceHandler : IServiceHandler
         // AttributeName.N → AttributeNames list
         var attrNames = new JsonArray();
         for (var i = 1; p.TryGetValue($"AttributeName.{i}", out var an) && !string.IsNullOrEmpty(an); i++)
-            attrNames.Add(an);
+            ((IList<JsonNode?>)attrNames).Add(JsonValue.Create(an));
         if (attrNames.Count > 0) d["AttributeNames"] = attrNames;
 
         // MessageAttributeName.N
         var manNames = new JsonArray();
         for (var i = 1; p.TryGetValue($"MessageAttributeName.{i}", out var mn) && !string.IsNullOrEmpty(mn); i++)
-            manNames.Add(mn);
+            ((IList<JsonNode?>)manNames).Add(JsonValue.Create(mn));
         if (manNames.Count > 0) d["MessageAttributeNames"] = manNames;
 
         // MessageAttribute.N.Name / .Value.*
@@ -1135,7 +1133,7 @@ internal sealed class SqsServiceHandler : IServiceHandler
         // TagKey.N
         var tagKeys = new JsonArray();
         for (var i = 1; p.TryGetValue($"TagKey.{i}", out var tk) && !string.IsNullOrEmpty(tk); i++)
-            tagKeys.Add(tk);
+            ((IList<JsonNode?>)tagKeys).Add(JsonValue.Create(tk));
         if (tagKeys.Count > 0) d["TagKeys"] = tagKeys;
 
         // Batch entries
@@ -1149,7 +1147,7 @@ internal sealed class SqsServiceHandler : IServiceHandler
             for (var i = 1; p.TryGetValue($"{pfx}.{i}.Id", out var eid) && !string.IsNullOrEmpty(eid); i++)
             {
                 p.TryGetValue($"{pfx}.{i}.ReceiptHandle", out var rh);
-                entries.Add(new JsonObject { ["Id"] = eid, ["ReceiptHandle"] = rh });
+                entries.Add((JsonNode)new JsonObject { ["Id"] = eid, ["ReceiptHandle"] = rh });
             }
             d["Entries"] = entries;
         }
@@ -1162,7 +1160,7 @@ internal sealed class SqsServiceHandler : IServiceHandler
             {
                 p.TryGetValue($"{pfx}.{i}.ReceiptHandle", out var rh);
                 p.TryGetValue($"{pfx}.{i}.VisibilityTimeout", out var vt);
-                entries.Add(new JsonObject
+                entries.Add((JsonNode)new JsonObject
                 {
                     ["Id"]                = eid,
                     ["ReceiptHandle"]     = rh,
@@ -1204,7 +1202,7 @@ internal sealed class SqsServiceHandler : IServiceHandler
             }
             if (ema.Count > 0) e["MessageAttributes"] = ema;
 
-            entries.Add(e);
+            entries.Add((JsonNode)e);
         }
         return entries;
     }
@@ -1424,7 +1422,7 @@ internal sealed class SqsServiceHandler : IServiceHandler
         var fault  = status < 500 ? "Sender" : "Receiver";
         var legacy = QueryCompatCodes.GetValueOrDefault(code, code);
         var body   = Encoding.UTF8.GetBytes(
-            JsonSerializer.Serialize(new { __type = code, message }));
+            JsonSerializer.Serialize(new AwsJsonError(code, message), MicroStackJsonContext.Default.AwsJsonError));
         return new ServiceResponse(status,
             new Dictionary<string, string>
             {
@@ -1588,3 +1586,8 @@ internal sealed class SqsException : Exception
         Status = status;
     }
 }
+
+// Persistence state records for SqsServiceHandler
+internal sealed record SqsQueueEntry(string AccountId, string Key, SqsQueue Value);
+internal sealed record SqsNameEntry(string AccountId, string Key, string Value);
+internal sealed record SqsState(List<SqsQueueEntry> Queues, List<SqsNameEntry> Names);

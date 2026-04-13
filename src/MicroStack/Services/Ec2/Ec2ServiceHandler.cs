@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text;
 using System.Web;
 using System.Xml.Linq;
@@ -166,8 +167,8 @@ internal sealed class Ec2ServiceHandler : IServiceHandler
         }
     }
 
-    public object? GetState() => null;
-    public void RestoreState(object state) { }
+    public JsonElement? GetState() => null;
+    public void RestoreState(JsonElement state) { }
 
     // ── Action dispatch ────────────────────────────────────────────────────────
 

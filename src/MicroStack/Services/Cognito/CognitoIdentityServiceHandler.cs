@@ -72,8 +72,8 @@ internal sealed class CognitoIdentityServiceHandler : IServiceHandler
         }
     }
 
-    public object? GetState() => null;
-    public void RestoreState(object state) { }
+    public JsonElement? GetState() => null;
+    public void RestoreState(JsonElement state) { }
 
     // ── Identity Dispatcher ────────────────────────────────────────────────
     private ServiceResponse DispatchIdentity(string action, JsonElement data)

@@ -157,8 +157,8 @@ internal sealed partial class CloudWatchServiceHandler : IServiceHandler
         }
     }
 
-    public object? GetState() => null;
-    public void RestoreState(object state) { }
+    public JsonElement? GetState() => null;
+    public void RestoreState(JsonElement state) { }
 
     // ── PutMetricData ─────────────────────────────────────────────────────────
 
@@ -266,8 +266,8 @@ internal sealed partial class CloudWatchServiceHandler : IServiceHandler
 
         EvaluateAllAlarms();
 
-        if (isCbor) return CborOk(new { });
-        if (isJson) return JsonOk(new { });
+        if (isCbor) return CborOk(new Dictionary<string, object?>());
+        if (isJson) return JsonOk(new Dictionary<string, object?>());
         return XmlResponse(200, "PutMetricDataResponse", "");
     }
 
@@ -315,8 +315,8 @@ internal sealed partial class CloudWatchServiceHandler : IServiceHandler
             });
         }
 
-        if (isCbor) return CborOk(new { Metrics = result });
-        if (isJson) return JsonOk(new { Metrics = result });
+        if (isCbor) return CborOk(new Dictionary<string, object?> { ["Metrics"] = result });
+        if (isJson) return JsonOk(new Dictionary<string, object?> { ["Metrics"] = result });
 
         var members = new StringBuilder();
         foreach (var item in result)
@@ -415,7 +415,7 @@ internal sealed partial class CloudWatchServiceHandler : IServiceHandler
         }
 
         if (isCbor) return CborOk(new Dictionary<string, object?> { ["Datapoints"] = datapoints.ConvertAll(CborTagTimestampsObj), ["Label"] = metricName ?? "" });
-        if (isJson) return JsonOk(new { Datapoints = datapoints, Label = metricName ?? "" });
+        if (isJson) return JsonOk(new Dictionary<string, object?> { ["Datapoints"] = datapoints, ["Label"] = metricName ?? "" });
 
         if (datapoints.Count == 0)
         {
@@ -544,7 +544,7 @@ internal sealed partial class CloudWatchServiceHandler : IServiceHandler
         }
 
         if (isCbor) return CborOk(new Dictionary<string, object?> { ["MetricDataResults"] = cborResults });
-        if (isJson) return JsonOk(new { MetricDataResults = results });
+        if (isJson) return JsonOk(new Dictionary<string, object?> { ["MetricDataResults"] = results });
 
         var members = new StringBuilder();
         foreach (var r in results)
@@ -684,8 +684,8 @@ internal sealed partial class CloudWatchServiceHandler : IServiceHandler
 
         EvaluateAlarm(alarm);
 
-        if (isCbor) return CborOk(new { });
-        if (isJson) return JsonOk(new { });
+        if (isCbor) return CborOk(new Dictionary<string, object?>());
+        if (isJson) return JsonOk(new Dictionary<string, object?>());
         return XmlResponse(200, "PutMetricAlarmResponse", "");
     }
 
@@ -739,8 +739,8 @@ internal sealed partial class CloudWatchServiceHandler : IServiceHandler
             ["AlarmConfigurationUpdatedTimestamp"] = NowEpoch(),
         };
 
-        if (isCbor) return CborOk(new { });
-        if (isJson) return JsonOk(new { });
+        if (isCbor) return CborOk(new Dictionary<string, object?>());
+        if (isJson) return JsonOk(new Dictionary<string, object?>());
         return XmlResponse(200, "PutCompositeAlarmResponse", "<PutCompositeAlarmResult/>");
     }
 
@@ -817,7 +817,7 @@ internal sealed partial class CloudWatchServiceHandler : IServiceHandler
             metricAlarms = metricAlarms.Take(maxRecords).ToList();
 
         if (isCbor) return CborOk(new Dictionary<string, object?> { ["MetricAlarms"] = metricAlarms.ConvertAll(CborTagTimestamps), ["CompositeAlarms"] = compositeResults.ConvertAll(CborTagTimestamps) });
-        if (isJson) return JsonOk(new { MetricAlarms = metricAlarms, CompositeAlarms = compositeResults });
+        if (isJson) return JsonOk(new Dictionary<string, object?> { ["MetricAlarms"] = metricAlarms, ["CompositeAlarms"] = compositeResults });
 
         var metricMembers = new StringBuilder();
         foreach (var a in metricAlarms)
@@ -878,7 +878,7 @@ internal sealed partial class CloudWatchServiceHandler : IServiceHandler
             .ToList();
 
         if (isCbor) return CborOk(new Dictionary<string, object?> { ["MetricAlarms"] = result.ConvertAll(CborTagTimestamps) });
-        if (isJson) return JsonOk(new { MetricAlarms = result });
+        if (isJson) return JsonOk(new Dictionary<string, object?> { ["MetricAlarms"] = result });
 
         var members = new StringBuilder();
         foreach (var a in result)
@@ -924,7 +924,7 @@ internal sealed partial class CloudWatchServiceHandler : IServiceHandler
             items = items.Take(maxRecords).ToList();
 
         if (isCbor) return CborOk(new Dictionary<string, object?> { ["AlarmHistoryItems"] = items.ConvertAll(CborTagTimestamps) });
-        if (isJson) return JsonOk(new { AlarmHistoryItems = items });
+        if (isJson) return JsonOk(new Dictionary<string, object?> { ["AlarmHistoryItems"] = items });
 
         var members = new StringBuilder();
         foreach (var h in items)
@@ -969,8 +969,8 @@ internal sealed partial class CloudWatchServiceHandler : IServiceHandler
                 $"arn:aws:cloudwatch:{Region}:{AccountContext.GetAccountId()}:alarm:{n}", out _);
         }
 
-        if (isCbor) return CborOk(new { });
-        if (isJson) return JsonOk(new { });
+        if (isCbor) return CborOk(new Dictionary<string, object?>());
+        if (isJson) return JsonOk(new Dictionary<string, object?>());
         return XmlResponse(200, "DeleteAlarmsResponse", "");
     }
 
@@ -986,8 +986,8 @@ internal sealed partial class CloudWatchServiceHandler : IServiceHandler
             if (_compositeAlarms.TryGetValue(n, out var ca)) ca["ActionsEnabled"] = true;
         }
 
-        if (isCbor) return CborOk(new { });
-        if (isJson) return JsonOk(new { });
+        if (isCbor) return CborOk(new Dictionary<string, object?>());
+        if (isJson) return JsonOk(new Dictionary<string, object?>());
         return XmlResponse(200, "EnableAlarmActionsResponse", "");
     }
 
@@ -1003,8 +1003,8 @@ internal sealed partial class CloudWatchServiceHandler : IServiceHandler
             if (_compositeAlarms.TryGetValue(n, out var ca)) ca["ActionsEnabled"] = false;
         }
 
-        if (isCbor) return CborOk(new { });
-        if (isJson) return JsonOk(new { });
+        if (isCbor) return CborOk(new Dictionary<string, object?>());
+        if (isJson) return JsonOk(new Dictionary<string, object?>());
         return XmlResponse(200, "DisableAlarmActionsResponse", "");
     }
 
@@ -1045,8 +1045,8 @@ internal sealed partial class CloudWatchServiceHandler : IServiceHandler
         if (oldState != newState)
             RecordHistory(name, oldState, newState, reason);
 
-        if (isCbor) return CborOk(new { });
-        if (isJson) return JsonOk(new { });
+        if (isCbor) return CborOk(new Dictionary<string, object?>());
+        if (isJson) return JsonOk(new Dictionary<string, object?>());
         return XmlResponse(200, "SetAlarmStateResponse", "");
     }
 
@@ -1087,8 +1087,8 @@ internal sealed partial class CloudWatchServiceHandler : IServiceHandler
             tagMap[k] = v;
         }
 
-        if (isCbor) return CborOk(new { });
-        if (isJson) return JsonOk(new { });
+        if (isCbor) return CborOk(new Dictionary<string, object?>());
+        if (isJson) return JsonOk(new Dictionary<string, object?>());
         return XmlResponse(200, "TagResourceResponse", "<TagResourceResult/>");
     }
 
@@ -1123,8 +1123,8 @@ internal sealed partial class CloudWatchServiceHandler : IServiceHandler
                 tagMap.Remove(k);
         }
 
-        if (isCbor) return CborOk(new { });
-        if (isJson) return JsonOk(new { });
+        if (isCbor) return CborOk(new Dictionary<string, object?>());
+        if (isJson) return JsonOk(new Dictionary<string, object?>());
         return XmlResponse(200, "UntagResourceResponse", "<UntagResourceResult/>");
     }
 
@@ -1150,8 +1150,8 @@ internal sealed partial class CloudWatchServiceHandler : IServiceHandler
             }));
         }
 
-        if (isCbor) return CborOk(new { Tags = tags });
-        if (isJson) return JsonOk(new { Tags = tags });
+        if (isCbor) return CborOk(new Dictionary<string, object?> { ["Tags"] = tags });
+        if (isJson) return JsonOk(new Dictionary<string, object?> { ["Tags"] = tags });
 
         var members = new StringBuilder();
         foreach (var t in tags)
@@ -1194,8 +1194,8 @@ internal sealed partial class CloudWatchServiceHandler : IServiceHandler
             ["Size"] = body.Length,
         };
 
-        if (isCbor) return CborOk(new { DashboardValidationMessages = Array.Empty<object>() });
-        if (isJson) return JsonOk(new { DashboardValidationMessages = Array.Empty<object>() });
+        if (isCbor) return CborOk(new Dictionary<string, object?> { ["DashboardValidationMessages"] = Array.Empty<object>() });
+        if (isJson) return JsonOk(new Dictionary<string, object?> { ["DashboardValidationMessages"] = Array.Empty<object>() });
         return XmlResponse(200, "PutDashboardResponse",
             "<PutDashboardResult><DashboardValidationMessages/></PutDashboardResult>");
     }
@@ -1215,11 +1215,14 @@ internal sealed partial class CloudWatchServiceHandler : IServiceHandler
         if (!_dashboards.TryGetValue(name, out var dash))
             return ErrorResponse("DashboardNotFoundError", $"Dashboard {name} does not exist", 404, isCbor, isJson);
 
-        var result = new
+        var dashArn = (string)(dash["DashboardArn"] ?? "");
+        var dashBody = (string)(dash["DashboardBody"] ?? "");
+        var dashName = (string)(dash["DashboardName"] ?? "");
+        var result = new Dictionary<string, object?>
         {
-            DashboardArn = (string)(dash["DashboardArn"] ?? ""),
-            DashboardBody = (string)(dash["DashboardBody"] ?? ""),
-            DashboardName = (string)(dash["DashboardName"] ?? ""),
+            ["DashboardArn"] = dashArn,
+            ["DashboardBody"] = dashBody,
+            ["DashboardName"] = dashName,
         };
 
         if (isCbor) return CborOk(result);
@@ -1227,9 +1230,9 @@ internal sealed partial class CloudWatchServiceHandler : IServiceHandler
 
         return XmlResponse(200, "GetDashboardResponse",
             $"<GetDashboardResult>"
-            + $"<DashboardArn>{Esc(result.DashboardArn)}</DashboardArn>"
-            + $"<DashboardBody>{Esc(result.DashboardBody)}</DashboardBody>"
-            + $"<DashboardName>{Esc(result.DashboardName)}</DashboardName>"
+            + $"<DashboardArn>{Esc(dashArn)}</DashboardArn>"
+            + $"<DashboardBody>{Esc(dashBody)}</DashboardBody>"
+            + $"<DashboardName>{Esc(dashName)}</DashboardName>"
             + "</GetDashboardResult>");
     }
 
@@ -1257,8 +1260,8 @@ internal sealed partial class CloudWatchServiceHandler : IServiceHandler
         foreach (var n in names)
             _dashboards.TryRemove(n, out _);
 
-        if (isCbor) return CborOk(new { });
-        if (isJson) return JsonOk(new { });
+        if (isCbor) return CborOk(new Dictionary<string, object?>());
+        if (isJson) return JsonOk(new Dictionary<string, object?>());
         return XmlResponse(200, "DeleteDashboardsResponse", "<DeleteDashboardsResult/>");
     }
 
@@ -1290,7 +1293,7 @@ internal sealed partial class CloudWatchServiceHandler : IServiceHandler
         }
 
         if (isCbor) return CborOk(new Dictionary<string, object?> { ["DashboardEntries"] = entries.ConvertAll(CborTagTimestampsObj) });
-        if (isJson) return JsonOk(new { DashboardEntries = entries });
+        if (isJson) return JsonOk(new Dictionary<string, object?> { ["DashboardEntries"] = entries });
 
         var members = new StringBuilder();
         foreach (var e in entries)
@@ -1373,11 +1376,11 @@ internal sealed partial class CloudWatchServiceHandler : IServiceHandler
             ["Timestamp"] = EpochToIso(NowEpoch()),
             ["HistoryItemType"] = "StateUpdate",
             ["HistorySummary"] = $"Alarm updated from {oldState} to {newState}",
-            ["HistoryData"] = JsonSerializer.Serialize(new
+            ["HistoryData"] = DictionaryObjectJsonConverter.SerializeValue(new Dictionary<string, object?>
             {
-                version = "1.0",
-                oldState = new { stateValue = oldState },
-                newState = new { stateValue = newState, stateReason = reason },
+                ["version"] = "1.0",
+                ["oldState"] = new Dictionary<string, object?> { ["stateValue"] = oldState },
+                ["newState"] = new Dictionary<string, object?> { ["stateValue"] = newState, ["stateReason"] = reason },
             }),
         });
     }
@@ -1876,13 +1879,13 @@ internal sealed partial class CloudWatchServiceHandler : IServiceHandler
         return new ServiceResponse(status, XmlHeaders, Encoding.UTF8.GetBytes(body));
     }
 
-    private static ServiceResponse JsonOk(object data)
+    private static ServiceResponse JsonOk(Dictionary<string, object?> data)
     {
-        var json = JsonSerializer.SerializeToUtf8Bytes(data, JsonOpts);
+        var json = JsonSerializer.SerializeToUtf8Bytes(data, MicroStackJsonContext.Default.DictionaryStringObject);
         return new ServiceResponse(200, JsonResponseHeaders, json);
     }
 
-    private static ServiceResponse CborOk(object data)
+    private static ServiceResponse CborOk(Dictionary<string, object?> data)
     {
         var cborBytes = EncodeToCbor(data);
         return new ServiceResponse(200, CborResponseHeaders, cborBytes);
@@ -1905,8 +1908,7 @@ internal sealed partial class CloudWatchServiceHandler : IServiceHandler
 
         if (isJson)
         {
-            var data = new { __type = code, message };
-            var json = JsonSerializer.SerializeToUtf8Bytes(data, JsonOpts);
+            var json = JsonSerializer.SerializeToUtf8Bytes(new AwsJsonError(code, message), MicroStackJsonContext.Default.AwsJsonError);
             return new ServiceResponse(status, JsonResponseHeaders, json);
         }
 
@@ -2034,7 +2036,7 @@ internal sealed partial class CloudWatchServiceHandler : IServiceHandler
                 break;
             default:
                 // For anonymous types and other objects, serialize to JSON first then re-encode
-                var json = JsonSerializer.Serialize(value, JsonOpts);
+                var json = DictionaryObjectJsonConverter.SerializeValue(value);
                 using (var doc = JsonDocument.Parse(json))
                 {
                     WriteJsonElementAsCbor(writer, doc.RootElement);
@@ -2096,7 +2098,7 @@ internal sealed partial class CloudWatchServiceHandler : IServiceHandler
             var result = ReadCborAsObject(reader);
             if (result is not null)
             {
-                var json = JsonSerializer.Serialize(result, JsonOpts);
+                var json = DictionaryObjectJsonConverter.SerializeValue(result);
                 using var doc = JsonDocument.Parse(json);
                 return doc.RootElement.Clone();
             }

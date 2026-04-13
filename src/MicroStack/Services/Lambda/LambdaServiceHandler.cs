@@ -79,9 +79,9 @@ internal sealed class LambdaServiceHandler : IServiceHandler
         }
     }
 
-    public object? GetState() => null;
+    public JsonElement? GetState() => null;
 
-    public void RestoreState(object state) { }
+    public void RestoreState(JsonElement state) { }
 
     // -- Routing ---------------------------------------------------------------
 
@@ -1648,7 +1648,7 @@ internal sealed class LambdaServiceHandler : IServiceHandler
 
             record.Policy.Statements.Add(statement);
 
-            var policyJson = JsonSerializer.Serialize(new Dictionary<string, object?>
+            var policyJson = DictionaryObjectJsonConverter.SerializeValue(new Dictionary<string, object?>
             {
                 ["Version"] = record.Policy.Version,
                 ["Id"] = "default",
@@ -1680,7 +1680,7 @@ internal sealed class LambdaServiceHandler : IServiceHandler
                     $"No policy is associated with the given resource.", 404);
             }
 
-            var policyJson = JsonSerializer.Serialize(new Dictionary<string, object?>
+            var policyJson = DictionaryObjectJsonConverter.SerializeValue(new Dictionary<string, object?>
             {
                 ["Version"] = record.Policy.Version,
                 ["Id"] = "default",
@@ -2081,7 +2081,7 @@ internal sealed class LambdaServiceHandler : IServiceHandler
                     ["Content-Type"] = "application/json",
                     ["X-Amz-Log-Result"] = "",
                 };
-                var errorPayload = JsonSerializer.SerializeToUtf8Bytes(new Dictionary<string, object?>
+                var errorPayload = DictionaryObjectJsonConverter.SerializeObject(new Dictionary<string, object?>
                 {
                     ["errorMessage"] = ex.Message,
                     ["errorType"] = "Runtime.InitError",
@@ -2112,7 +2112,7 @@ internal sealed class LambdaServiceHandler : IServiceHandler
 
             // Error response
             invokeHeaders["X-Amz-Function-Error"] = "Unhandled";
-            var errorBody = JsonSerializer.SerializeToUtf8Bytes(new Dictionary<string, object?>
+            var errorBody = DictionaryObjectJsonConverter.SerializeObject(new Dictionary<string, object?>
             {
                 ["errorMessage"] = workerResult.Error,
                 ["errorType"] = "Error",
@@ -2372,7 +2372,7 @@ internal sealed class LambdaServiceHandler : IServiceHandler
         try
         {
             var requestId = HashHelpers.NewUuid();
-            var eventJson = JsonSerializer.SerializeToUtf8Bytes(eventPayload);
+            var eventJson = DictionaryObjectJsonConverter.SerializeObject(eventPayload);
             var worker = _workerPool.GetOrCreate(name, config, codeZip);
             var workerResult = worker.Invoke(eventJson, requestId);
             return workerResult.Success;
@@ -2418,7 +2418,7 @@ internal sealed class LambdaServiceHandler : IServiceHandler
 
         if (codeZip is null || codeZip.Length == 0 || !IsSupportedRuntime(runtime))
         {
-            return (true, JsonSerializer.SerializeToUtf8Bytes(new Dictionary<string, object?>
+            return (true, DictionaryObjectJsonConverter.SerializeObject(new Dictionary<string, object?>
             {
                 ["statusCode"] = 200,
                 ["body"] = "Mock response",
@@ -2648,7 +2648,7 @@ internal sealed class LambdaServiceHandler : IServiceHandler
 
     private static ServiceResponse JsonResponse(object data, int statusCode)
     {
-        var json = JsonSerializer.SerializeToUtf8Bytes(data, JsonOpts);
+        var json = JsonSerializer.SerializeToUtf8Bytes(data, data.GetType(), MicroStackJsonContext.Default);
         return new ServiceResponse(statusCode, JsonContentTypeHeaders, json);
     }
 
@@ -2755,7 +2755,7 @@ internal sealed class LambdaServiceHandler : IServiceHandler
     private static Dictionary<string, object?> CloneConfig(Dictionary<string, object?> config)
     {
         // Deep clone by serializing and deserializing
-        var json = JsonSerializer.SerializeToUtf8Bytes(config, JsonOpts);
+        var json = DictionaryObjectJsonConverter.SerializeObject(config);
         using var doc = JsonDocument.Parse(json);
         return JsonElementToDict(doc.RootElement);
     }

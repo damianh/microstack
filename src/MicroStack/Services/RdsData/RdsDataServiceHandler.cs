@@ -72,9 +72,9 @@ internal sealed class RdsDataServiceHandler : IServiceHandler
         }
     }
 
-    public object? GetState() => null;
+    public JsonElement? GetState() => null;
 
-    public void RestoreState(object state) { }
+    public void RestoreState(JsonElement state) { }
 
     // ── Execute Statement ─────────────────────────────────────────────────────
 
@@ -125,7 +125,7 @@ internal sealed class RdsDataServiceHandler : IServiceHandler
         if (!_transactions.Remove(txnId))
             return ErrorJson("NotFoundException", $"Transaction {txnId} not found", 404);
 
-        return AwsResponseHelpers.JsonResponse(new { transactionStatus = "Transaction Committed" });
+        return AwsResponseHelpers.JsonResponse(new Dictionary<string, object?> { ["transactionStatus"] = "Transaction Committed" });
     }
 
     // ── Rollback Transaction ──────────────────────────────────────────────────
@@ -139,7 +139,7 @@ internal sealed class RdsDataServiceHandler : IServiceHandler
         if (!_transactions.Remove(txnId))
             return ErrorJson("NotFoundException", $"Transaction {txnId} not found", 404);
 
-        return AwsResponseHelpers.JsonResponse(new { transactionStatus = "Transaction Rolled Back" });
+        return AwsResponseHelpers.JsonResponse(new Dictionary<string, object?> { ["transactionStatus"] = "Transaction Rolled Back" });
     }
 
     // ── Batch Execute Statement ───────────────────────────────────────────────

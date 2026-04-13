@@ -171,9 +171,9 @@ internal sealed partial class EventBridgeServiceHandler : IServiceHandler
         }
     }
 
-    public object? GetState() => null;
+    public JsonElement? GetState() => null;
 
-    public void RestoreState(object state) { }
+    public void RestoreState(JsonElement state) { }
 
     // -- JSON helpers ----------------------------------------------------------
 
@@ -392,7 +392,7 @@ internal sealed partial class EventBridgeServiceHandler : IServiceHandler
                     ["Description"] = b.GetValueOrDefault("Description", ""),
                     ["CreationTime"] = b["CreationTime"],
                     ["LastModifiedTime"] = b.GetValueOrDefault("LastModifiedTime", b["CreationTime"]),
-                    ["Policy"] = policy is not null ? JsonSerializer.Serialize(policy) : "",
+                    ["Policy"] = policy is not null ? DictionaryObjectJsonConverter.SerializeValue(policy) : "",
                 });
             }
 
@@ -422,7 +422,7 @@ internal sealed partial class EventBridgeServiceHandler : IServiceHandler
                 ["Description"] = bus.GetValueOrDefault("Description", ""),
                 ["CreationTime"] = bus["CreationTime"],
                 ["LastModifiedTime"] = bus.GetValueOrDefault("LastModifiedTime", bus["CreationTime"]),
-                ["Policy"] = policy is not null ? JsonSerializer.Serialize(policy) : "",
+                ["Policy"] = policy is not null ? DictionaryObjectJsonConverter.SerializeValue(policy) : "",
             });
         }
     }
@@ -896,7 +896,7 @@ internal sealed partial class EventBridgeServiceHandler : IServiceHandler
         string detailStr;
         if (detail is Dictionary<string, object?> detailDict)
         {
-            detailStr = JsonSerializer.Serialize(detailDict);
+            detailStr = DictionaryObjectJsonConverter.SerializeValue(detailDict);
         }
         else if (detail is null)
         {

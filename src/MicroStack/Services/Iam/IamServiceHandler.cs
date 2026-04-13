@@ -206,9 +206,9 @@ internal sealed class IamServiceHandler : IServiceHandler
         }
     }
 
-    public object? GetState() => null;
+    public JsonElement? GetState() => null;
 
-    public void RestoreState(object state) { }
+    public void RestoreState(JsonElement state) { }
 
     // ── User management ─────────────────────────────────────────────────────────
 
@@ -1925,16 +1925,16 @@ internal sealed class IamServiceHandler : IServiceHandler
                     $"Role with name {roleName} already exists.");
             }
 
-            var trustPolicy = JsonSerializer.Serialize(new
+            var trustPolicy = DictionaryObjectJsonConverter.SerializeValue(new Dictionary<string, object?>
             {
-                Version = "2012-10-17",
-                Statement = new object[]
+                ["Version"] = "2012-10-17",
+                ["Statement"] = new List<object?>
                 {
-                    new
+                    new Dictionary<string, object?>
                     {
-                        Effect = "Allow",
-                        Principal = new { Service = serviceName },
-                        Action = "sts:AssumeRole",
+                        ["Effect"] = "Allow",
+                        ["Principal"] = new Dictionary<string, object?> { ["Service"] = serviceName },
+                        ["Action"] = "sts:AssumeRole",
                     },
                 },
             });

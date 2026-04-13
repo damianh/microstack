@@ -125,9 +125,9 @@ internal sealed partial class SesServiceHandler : IServiceHandler
         }
     }
 
-    public object? GetState() => null;
+    public JsonElement? GetState() => null;
 
-    public void RestoreState(object state) { }
+    public void RestoreState(JsonElement state) { }
 
     // ═══════════════════════════════════════════════════════════════════════════
     // v1 — Send operations
@@ -639,9 +639,9 @@ internal sealed partial class SesServiceHandler : IServiceHandler
         if (route == "/account" && method == "GET")
             return V2GetAccount();
         if (route == "/account/suppression" && method == "PUT")
-            return JsonResponse(new { });
+            return JsonResponse(new Dictionary<string, object?>());
         if (route == "/suppression/addresses" && method == "GET")
-            return JsonResponse(new { SuppressedDestinationSummaries = Array.Empty<object>(), NextToken = (string?)null });
+            return JsonResponse(new Dictionary<string, object?> { ["SuppressedDestinationSummaries"] = Array.Empty<object>(), ["NextToken"] = null });
 
         // Send
         if (route == "/outbound-emails" && method == "POST")
@@ -669,7 +669,7 @@ internal sealed partial class SesServiceHandler : IServiceHandler
         if (route == "/tags" && method == "GET")
         {
             var arn = request.GetQueryParam("ResourceArn") ?? "";
-            return JsonResponse(new { Tags = _sesTags.TryGetValue(arn, out var tags) ? tags : new List<Dictionary<string, string>>() });
+            return JsonResponse(new Dictionary<string, object?> { ["Tags"] = _sesTags.TryGetValue(arn, out var tags) ? tags : new List<Dictionary<string, string>>() });
         }
         if (route == "/tags" && method == "POST")
         {
@@ -731,7 +731,7 @@ internal sealed partial class SesServiceHandler : IServiceHandler
             });
         }
 
-        return JsonResponse(new { MessageId = msgId });
+        return JsonResponse(new Dictionary<string, object?> { ["MessageId"] = msgId });
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -751,27 +751,27 @@ internal sealed partial class SesServiceHandler : IServiceHandler
                 identityType == "DOMAIN" ? "Domain" : "EmailAddress");
         }
 
-        return JsonResponse(new
+        return JsonResponse(new Dictionary<string, object?>
         {
-            IdentityType = identityType,
-            VerifiedForSendingStatus = true,
-            DkimAttributes = new { SigningEnabled = false, Status = "NOT_STARTED", Tokens = Array.Empty<string>() },
+            ["IdentityType"] = identityType,
+            ["VerifiedForSendingStatus"] = true,
+            ["DkimAttributes"] = new Dictionary<string, object?> { ["SigningEnabled"] = false, ["Status"] = "NOT_STARTED", ["Tokens"] = Array.Empty<string>() },
         });
     }
 
     private ServiceResponse V2ListIdentities()
     {
-        var items = new List<object>();
+        var items = new List<Dictionary<string, object?>>();
         foreach (var (identity, info) in _identities)
         {
-            items.Add(new
+            items.Add(new Dictionary<string, object?>
             {
-                IdentityType = info.IdentityType == "Domain" ? "DOMAIN" : "EMAIL_ADDRESS",
-                IdentityName = identity,
-                SendingEnabled = true,
+                ["IdentityType"] = info.IdentityType == "Domain" ? "DOMAIN" : "EMAIL_ADDRESS",
+                ["IdentityName"] = identity,
+                ["SendingEnabled"] = true,
             });
         }
-        return JsonResponse(new { EmailIdentities = items, NextToken = (string?)null });
+        return JsonResponse(new Dictionary<string, object?> { ["EmailIdentities"] = items, ["NextToken"] = null });
     }
 
     private ServiceResponse V2GetIdentity(string identity)
@@ -779,26 +779,26 @@ internal sealed partial class SesServiceHandler : IServiceHandler
         if (!_identities.TryGetValue(identity, out var info))
             return JsonErrorResponse("NotFoundException", $"Identity {identity} not found", 404);
 
-        return JsonResponse(new
+        return JsonResponse(new Dictionary<string, object?>
         {
-            EmailIdentity = identity,
-            IdentityType = info.IdentityType == "Domain" ? "DOMAIN" : "EMAIL_ADDRESS",
-            VerifiedForSendingStatus = info.VerificationStatus == "Success",
-            FeedbackForwardingStatus = info.FeedbackForwardingEnabled,
-            DkimAttributes = new
+            ["EmailIdentity"] = identity,
+            ["IdentityType"] = info.IdentityType == "Domain" ? "DOMAIN" : "EMAIL_ADDRESS",
+            ["VerifiedForSendingStatus"] = info.VerificationStatus == "Success",
+            ["FeedbackForwardingStatus"] = info.FeedbackForwardingEnabled,
+            ["DkimAttributes"] = new Dictionary<string, object?>
             {
-                SigningEnabled = info.DkimEnabled,
-                Status = info.DkimVerificationStatus ?? "NOT_STARTED",
-                Tokens = info.DkimTokens ?? [],
+                ["SigningEnabled"] = info.DkimEnabled,
+                ["Status"] = info.DkimVerificationStatus ?? "NOT_STARTED",
+                ["Tokens"] = info.DkimTokens ?? [],
             },
-            MailFromAttributes = new { BehaviorOnMxFailure = "USE_DEFAULT_VALUE" },
+            ["MailFromAttributes"] = new Dictionary<string, object?> { ["BehaviorOnMxFailure"] = "USE_DEFAULT_VALUE" },
         });
     }
 
     private ServiceResponse V2DeleteIdentity(string identity)
     {
         lock (_lock) { _identities.TryRemove(identity, out _); }
-        return JsonResponse(new { });
+        return JsonResponse(new Dictionary<string, object?>());
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -816,20 +816,20 @@ internal sealed partial class SesServiceHandler : IServiceHandler
                 return JsonErrorResponse("AlreadyExistsException", $"Configuration set {name} already exists", 409);
             _configurationSets[name] = new SesConfigurationSet { Name = name, CreatedTimestamp = TimeHelpers.NowIso() };
         }
-        return JsonResponse(new { });
+        return JsonResponse(new Dictionary<string, object?>());
     }
 
     private ServiceResponse V2ListConfigurationSets()
     {
         var items = _configurationSets.Values.Select(cs => cs.Name).ToList();
-        return JsonResponse(new { ConfigurationSets = items, NextToken = (string?)null });
+        return JsonResponse(new Dictionary<string, object?> { ["ConfigurationSets"] = items, ["NextToken"] = null });
     }
 
     private ServiceResponse V2GetConfigurationSet(string name)
     {
         if (!_configurationSets.TryGetValue(name, out var cs))
             return JsonErrorResponse("NotFoundException", $"Configuration set {name} not found", 404);
-        return JsonResponse(new { ConfigurationSetName = cs.Name });
+        return JsonResponse(new Dictionary<string, object?> { ["ConfigurationSetName"] = cs.Name });
     }
 
     private ServiceResponse V2DeleteConfigurationSet(string name)
@@ -840,7 +840,7 @@ internal sealed partial class SesServiceHandler : IServiceHandler
                 return JsonErrorResponse("NotFoundException", $"Configuration set {name} not found", 404);
             _configurationSets.TryRemove(name, out _);
         }
-        return JsonResponse(new { });
+        return JsonResponse(new Dictionary<string, object?>());
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -868,31 +868,31 @@ internal sealed partial class SesServiceHandler : IServiceHandler
                 CreatedTimestamp = TimeHelpers.NowIso(),
             };
         }
-        return JsonResponse(new { });
+        return JsonResponse(new Dictionary<string, object?>());
     }
 
     private ServiceResponse V2ListTemplates()
     {
-        var items = _templates.Values.Select(t => new
+        var items = _templates.Values.Select(t => new Dictionary<string, object?>
         {
-            t.TemplateName,
-            t.CreatedTimestamp,
+            ["TemplateName"] = t.TemplateName,
+            ["CreatedTimestamp"] = t.CreatedTimestamp,
         }).ToList();
-        return JsonResponse(new { TemplatesMetadata = items });
+        return JsonResponse(new Dictionary<string, object?> { ["TemplatesMetadata"] = items });
     }
 
     private ServiceResponse V2GetTemplate(string name)
     {
         if (!_templates.TryGetValue(name, out var tpl))
             return JsonErrorResponse("NotFoundException", $"Template {name} not found", 404);
-        return JsonResponse(new
+        return JsonResponse(new Dictionary<string, object?>
         {
-            tpl.TemplateName,
-            TemplateContent = new
+            ["TemplateName"] = tpl.TemplateName,
+            ["TemplateContent"] = new Dictionary<string, object?>
             {
-                Subject = tpl.SubjectPart,
-                Text = tpl.TextPart,
-                Html = tpl.HtmlPart,
+                ["Subject"] = tpl.SubjectPart,
+                ["Text"] = tpl.TextPart,
+                ["Html"] = tpl.HtmlPart,
             },
         });
     }
@@ -912,13 +912,13 @@ internal sealed partial class SesServiceHandler : IServiceHandler
             var h = GetStr(content, "Html");
             if (h is not null) tpl.HtmlPart = h;
         }
-        return JsonResponse(new { });
+        return JsonResponse(new Dictionary<string, object?>());
     }
 
     private ServiceResponse V2DeleteTemplate(string name)
     {
         lock (_lock) { _templates.TryRemove(name, out _); }
-        return JsonResponse(new { });
+        return JsonResponse(new Dictionary<string, object?>());
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -948,7 +948,7 @@ internal sealed partial class SesServiceHandler : IServiceHandler
             }
             _sesTags[arn] = existingMap.Values.ToList();
         }
-        return JsonResponse(new { });
+        return JsonResponse(new Dictionary<string, object?>());
     }
 
     private ServiceResponse V2UntagResource(ServiceRequest request)
@@ -966,7 +966,7 @@ internal sealed partial class SesServiceHandler : IServiceHandler
                 _sesTags[arn] = existing.Where(t => !removeKeys.Contains(t["Key"])).ToList();
             }
         }
-        return JsonResponse(new { });
+        return JsonResponse(new Dictionary<string, object?>());
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -982,19 +982,19 @@ internal sealed partial class SesServiceHandler : IServiceHandler
             sent24H = _sentEmails.Count(e => e.Timestamp >= cutoff);
         }
 
-        return JsonResponse(new
+        return JsonResponse(new Dictionary<string, object?>
         {
-            DedicatedIpAutoWarmupEnabled = false,
-            EnforcementStatus = "HEALTHY",
-            ProductionAccessEnabled = true,
-            SendQuota = new
+            ["DedicatedIpAutoWarmupEnabled"] = false,
+            ["EnforcementStatus"] = "HEALTHY",
+            ["ProductionAccessEnabled"] = true,
+            ["SendQuota"] = new Dictionary<string, object?>
             {
-                Max24HourSend = 50000.0,
-                MaxSendRate = 14.0,
-                SentLast24Hours = sent24H,
+                ["Max24HourSend"] = 50000.0,
+                ["MaxSendRate"] = 14.0,
+                ["SentLast24Hours"] = sent24H,
             },
-            SendingEnabled = true,
-            SuppressionAttributes = new { SuppressedReasons = Array.Empty<string>() },
+            ["SendingEnabled"] = true,
+            ["SuppressionAttributes"] = new Dictionary<string, object?> { ["SuppressedReasons"] = Array.Empty<string>() },
         });
     }
 
@@ -1067,16 +1067,15 @@ internal sealed partial class SesServiceHandler : IServiceHandler
         return new ServiceResponse(status, XmlHeaders, body);
     }
 
-    private static ServiceResponse JsonResponse(object data)
+    private static ServiceResponse JsonResponse(Dictionary<string, object?> data)
     {
-        var json = JsonSerializer.SerializeToUtf8Bytes(data, JsonOpts);
+        var json = DictionaryObjectJsonConverter.SerializeObject(data);
         return new ServiceResponse(200, JsonResponseHeaders, json);
     }
 
     private static ServiceResponse JsonErrorResponse(string code, string message, int status)
     {
-        var data = new { __type = code, message };
-        var json = JsonSerializer.SerializeToUtf8Bytes(data, JsonOpts);
+        var json = JsonSerializer.SerializeToUtf8Bytes(new AwsJsonError(code, message), MicroStackJsonContext.Default.AwsJsonError);
         return new ServiceResponse(status, JsonResponseHeaders, json);
     }
 
@@ -1093,12 +1092,6 @@ internal sealed partial class SesServiceHandler : IServiceHandler
 
     private static readonly Dictionary<string, string> JsonResponseHeaders = new()
         { ["Content-Type"] = "application/json" };
-
-    private static readonly JsonSerializerOptions JsonOpts = new()
-    {
-        PropertyNamingPolicy = null,
-        WriteIndented = false,
-    };
 
     // ── Internal record types ────────────────────────────────────────────────
 

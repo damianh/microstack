@@ -38,12 +38,6 @@ internal sealed partial class ApiGatewayV2ServiceHandler : IServiceHandler
 
     private static string Port => MicroStackOptions.Instance.GatewayPort.ToString();
 
-    private static readonly JsonSerializerOptions s_jsonOpts = new()
-    {
-        PropertyNamingPolicy = null,
-        WriteIndented = false,
-    };
-
     [GeneratedRegex(@"^([a-f0-9]{8})\.execute-api\.", RegexOptions.IgnoreCase)]
     private static partial Regex ExecuteApiRegex();
 
@@ -99,15 +93,15 @@ internal sealed partial class ApiGatewayV2ServiceHandler : IServiceHandler
         _v1Handler.Reset();
     }
 
-    public object? GetState() => null;
+    public JsonElement? GetState() => null;
 
-    public void RestoreState(object state) { }
+    public void RestoreState(JsonElement state) { }
 
     // -- Response helpers -------------------------------------------------------
 
     private static ServiceResponse ApigwResponse(Dictionary<string, object?> data, int statusCode)
     {
-        var json = JsonSerializer.SerializeToUtf8Bytes(data, s_jsonOpts);
+        var json = DictionaryObjectJsonConverter.SerializeObject(data);
         return new ServiceResponse(statusCode,
             new Dictionary<string, string> { ["Content-Type"] = "application/json" }, json);
     }
@@ -142,7 +136,7 @@ internal sealed partial class ApiGatewayV2ServiceHandler : IServiceHandler
         try
         {
             data = request.Body.Length > 0
-                ? JsonSerializer.Deserialize<Dictionary<string, object?>>(request.Body, s_jsonOpts)
+                ? DictionaryObjectJsonConverter.DeserializeObject(request.Body)
                   ?? new Dictionary<string, object?>()
                 : new Dictionary<string, object?>();
         }
@@ -1056,7 +1050,7 @@ internal sealed partial class ApiGatewayV2ServiceHandler : IServiceHandler
             ["isBase64Encoded"] = false,
         };
 
-        var eventPayload = JsonSerializer.SerializeToUtf8Bytes(lambdaEvent, s_jsonOpts);
+        var eventPayload = DictionaryObjectJsonConverter.SerializeObject(lambdaEvent);
         var (success, responsePayload, error) = _lambdaHandler.InvokeForApiGateway(uri, eventPayload);
 
         if (!success)
@@ -1069,7 +1063,7 @@ internal sealed partial class ApiGatewayV2ServiceHandler : IServiceHandler
         try
         {
             lambdaResponse = responsePayload is not null
-                ? JsonSerializer.Deserialize<Dictionary<string, object?>>(responsePayload, s_jsonOpts)
+                ? DictionaryObjectJsonConverter.DeserializeObject(responsePayload)
                 : null;
         }
         catch (JsonException)
@@ -1083,9 +1077,15 @@ internal sealed partial class ApiGatewayV2ServiceHandler : IServiceHandler
         }
 
         var statusCode = 200;
-        if (lambdaResponse.TryGetValue("statusCode", out var scObj) && scObj is JsonElement scEl)
+        if (lambdaResponse.TryGetValue("statusCode", out var scObj))
         {
-            statusCode = scEl.GetInt32();
+            statusCode = scObj switch
+            {
+                JsonElement scEl => scEl.GetInt32(),
+                long l => (int)l,
+                int i => i,
+                _ => 200,
+            };
         }
 
         var respHeaders = new Dictionary<string, string> { ["Content-Type"] = "application/json" };
@@ -1111,6 +1111,10 @@ internal sealed partial class ApiGatewayV2ServiceHandler : IServiceHandler
                     _ => Encoding.UTF8.GetBytes(bEl.GetRawText()),
                 };
             }
+            else if (bObj is string bodyStr)
+            {
+                respBody = Encoding.UTF8.GetBytes(bodyStr);
+            }
         }
 
         return new ServiceResponse(statusCode, respHeaders, respBody);
@@ -1118,20 +1122,18 @@ internal sealed partial class ApiGatewayV2ServiceHandler : IServiceHandler
 
     private static ServiceResponse JsonNotFound(string message)
     {
-        var body = JsonSerializer.SerializeToUtf8Bytes(new Dictionary<string, object?>
-        {
+        var body = DictionaryObjectJsonConverter.SerializeObject(new Dictionary<string, object?>{
             ["message"] = message,
-        }, s_jsonOpts);
+        });
         return new ServiceResponse(404,
             new Dictionary<string, string> { ["Content-Type"] = "application/json" }, body);
     }
 
     private static ServiceResponse JsonError(string message, int statusCode)
     {
-        var body = JsonSerializer.SerializeToUtf8Bytes(new Dictionary<string, object?>
-        {
+        var body = DictionaryObjectJsonConverter.SerializeObject(new Dictionary<string, object?>{
             ["message"] = message,
-        }, s_jsonOpts);
+        });
         return new ServiceResponse(statusCode,
             new Dictionary<string, string> { ["Content-Type"] = "application/json" }, body);
     }
@@ -1204,6 +1206,16 @@ internal sealed partial class ApiGatewayV2ServiceHandler : IServiceHandler
             {
                 result[prop.Name] = prop.Value.GetString() ?? "";
             }
+        }
+        else if (value is Dictionary<string, string> strDict)
+        {
+            foreach (var kv in strDict)
+                result[kv.Key] = kv.Value;
+        }
+        else if (value is Dictionary<string, object?> objDict)
+        {
+            foreach (var kv in objDict)
+                result[kv.Key] = kv.Value?.ToString() ?? "";
         }
 
         return result;

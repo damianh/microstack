@@ -104,9 +104,9 @@ internal sealed class EmrServiceHandler : IServiceHandler
         }
     }
 
-    public object? GetState() => null;
+    public JsonElement? GetState() => null;
 
-    public void RestoreState(object state) { }
+    public void RestoreState(JsonElement state) { }
 
     // -- ID generators ---------------------------------------------------------
 

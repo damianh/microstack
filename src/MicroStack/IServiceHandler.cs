@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 namespace MicroStack;
 
 /// <summary>
@@ -14,9 +16,9 @@ public interface IServiceHandler
     /// <summary>Reset all in-memory state (called by /_ministack/reset).</summary>
     void Reset();
 
-    /// <summary>Serialize current state for persistence.</summary>
-    object? GetState();
+    /// <summary>Serialize current state for persistence. Returns null if this handler has no persistent state.</summary>
+    JsonElement? GetState();
 
     /// <summary>Restore state from a previously persisted snapshot.</summary>
-    void RestoreState(object state);
+    void RestoreState(JsonElement state);
 }

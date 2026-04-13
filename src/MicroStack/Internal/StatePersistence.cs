@@ -39,7 +39,7 @@ internal sealed class StatePersistence
             {
                 var state = handler.GetState();
                 if (state is null) continue;
-                SaveState(handler.ServiceName, state);
+                SaveState(handler.ServiceName, state.Value);
             }
             catch (Exception ex)
             {
@@ -59,7 +59,7 @@ internal sealed class StatePersistence
             {
                 var data = LoadState(handler.ServiceName);
                 if (data is null) continue;
-                handler.RestoreState(data);
+                handler.RestoreState(data.Value);
             }
             catch (Exception ex)
             {
@@ -81,7 +81,7 @@ internal sealed class StatePersistence
         }
     }
 
-    private void SaveState(string serviceName, object state)
+    private void SaveState(string serviceName, JsonElement state)
     {
         try
         {
@@ -91,7 +91,7 @@ internal sealed class StatePersistence
 
             try
             {
-                var json = JsonSerializer.Serialize(state, JsonOptions);
+                var json = state.GetRawText();
                 File.WriteAllText(tmp, json);
                 File.Move(tmp, path, overwrite: true);
                 _logger.LogDebug("Persistence: saved {Service} state to {Path}", serviceName, path);
@@ -108,7 +108,7 @@ internal sealed class StatePersistence
         }
     }
 
-    private object? LoadState(string serviceName)
+    private JsonElement? LoadState(string serviceName)
     {
         var path = Path.Combine(_stateDir, $"{serviceName}.json");
         if (!File.Exists(path)) return null;
@@ -116,9 +116,9 @@ internal sealed class StatePersistence
         try
         {
             var json = File.ReadAllText(path);
-            var data = JsonSerializer.Deserialize<object>(json, JsonOptions);
+            using var doc = JsonDocument.Parse(json);
             _logger.LogDebug("Persistence: loaded {Service} state from {Path}", serviceName, path);
-            return data;
+            return doc.RootElement.Clone();
         }
         catch (Exception ex)
         {
@@ -126,10 +126,4 @@ internal sealed class StatePersistence
             return null;
         }
     }
-
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        WriteIndented = false,
-        PropertyNamingPolicy = null,
-    };
 }

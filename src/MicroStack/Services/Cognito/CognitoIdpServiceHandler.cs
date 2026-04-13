@@ -103,8 +103,8 @@ internal sealed partial class CognitoIdpServiceHandler : IServiceHandler
         }
     }
 
-    public object? GetState() => null;
-    public void RestoreState(object state) { }
+    public JsonElement? GetState() => null;
+    public void RestoreState(JsonElement state) { }
 
     // ── IDP Dispatcher ─────────────────────────────────────────────────────
     private ServiceResponse DispatchIdp(string action, JsonElement data)
@@ -790,7 +790,7 @@ internal sealed partial class CognitoIdpServiceHandler : IServiceHandler
                     {
                         ["USER_ID_FOR_SRP"] = username,
                         ["requiredAttributes"] = "[]",
-                        ["userAttributes"] = JsonSerializer.Serialize(AttrListToDict(GetAttributeList(user))),
+                        ["userAttributes"] = DictionaryObjectJsonConverter.SerializeValue(AttrListToDict(GetAttributeList(user))),
                     },
                 });
             }
@@ -910,7 +910,7 @@ internal sealed partial class CognitoIdpServiceHandler : IServiceHandler
                     {
                         ["USER_ID_FOR_SRP"] = username,
                         ["requiredAttributes"] = "[]",
-                        ["userAttributes"] = JsonSerializer.Serialize(AttrListToDict(GetAttributeList(user))),
+                        ["userAttributes"] = DictionaryObjectJsonConverter.SerializeValue(AttrListToDict(GetAttributeList(user))),
                     },
                 });
             }
@@ -1647,7 +1647,7 @@ internal sealed partial class CognitoIdpServiceHandler : IServiceHandler
                 },
             },
         };
-        var body = JsonSerializer.SerializeToUtf8Bytes(jwks);
+        var body = DictionaryObjectJsonConverter.SerializeObject(jwks);
         return new ServiceResponse(200, JsonContentType, body);
     }
 
@@ -1664,7 +1664,7 @@ internal sealed partial class CognitoIdpServiceHandler : IServiceHandler
             ["subject_types_supported"] = new List<string> { "public" },
             ["id_token_signing_alg_values_supported"] = new List<string> { "RS256" },
         };
-        var body = JsonSerializer.SerializeToUtf8Bytes(doc);
+        var body = DictionaryObjectJsonConverter.SerializeObject(doc);
         return new ServiceResponse(200, JsonContentType, body);
     }
 
@@ -1708,7 +1708,7 @@ internal sealed partial class CognitoIdpServiceHandler : IServiceHandler
             ["token_type"] = "Bearer",
             ["expires_in"] = 3600,
         };
-        var body = JsonSerializer.SerializeToUtf8Bytes(resp);
+        var body = DictionaryObjectJsonConverter.SerializeObject(resp);
         return new ServiceResponse(200, JsonContentType, body);
     }
 
@@ -2053,7 +2053,7 @@ internal sealed partial class CognitoIdpServiceHandler : IServiceHandler
 
     private static string Base64UrlEncodeJson(Dictionary<string, object?> obj)
     {
-        var json = JsonSerializer.SerializeToUtf8Bytes(obj);
+        var json = DictionaryObjectJsonConverter.SerializeObject(obj);
         return Base64UrlEncode(json);
     }
 

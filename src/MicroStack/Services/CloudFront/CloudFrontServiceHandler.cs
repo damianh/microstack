@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
@@ -71,9 +72,9 @@ internal sealed partial class CloudFrontServiceHandler : IServiceHandler
         }
     }
 
-    public object? GetState() => null;
+    public JsonElement? GetState() => null;
 
-    public void RestoreState(object state) { }
+    public void RestoreState(JsonElement state) { }
 
     // ── Request router ──────────────────────────────────────────────────────
 

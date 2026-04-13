@@ -123,9 +123,9 @@ internal sealed class ServiceDiscoveryServiceHandler : IServiceHandler
         }
     }
 
-    public object? GetState() => null;
+    public JsonElement? GetState() => null;
 
-    public void RestoreState(object state)
+    public void RestoreState(JsonElement state)
     {
         // Not implementing restore in Phase 1.
     }

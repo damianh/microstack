@@ -130,9 +130,9 @@ internal sealed partial class StepFunctionsServiceHandler : IServiceHandler
         _sfnMockConfig = new Dictionary<string, object?>();
     }
 
-    public object? GetState() => null;
+    public JsonElement? GetState() => null;
 
-    public void RestoreState(object state) { }
+    public void RestoreState(JsonElement state) { }
 
     internal void SetMockConfig(Dictionary<string, object?> config) => _sfnMockConfig = config;
     // -- Helpers ---------------------------------------------------------------
@@ -165,7 +165,7 @@ internal sealed partial class StepFunctionsServiceHandler : IServiceHandler
     /// Map/Parallel results emit JSON arrays and scalar Pass results emit primitives.
     /// </summary>
     private static string SerializeOutput(Dictionary<string, object?> data)
-        => JsonSerializer.Serialize(UnwrapForSerialization(data));
+        => DictionaryObjectJsonConverter.SerializeValue(UnwrapForSerialization(data));
 
     /// <summary>
     /// Recursively unwraps __list__ and __scalar__ wrapper dictionaries
@@ -1295,7 +1295,7 @@ internal sealed partial class StepFunctionsServiceHandler : IServiceHandler
     private static void FailExecution(Dictionary<string, object?> execution, string error, string cause)
     {
         execution["status"] = "FAILED";
-        execution["output"] = JsonSerializer.Serialize(new Dictionary<string, object?> { ["Error"] = error, ["Cause"] = cause });
+        execution["output"] = DictionaryObjectJsonConverter.SerializeValue(new Dictionary<string, object?> { ["Error"] = error, ["Cause"] = cause });
         execution["stopDate"] = NowIso();
         AddEvent(execution, "ExecutionFailed", new Dictionary<string, object?>
         {
@@ -2422,7 +2422,7 @@ internal sealed partial class StepFunctionsServiceHandler : IServiceHandler
                     ? (object)ParseJsonToDict(Encoding.UTF8.GetBytes(s))
                     : JsonElementToObject(JsonDocument.Parse(s).RootElement.Clone())
                 : null,
-            "States.JsonToString" => args.Count > 0 ? JsonSerializer.Serialize(args[0]) : null,
+            "States.JsonToString" => args.Count > 0 ? DictionaryObjectJsonConverter.SerializeValue(args[0]) : null,
             "States.JsonMerge" => MergeJsonObjects(args),
             "States.Format" => FormatIntrinsic(args),
             "States.ArrayGetItem" => ArrayGetItem(args),
@@ -2573,7 +2573,7 @@ internal sealed partial class StepFunctionsServiceHandler : IServiceHandler
 
     private Dictionary<string, object?> CallLambda(string funcName, Dictionary<string, object?> eventData)
     {
-        var eventBytes = JsonSerializer.SerializeToUtf8Bytes(eventData);
+        var eventBytes = DictionaryObjectJsonConverter.SerializeObject(eventData);
         var (success, responsePayload, error) = _lambda.InvokeForApiGateway(funcName, eventBytes);
 
         if (!success)
@@ -2633,7 +2633,7 @@ internal sealed partial class StepFunctionsServiceHandler : IServiceHandler
                 queue.Add(new Dictionary<string, object?>
                 {
                     ["taskToken"] = token,
-                    ["input"] = JsonSerializer.Serialize(inputData),
+                    ["input"] = DictionaryObjectJsonConverter.SerializeValue(inputData),
                 });
             }
         }
@@ -2766,7 +2766,7 @@ internal sealed partial class StepFunctionsServiceHandler : IServiceHandler
             ["authorization"] = $"AWS4-HMAC-SHA256 Credential=test/20260101/{Region}/{serviceName}/aws4_request",
         };
 
-        var bodyBytes = JsonSerializer.SerializeToUtf8Bytes(inputData);
+        var bodyBytes = DictionaryObjectJsonConverter.SerializeObject(inputData);
         var request = new ServiceRequest("POST", "/", headers, bodyBytes, new Dictionary<string, string[]>());
         var response = handler.HandleAsync(request).GetAwaiter().GetResult();
         var decoded = ParseJsonToDict(response.Body);
@@ -2797,7 +2797,7 @@ internal sealed partial class StepFunctionsServiceHandler : IServiceHandler
         }
         else
         {
-            inputStr = nestedInput is not null ? JsonSerializer.Serialize(nestedInput) : "{}";
+            inputStr = nestedInput is not null ? DictionaryObjectJsonConverter.SerializeValue(nestedInput) : "{}";
         }
 
         var request = new Dictionary<string, object?>
@@ -2960,7 +2960,7 @@ internal sealed partial class StepFunctionsServiceHandler : IServiceHandler
             ["authorization"] = $"AWS4-HMAC-SHA256 Credential=test/20260101/{Region}/{serviceKey}/aws4_request",
         };
 
-        var bodyBytes = JsonSerializer.SerializeToUtf8Bytes(inputData);
+        var bodyBytes = DictionaryObjectJsonConverter.SerializeObject(inputData);
         var request = new ServiceRequest("POST", "/", headers, bodyBytes, new Dictionary<string, string[]>());
         var response = handler.HandleAsync(request).GetAwaiter().GetResult();
         var decoded = ParseJsonToDict(response.Body);
@@ -2968,7 +2968,7 @@ internal sealed partial class StepFunctionsServiceHandler : IServiceHandler
         if (response.StatusCode >= 400)
         {
             var errorType = GetString(decoded, "__type") ?? $"{serviceName}.ServiceException";
-            var errorMsg = GetString(decoded, "message") ?? JsonSerializer.Serialize(decoded);
+            var errorMsg = GetString(decoded, "message") ?? DictionaryObjectJsonConverter.SerializeValue(decoded);
             throw new ExecutionError(errorType, errorMsg);
         }
 
@@ -3139,7 +3139,7 @@ internal sealed partial class StepFunctionsServiceHandler : IServiceHandler
         var inspectionData = new Dictionary<string, object?>();
         if (inspectionLevel is "DEBUG" or "TRACE")
         {
-            inspectionData["input"] = JsonSerializer.Serialize(inputData);
+            inspectionData["input"] = DictionaryObjectJsonConverter.SerializeValue(inputData);
         }
 
         var result = new Dictionary<string, object?>();
@@ -3210,8 +3210,8 @@ internal sealed partial class StepFunctionsServiceHandler : IServiceHandler
 
                     if (inspectionLevel is "DEBUG" or "TRACE")
                     {
-                        inspectionData["afterInputPath"] = JsonSerializer.Serialize(ApplyInputPath(stateDef, inputData));
-                        inspectionData["afterParameters"] = JsonSerializer.Serialize(effective);
+                        inspectionData["afterInputPath"] = DictionaryObjectJsonConverter.SerializeValue(ApplyInputPath(stateDef, inputData));
+                        inspectionData["afterParameters"] = DictionaryObjectJsonConverter.SerializeValue(effective);
                     }
 
                     // Check mock

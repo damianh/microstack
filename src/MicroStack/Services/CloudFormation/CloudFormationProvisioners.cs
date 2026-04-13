@@ -35,7 +35,7 @@ internal sealed partial class CloudFormationServiceHandler
         var bucket = GetString(props.GetValueOrDefault("Bucket"));
         if (!string.IsNullOrEmpty(bucket) && props.TryGetValue("PolicyDocument", out var policyObj) && policyObj is not null)
         {
-            var policyJson = policyObj is string ps ? ps : JsonSerializer.Serialize(policyObj);
+            var policyJson = policyObj is string ps ? ps : DictionaryObjectJsonConverter.SerializeValue(policyObj);
             var queryParams = new Dictionary<string, string[]>(StringComparer.Ordinal)
             {
                 ["policy"] = [""],
@@ -178,7 +178,7 @@ internal sealed partial class CloudFormationServiceHandler
         if (props.TryGetValue("StreamSpecification", out var ss) && ss is not null)
             createReq["StreamSpecification"] = ss;
 
-        var jsonBody = JsonSerializer.Serialize(createReq);
+        var jsonBody = DictionaryObjectJsonConverter.SerializeValue(createReq);
         var headers = new Dictionary<string, string>
         {
             ["Content-Type"] = "application/x-amz-json-1.0",
@@ -248,7 +248,7 @@ internal sealed partial class CloudFormationServiceHandler
         if (props.TryGetValue("Description", out var desc)) createReq["Description"] = desc;
         if (props.TryGetValue("Layers", out var layers)) createReq["Layers"] = layers;
 
-        var jsonBody = JsonSerializer.Serialize(createReq);
+        var jsonBody = DictionaryObjectJsonConverter.SerializeValue(createReq);
         var headers = new Dictionary<string, string>
         {
             ["Content-Type"] = "application/json",
@@ -270,7 +270,7 @@ internal sealed partial class CloudFormationServiceHandler
             name = PhysicalName(stackName, logicalId, maxLen: 64);
 
         var assumeDoc = props.GetValueOrDefault("AssumeRolePolicyDocument");
-        var assumeDocStr = assumeDoc is string s ? s : JsonSerializer.Serialize(assumeDoc);
+        var assumeDocStr = assumeDoc is string s ? s : DictionaryObjectJsonConverter.SerializeValue(assumeDoc);
 
         var formData = $"Action=CreateRole&RoleName={Uri.EscapeDataString(name)}&AssumeRolePolicyDocument={Uri.EscapeDataString(assumeDocStr)}";
         if (props.TryGetValue("Path", out var path))
@@ -307,7 +307,7 @@ internal sealed partial class CloudFormationServiceHandler
                 var polDict = GetDict(pol);
                 var polName = GetString(polDict.GetValueOrDefault("PolicyName"));
                 var polDoc = polDict.GetValueOrDefault("PolicyDocument");
-                var polDocStr = polDoc is string ps ? ps : JsonSerializer.Serialize(polDoc);
+                var polDocStr = polDoc is string ps ? ps : DictionaryObjectJsonConverter.SerializeValue(polDoc);
                 var putForm = $"Action=PutRolePolicy&RoleName={Uri.EscapeDataString(name)}&PolicyName={Uri.EscapeDataString(polName)}&PolicyDocument={Uri.EscapeDataString(polDocStr)}";
                 var putReq = new ServiceRequest("POST", "/", IamHeaders,
                     Encoding.UTF8.GetBytes(putForm), EmptyQuery);
@@ -323,7 +323,7 @@ internal sealed partial class CloudFormationServiceHandler
         var name = GetString(props.GetValueOrDefault("PolicyName"));
         if (string.IsNullOrEmpty(name)) name = PhysicalName(stackName, logicalId, maxLen: 128);
         var polDoc = props.GetValueOrDefault("PolicyDocument");
-        var polDocStr = polDoc is string ps ? ps : JsonSerializer.Serialize(polDoc);
+        var polDocStr = polDoc is string ps ? ps : DictionaryObjectJsonConverter.SerializeValue(polDoc);
 
         var formData = $"Action=CreatePolicy&PolicyName={Uri.EscapeDataString(name)}&PolicyDocument={Uri.EscapeDataString(polDocStr)}";
         var request = new ServiceRequest("POST", "/", IamHeaders,
@@ -368,7 +368,7 @@ internal sealed partial class CloudFormationServiceHandler
         if (string.IsNullOrEmpty(name)) name = $"{stackName}-{logicalId}";
         var arn = $"arn:aws:iam::{AccountContext.GetAccountId()}:policy/{name}";
         var polDoc = props.GetValueOrDefault("PolicyDocument");
-        var polDocStr = polDoc is string ps ? ps : JsonSerializer.Serialize(polDoc);
+        var polDocStr = polDoc is string ps ? ps : DictionaryObjectJsonConverter.SerializeValue(polDoc);
 
         var formData = $"Action=CreatePolicy&PolicyName={Uri.EscapeDataString(name)}&PolicyDocument={Uri.EscapeDataString(polDocStr)}";
         var request = new ServiceRequest("POST", "/", IamHeaders,
@@ -393,7 +393,7 @@ internal sealed partial class CloudFormationServiceHandler
             ["Content-Type"] = "application/x-amz-json-1.1",
             ["X-Amz-Target"] = "AmazonSSM.PutParameter",
         };
-        var jsonBody = JsonSerializer.Serialize(new Dictionary<string, object?>
+        var jsonBody = DictionaryObjectJsonConverter.SerializeValue(new Dictionary<string, object?>
         {
             ["Name"] = name, ["Type"] = ptype, ["Value"] = value, ["Overwrite"] = true,
         });
@@ -415,7 +415,7 @@ internal sealed partial class CloudFormationServiceHandler
         if (string.IsNullOrEmpty(name)) name = $"/aws/cloudformation/{stackName}/{logicalId}";
         var arn = $"arn:aws:logs:{Region}:{AccountContext.GetAccountId()}:log-group:{name}:*";
 
-        var jsonBody = JsonSerializer.Serialize(new Dictionary<string, object?> { ["logGroupName"] = name });
+        var jsonBody = DictionaryObjectJsonConverter.SerializeValue(new Dictionary<string, object?> { ["logGroupName"] = name });
         var headers = new Dictionary<string, string>
         {
             ["Content-Type"] = "application/x-amz-json-1.1",
@@ -444,10 +444,10 @@ internal sealed partial class CloudFormationServiceHandler
         };
         if (props.TryGetValue("ScheduleExpression", out var se)) putReq["ScheduleExpression"] = se;
         if (props.TryGetValue("EventPattern", out var ep))
-            putReq["EventPattern"] = ep is string eps ? eps : JsonSerializer.Serialize(ep);
+            putReq["EventPattern"] = ep is string eps ? eps : DictionaryObjectJsonConverter.SerializeValue(ep);
         if (props.TryGetValue("Description", out var desc)) putReq["Description"] = desc;
 
-        var jsonBody = JsonSerializer.Serialize(putReq);
+        var jsonBody = DictionaryObjectJsonConverter.SerializeValue(putReq);
         var headers = new Dictionary<string, string>
         {
             ["Content-Type"] = "application/x-amz-json-1.1",
@@ -475,7 +475,7 @@ internal sealed partial class CloudFormationServiceHandler
         {
             ["StreamName"] = name, ["ShardCount"] = shardCount,
         };
-        var jsonBody = JsonSerializer.Serialize(createReq);
+        var jsonBody = DictionaryObjectJsonConverter.SerializeValue(createReq);
         var headers = new Dictionary<string, string>
         {
             ["Content-Type"] = "application/x-amz-json-1.1",
@@ -511,7 +511,7 @@ internal sealed partial class CloudFormationServiceHandler
         };
         if (props.TryGetValue("SourceArn", out var sa)) addReq["SourceArn"] = sa;
 
-        var jsonBody = JsonSerializer.Serialize(addReq);
+        var jsonBody = DictionaryObjectJsonConverter.SerializeValue(addReq);
         var headers = new Dictionary<string, string> { ["Content-Type"] = "application/json" };
         var request = new ServiceRequest("POST", $"/2015-03-31/functions/{Uri.EscapeDataString(funcName)}/policy",
             headers, Encoding.UTF8.GetBytes(jsonBody), EmptyQuery);
@@ -526,7 +526,7 @@ internal sealed partial class CloudFormationServiceHandler
         if (funcName.StartsWith("arn:", StringComparison.Ordinal))
             funcName = funcName.Split(':')[^1];
 
-        var jsonBody = JsonSerializer.Serialize(new Dictionary<string, object?> { ["FunctionName"] = funcName });
+        var jsonBody = DictionaryObjectJsonConverter.SerializeValue(new Dictionary<string, object?> { ["FunctionName"] = funcName });
         var headers = new Dictionary<string, string> { ["Content-Type"] = "application/json" };
         var request = new ServiceRequest("POST", $"/2015-03-31/functions/{Uri.EscapeDataString(funcName)}/versions",
             headers, Encoding.UTF8.GetBytes(jsonBody), EmptyQuery);
@@ -603,9 +603,9 @@ internal sealed partial class CloudFormationServiceHandler
             {
                 try
                 {
-                    var obj = JsonSerializer.Deserialize<Dictionary<string, object?>>(template) ?? new();
+                    var obj = JsonSerializer.Deserialize(template, MicroStackJsonContext.Default.DictionaryStringObject) ?? new();
                     obj[genKey] = generated;
-                    secretString = JsonSerializer.Serialize(obj);
+                    secretString = DictionaryObjectJsonConverter.SerializeValue(obj);
                 }
                 catch
                 {
@@ -620,7 +620,7 @@ internal sealed partial class CloudFormationServiceHandler
 
         createReq["SecretString"] = secretString;
 
-        var jsonBody = JsonSerializer.Serialize(createReq);
+        var jsonBody = DictionaryObjectJsonConverter.SerializeValue(createReq);
         var headers = new Dictionary<string, string>
         {
             ["Content-Type"] = "application/x-amz-json-1.1",
@@ -644,7 +644,7 @@ internal sealed partial class CloudFormationServiceHandler
         if (props.TryGetValue("Description", out var desc)) createReq["Description"] = desc;
         if (props.TryGetValue("KeyUsage", out var ku)) createReq["KeyUsage"] = ku;
 
-        var jsonBody = JsonSerializer.Serialize(createReq);
+        var jsonBody = DictionaryObjectJsonConverter.SerializeValue(createReq);
         var headers = new Dictionary<string, string>
         {
             ["Content-Type"] = "application/x-amz-json-1.1",
@@ -663,7 +663,7 @@ internal sealed partial class CloudFormationServiceHandler
         var targetKey = GetString(props.GetValueOrDefault("TargetKeyId"));
 
         var createReq = new Dictionary<string, object?> { ["AliasName"] = aliasName, ["TargetKeyId"] = targetKey };
-        var jsonBody = JsonSerializer.Serialize(createReq);
+        var jsonBody = DictionaryObjectJsonConverter.SerializeValue(createReq);
         var headers = new Dictionary<string, string>
         {
             ["Content-Type"] = "application/x-amz-json-1.1",
@@ -843,7 +843,7 @@ internal sealed partial class CloudFormationServiceHandler
         var arn = $"arn:aws:ecr:{Region}:{AccountContext.GetAccountId()}:repository/{name}";
         var uri = $"{AccountContext.GetAccountId()}.dkr.ecr.{Region}.amazonaws.com/{name}";
 
-        var jsonBody = JsonSerializer.Serialize(new Dictionary<string, object?> { ["repositoryName"] = name });
+        var jsonBody = DictionaryObjectJsonConverter.SerializeValue(new Dictionary<string, object?> { ["repositoryName"] = name });
         var headers = new Dictionary<string, string>
         {
             ["Content-Type"] = "application/x-amz-json-1.1",
@@ -863,7 +863,7 @@ internal sealed partial class CloudFormationServiceHandler
         var name = GetString(props.GetValueOrDefault("ClusterName", $"{stackName}-{logicalId}"));
         var arn = $"arn:aws:ecs:{Region}:{AccountContext.GetAccountId()}:cluster/{name}";
 
-        var jsonBody = JsonSerializer.Serialize(new Dictionary<string, object?> { ["clusterName"] = name });
+        var jsonBody = DictionaryObjectJsonConverter.SerializeValue(new Dictionary<string, object?> { ["clusterName"] = name });
         var headers = new Dictionary<string, string>
         {
             ["Content-Type"] = "application/x-amz-json-1.1",
@@ -985,7 +985,7 @@ internal sealed partial class CloudFormationServiceHandler
         var arn = $"arn:aws:cognito-idp:{Region}:{AccountContext.GetAccountId()}:userpool/{pid}";
         var providerName = $"cognito-idp.{Region}.amazonaws.com/{pid}";
 
-        var jsonBody = JsonSerializer.Serialize(new Dictionary<string, object?> { ["PoolName"] = name });
+        var jsonBody = DictionaryObjectJsonConverter.SerializeValue(new Dictionary<string, object?> { ["PoolName"] = name });
         var headers = new Dictionary<string, string>
         {
             ["Content-Type"] = "application/x-amz-json-1.1",
@@ -1019,7 +1019,7 @@ internal sealed partial class CloudFormationServiceHandler
         var clientName = GetString(props.GetValueOrDefault("ClientName"));
         var cid = Guid.NewGuid().ToString("N")[..26];
 
-        var jsonBody = JsonSerializer.Serialize(new Dictionary<string, object?>
+        var jsonBody = DictionaryObjectJsonConverter.SerializeValue(new Dictionary<string, object?>
         {
             ["UserPoolId"] = poolId, ["ClientName"] = clientName,
         });
@@ -1190,7 +1190,7 @@ internal sealed partial class CloudFormationServiceHandler
 
     private static ServiceRequest BuildDeleteTableRequest(string name)
     {
-        var json = JsonSerializer.Serialize(new Dictionary<string, object?> { ["TableName"] = name });
+        var json = DictionaryObjectJsonConverter.SerializeValue(new Dictionary<string, object?> { ["TableName"] = name });
         return new("POST", "/", new Dictionary<string, string>
         {
             ["Content-Type"] = "application/x-amz-json-1.0",
@@ -1208,7 +1208,7 @@ internal sealed partial class CloudFormationServiceHandler
 
     private static ServiceRequest BuildDeleteParameterRequest(string name)
     {
-        var json = JsonSerializer.Serialize(new Dictionary<string, object?> { ["Name"] = name });
+        var json = DictionaryObjectJsonConverter.SerializeValue(new Dictionary<string, object?> { ["Name"] = name });
         return new("POST", "/", new Dictionary<string, string>
         {
             ["Content-Type"] = "application/x-amz-json-1.1",
@@ -1218,7 +1218,7 @@ internal sealed partial class CloudFormationServiceHandler
 
     private static ServiceRequest BuildDeleteLogGroupRequest(string name)
     {
-        var json = JsonSerializer.Serialize(new Dictionary<string, object?> { ["logGroupName"] = name });
+        var json = DictionaryObjectJsonConverter.SerializeValue(new Dictionary<string, object?> { ["logGroupName"] = name });
         return new("POST", "/", new Dictionary<string, string>
         {
             ["Content-Type"] = "application/x-amz-json-1.1",
@@ -1229,7 +1229,7 @@ internal sealed partial class CloudFormationServiceHandler
     private static ServiceRequest BuildDeleteRuleRequest(string name, Dictionary<string, object?> props)
     {
         var bus = GetString(props.GetValueOrDefault("EventBusName", "default"));
-        var json = JsonSerializer.Serialize(new Dictionary<string, object?> { ["Name"] = name, ["EventBusName"] = bus });
+        var json = DictionaryObjectJsonConverter.SerializeValue(new Dictionary<string, object?> { ["Name"] = name, ["EventBusName"] = bus });
         return new("POST", "/", new Dictionary<string, string>
         {
             ["Content-Type"] = "application/x-amz-json-1.1",
@@ -1239,7 +1239,7 @@ internal sealed partial class CloudFormationServiceHandler
 
     private static ServiceRequest BuildDeleteStreamRequest(string name)
     {
-        var json = JsonSerializer.Serialize(new Dictionary<string, object?> { ["StreamName"] = name });
+        var json = DictionaryObjectJsonConverter.SerializeValue(new Dictionary<string, object?> { ["StreamName"] = name });
         return new("POST", "/", new Dictionary<string, string>
         {
             ["Content-Type"] = "application/x-amz-json-1.1",
@@ -1249,7 +1249,7 @@ internal sealed partial class CloudFormationServiceHandler
 
     private static ServiceRequest BuildDeleteSecretRequest(string name)
     {
-        var json = JsonSerializer.Serialize(new Dictionary<string, object?>
+        var json = DictionaryObjectJsonConverter.SerializeValue(new Dictionary<string, object?>
         {
             ["SecretId"] = name, ["ForceDeleteWithoutRecovery"] = true,
         });
@@ -1262,7 +1262,7 @@ internal sealed partial class CloudFormationServiceHandler
 
     private static ServiceRequest BuildDeleteKmsKeyRequest(string keyId)
     {
-        var json = JsonSerializer.Serialize(new Dictionary<string, object?> { ["KeyId"] = keyId });
+        var json = DictionaryObjectJsonConverter.SerializeValue(new Dictionary<string, object?> { ["KeyId"] = keyId });
         return new("POST", "/", new Dictionary<string, string>
         {
             ["Content-Type"] = "application/x-amz-json-1.1",
@@ -1272,7 +1272,7 @@ internal sealed partial class CloudFormationServiceHandler
 
     private static ServiceRequest BuildDeleteEcrRepoRequest(string name)
     {
-        var json = JsonSerializer.Serialize(new Dictionary<string, object?>
+        var json = DictionaryObjectJsonConverter.SerializeValue(new Dictionary<string, object?>
         {
             ["repositoryName"] = name, ["force"] = true,
         });
@@ -1285,7 +1285,7 @@ internal sealed partial class CloudFormationServiceHandler
 
     private static ServiceRequest BuildDeleteEcsClusterRequest(string name)
     {
-        var json = JsonSerializer.Serialize(new Dictionary<string, object?> { ["cluster"] = name });
+        var json = DictionaryObjectJsonConverter.SerializeValue(new Dictionary<string, object?> { ["cluster"] = name });
         return new("POST", "/", new Dictionary<string, string>
         {
             ["Content-Type"] = "application/x-amz-json-1.1",

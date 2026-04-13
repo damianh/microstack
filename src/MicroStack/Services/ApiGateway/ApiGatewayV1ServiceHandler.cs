@@ -38,12 +38,6 @@ internal sealed class ApiGatewayV1ServiceHandler
 
     private static string Region => MicroStackOptions.Instance.Region;
 
-    private static readonly JsonSerializerOptions s_jsonOpts = new()
-    {
-        PropertyNamingPolicy = null,
-        WriteIndented = false,
-    };
-
     internal ApiGatewayV1ServiceHandler(LambdaServiceHandler lambdaHandler)
     {
         _lambdaHandler = lambdaHandler;
@@ -74,7 +68,7 @@ internal sealed class ApiGatewayV1ServiceHandler
 
     private static ServiceResponse V1Response(Dictionary<string, object?> data, int statusCode)
     {
-        var json = JsonSerializer.SerializeToUtf8Bytes(data, s_jsonOpts);
+        var json = DictionaryObjectJsonConverter.SerializeObject(data);
         return new ServiceResponse(statusCode,
             new Dictionary<string, string> { ["Content-Type"] = "application/json" }, json);
     }
@@ -113,7 +107,7 @@ internal sealed class ApiGatewayV1ServiceHandler
         try
         {
             data = request.Body.Length > 0
-                ? JsonSerializer.Deserialize<Dictionary<string, object?>>(request.Body, s_jsonOpts)
+                ? DictionaryObjectJsonConverter.DeserializeObject(request.Body)
                   ?? new Dictionary<string, object?>()
                 : new Dictionary<string, object?>();
         }
@@ -679,7 +673,7 @@ internal sealed class ApiGatewayV1ServiceHandler
             ["isBase64Encoded"] = false,
         };
 
-        var eventPayload = JsonSerializer.SerializeToUtf8Bytes(lambdaEvent, s_jsonOpts);
+        var eventPayload = DictionaryObjectJsonConverter.SerializeObject(lambdaEvent);
 
         // Use the full URI to resolve via LambdaServiceHandler
         var (success, responsePayload, error) = _lambdaHandler.InvokeForApiGateway(uri, eventPayload);
@@ -694,7 +688,7 @@ internal sealed class ApiGatewayV1ServiceHandler
         try
         {
             lambdaResponse = responsePayload is not null
-                ? JsonSerializer.Deserialize<Dictionary<string, object?>>(responsePayload, s_jsonOpts)
+                ? DictionaryObjectJsonConverter.DeserializeObject(responsePayload)
                 : null;
         }
         catch (JsonException)
@@ -708,9 +702,15 @@ internal sealed class ApiGatewayV1ServiceHandler
         }
 
         var statusCode = 200;
-        if (lambdaResponse.TryGetValue("statusCode", out var scObj) && scObj is JsonElement scEl)
+        if (lambdaResponse.TryGetValue("statusCode", out var scObj))
         {
-            statusCode = scEl.GetInt32();
+            statusCode = scObj switch
+            {
+                JsonElement scEl => scEl.GetInt32(),
+                long l => (int)l,
+                int i => i,
+                _ => 200,
+            };
         }
 
         var respHeaders = new Dictionary<string, string> { ["Content-Type"] = "application/json" };
@@ -735,6 +735,10 @@ internal sealed class ApiGatewayV1ServiceHandler
                         Encoding.UTF8.GetBytes(bEl.GetRawText()),
                     _ => Encoding.UTF8.GetBytes(bEl.GetRawText()),
                 };
+            }
+            else if (bObj is string bodyStr)
+            {
+                respBody = Encoding.UTF8.GetBytes(bodyStr);
             }
         }
 
@@ -825,7 +829,7 @@ internal sealed class ApiGatewayV1ServiceHandler
 
     private static ServiceResponse JsonResponse(Dictionary<string, object?> data, int statusCode)
     {
-        var json = JsonSerializer.SerializeToUtf8Bytes(data, s_jsonOpts);
+        var json = DictionaryObjectJsonConverter.SerializeObject(data);
         return new ServiceResponse(statusCode,
             new Dictionary<string, string> { ["Content-Type"] = "application/json" }, json);
     }
@@ -2107,6 +2111,16 @@ internal sealed class ApiGatewayV1ServiceHandler
             {
                 result[prop.Name] = prop.Value.GetString() ?? "";
             }
+        }
+        else if (value is Dictionary<string, string> strDict)
+        {
+            foreach (var kv in strDict)
+                result[kv.Key] = kv.Value;
+        }
+        else if (value is Dictionary<string, object?> objDict)
+        {
+            foreach (var kv in objDict)
+                result[kv.Key] = kv.Value?.ToString() ?? "";
         }
         return result;
     }
