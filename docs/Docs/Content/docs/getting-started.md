@@ -1,6 +1,6 @@
 ---
 title: Getting Started
-description: Get MicroStack running in under a minute — via Docker or directly with .NET.
+description: Get MicroStack running in under a minute — via Aspire, Docker, or directly with .NET.
 order: 1
 section: Basics
 ---
@@ -8,6 +8,44 @@ section: Basics
 # Getting Started
 
 MicroStack is a lightweight local AWS service emulator for .NET. It runs 39 AWS services on a single port (4566), allowing you to build and test AWS integrations without connecting to the cloud.
+
+## Quick Start with .NET Aspire (Recommended)
+
+The fastest way to use MicroStack in your projects is via the Aspire hosting integration.
+
+### 1. Add the NuGet package to your AppHost
+
+```bash
+dotnet add package MicroStack.Aspire.Hosting
+```
+
+### 2. Register MicroStack as a resource
+
+```csharp
+var builder = DistributedApplication.CreateBuilder(args);
+
+var microstack = builder.AddMicroStack("microstack");
+
+builder.AddProject<Projects.MyApi>("api")
+    .WithReference(microstack);
+
+builder.Build().Run();
+```
+
+### 3. Use in your application
+
+The connection string is available as `ConnectionStrings:microstack` — point any AWS SDK client at it:
+
+```csharp
+var serviceUrl = builder.Configuration.GetConnectionString("microstack");
+
+var config = new AmazonSQSConfig { ServiceURL = serviceUrl };
+var client = new AmazonSQSClient(new BasicAWSCredentials("test", "test"), config);
+
+var response = await client.CreateQueueAsync("my-queue");
+```
+
+See [Integration Testing](/docs/testing) for the full Aspire-based testing setup with `DistributedApplicationTestingBuilder`.
 
 ## Quick Start with Docker
 
@@ -68,9 +106,13 @@ aws --endpoint-url http://localhost:4566 dynamodb create-table \
   --billing-mode PAY_PER_REQUEST
 ```
 
+See [AWS CLI](/docs/aws-cli) for named profiles, more examples, and multi-tenancy.
+
 ## Next Steps
 
 - [Configuration](/docs/configuration) — Environment variables and options
 - [Docker](/docs/docker) — Container image details and Docker Compose
-- [Testing](/docs/testing) — Integration testing with `WebApplicationFactory`
+- [Integration Testing](/docs/testing) — Aspire-based and in-process testing
+- [Internal API](/docs/internal-api) — Health, reset, and config endpoints
+- [AWS CLI](/docs/aws-cli) — CLI usage with profiles and examples
 - [Services Overview](/docs/services/overview) — All 39 supported services

@@ -9,11 +9,20 @@ A lightweight local AWS service emulator for .NET. Runs **39 AWS services** on a
 
 Ported from [MiniStack](https://github.com/damianh/ministack) (Python) to .NET 10 / C#.
 
+## Why MicroStack?
+
+- **39 AWS services** emulated on a single port (4566)
+- **Native AOT** — single self-contained binary, ~30MB container image, sub-second startup
+- **.NET Aspire integration** — first-class `AddMicroStack()` resource for Aspire app models
+- **In-process testing** — run inside `WebApplicationFactory` for sub-millisecond test times
+- **Multi-tenant** — 12-digit access keys give each team/pipeline isolated resources
+- **MIT licensed** — free forever
+
 ## Packages
 
 | Package | Description |
 |---|---|
-| [`MicroStack.Aspire.Hosting`](https://www.nuget.org/packages/MicroStack.Aspire.Hosting) | .NET Aspire hosting integration — adds MicroStack as a container resource to your Aspire app model |
+| [`MicroStack.Aspire.Hosting`](https://www.nuget.org/packages/MicroStack.Aspire.Hosting) | .NET Aspire hosting integration — adds MicroStack as a container resource |
 
 ## Quick Start
 
@@ -51,20 +60,21 @@ var client = new AmazonSQSClient(
 await client.CreateQueueAsync("my-queue");
 ```
 
-## Aspire Integration
+See the [Getting Started guide](https://damianh.github.io/microstack/docs/getting-started) for more examples.
 
-Add the NuGet package to your Aspire AppHost:
+## Aspire Integration
 
 ```bash
 dotnet add package MicroStack.Aspire.Hosting
 ```
 
-Then register MicroStack as a resource:
-
 ```csharp
 var builder = DistributedApplication.CreateBuilder(args);
 
-var microstack = builder.AddMicroStack("microstack");
+var microstack = builder.AddMicroStack("microstack")
+    .WithDataVolume()                    // persistent state across restarts
+    .WithServices("s3,sqs,dynamodb")     // limit enabled services
+    .WithRegion("eu-west-1");            // set AWS region
 
 builder.AddProject<Projects.MyApi>("api")
     .WithReference(microstack);
@@ -72,69 +82,39 @@ builder.AddProject<Projects.MyApi>("api")
 builder.Build().Run();
 ```
 
-Configure optional features:
-
-```csharp
-var microstack = builder.AddMicroStack("microstack")
-    .WithDataVolume()                    // persistent state across restarts
-    .WithServices("s3,sqs,dynamodb")     // limit enabled services
-    .WithRegion("eu-west-1");            // set AWS region
-```
-
-The connection string (e.g. `http://localhost:4566`) is injected into dependent projects
-automatically via `WithReference()`.
-
-## Integration Testing
-
-Use .NET Aspire's `DistributedApplicationTestingBuilder` for integration tests that spin up MicroStack
-as a container — matching how you run in production:
-
-```csharp
-public sealed class SqsTests : IAsyncLifetime
-{
-    private DistributedApplication _app = null!;
-    private string _connectionString = null!;
-
-    public async Task InitializeAsync()
-    {
-        var builder = await DistributedApplicationTestingBuilder
-            .CreateAsync<Projects.MyAspireAppHost>();
-
-        _app = await builder.BuildAsync();
-        await _app.StartAsync();
-
-        _connectionString = await _app.GetConnectionStringAsync("microstack")
-            ?? throw new InvalidOperationException("MicroStack connection string not found");
-    }
-
-    [Fact]
-    public async Task CanCreateQueueAndSendMessage()
-    {
-        var config = new AmazonSQSConfig { ServiceURL = _connectionString };
-        using var sqs = new AmazonSQSClient(
-            new BasicAWSCredentials("test", "test"), config);
-
-        var created = await sqs.CreateQueueAsync("test-queue");
-        Assert.NotEmpty(created.QueueUrl);
-
-        await sqs.SendMessageAsync(created.QueueUrl, "hello world");
-
-        var received = await sqs.ReceiveMessageAsync(created.QueueUrl);
-        Assert.Single(received.Messages);
-        Assert.Equal("hello world", received.Messages[0].Body);
-    }
-
-    public async Task DisposeAsync()
-    {
-        await _app.StopAsync();
-        await _app.DisposeAsync();
-    }
-}
-```
+See [Integration Testing](https://damianh.github.io/microstack/docs/testing) for Aspire-based test patterns.
 
 ## Supported Services
 
-S3, SQS, DynamoDB, Lambda, API Gateway (v1+v2), Step Functions, SNS, IAM, STS, Secrets Manager, SSM Parameter Store, KMS, CloudWatch Logs, CloudWatch Metrics, EC2, ECS, RDS, ElastiCache, ECR, RDS Data, EventBridge, Kinesis, Firehose, Glue, Athena, SES, WAF v2, EFS, EMR, AppSync, CloudFront, Route 53, ALB, ACM, Service Discovery, Cognito IdP, Cognito Identity, CloudFormation, S3Files.
+| Category | Services |
+|---|---|
+| **Compute & Serverless** | Lambda, Step Functions, ECS, EMR |
+| **Storage** | S3, EFS |
+| **Database** | DynamoDB, RDS, RDS Data API, ElastiCache |
+| **Messaging** | SQS, SNS, EventBridge, Kinesis, Firehose |
+| **Networking** | EC2, Route 53, CloudFront, ALB, API Gateway (v1+v2), Service Discovery |
+| **Security** | IAM, STS, KMS, ACM, Cognito (IdP + Identity), WAF v2, Secrets Manager |
+| **Management** | CloudFormation, CloudWatch (Logs + Metrics), SSM Parameter Store, AppSync |
+| **Other** | SES, ECR, Glue, Athena |
+
+See [Services Overview](https://damianh.github.io/microstack/docs/services/overview) for the full list of supported operations per service.
+
+## Internal API
+
+```bash
+# Health check — service status
+curl http://localhost:4566/_ministack/health
+
+# Reset all state — useful between test runs
+curl -X POST http://localhost:4566/_ministack/reset
+
+# Runtime config — change settings without restart
+curl -X POST http://localhost:4566/_ministack/config \
+  -H "Content-Type: application/json" \
+  -d '{"stepfunctions._sfn_mock_config": "{...}"}'
+```
+
+See [Internal API](https://damianh.github.io/microstack/docs/internal-api) for full details.
 
 ## Configuration
 
@@ -148,6 +128,8 @@ S3, SQS, DynamoDB, Lambda, API Gateway (v1+v2), Step Functions, SNS, IAM, STS, S
 | `STATE_DIR` | `<temp>/ministack-state` | Directory for persisted state |
 | `SERVICES` | *(all)* | Comma-separated list of services to enable |
 
+See [Configuration](https://damianh.github.io/microstack/docs/configuration) for all options including S3 persistence, service aliases, and Docker Compose examples.
+
 ## Multi-Tenancy
 
 Use a 12-digit AWS access key to simulate separate accounts:
@@ -157,6 +139,40 @@ var client1 = new AmazonSQSClient(new BasicAWSCredentials("111111111111", "test"
 var client2 = new AmazonSQSClient(new BasicAWSCredentials("222222222222", "test"), config);
 // Each account has fully isolated resources
 ```
+
+See [Multi-Tenancy](https://damianh.github.io/microstack/docs/architecture/multi-tenancy) for details.
+
+## Docker
+
+```yaml
+services:
+  microstack:
+    image: ghcr.io/damianh/microstack:latest
+    ports:
+      - "4566:4566"
+    environment:
+      - PERSIST_STATE=1
+    volumes:
+      - microstack-state:/tmp/ministack-state
+
+volumes:
+  microstack-state:
+```
+
+See [Docker](https://damianh.github.io/microstack/docs/docker) for more options.
+
+## Using with AWS CLI
+
+```bash
+export AWS_ACCESS_KEY_ID=test
+export AWS_SECRET_ACCESS_KEY=test
+
+aws --endpoint-url http://localhost:4566 s3 mb s3://my-bucket
+aws --endpoint-url http://localhost:4566 sqs create-queue --queue-name my-queue
+aws --endpoint-url http://localhost:4566 dynamodb list-tables
+```
+
+See [AWS CLI](https://damianh.github.io/microstack/docs/aws-cli) for profiles and more examples.
 
 ## License
 
