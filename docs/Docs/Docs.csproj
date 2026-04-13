@@ -4,6 +4,7 @@
     <RootNamespace>Docs</RootNamespace>
     <AssemblyName>Docs</AssemblyName>
     <IsPackable>false</IsPackable>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
   </PropertyGroup>
 
   <ItemGroup>
