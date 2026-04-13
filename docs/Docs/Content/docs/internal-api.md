@@ -81,4 +81,4 @@ docker run -p 4566:4566 \
   ghcr.io/damianh/microstack:latest
 ```
 
-Or use the [multi-tenancy](/docs/architecture/multi-tenancy) feature — a 12-digit access key automatically becomes the account ID.
+Or use the [multi-tenancy](/architecture/multi-tenancy) feature — a 12-digit access key automatically becomes the account ID.

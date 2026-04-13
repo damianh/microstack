@@ -126,4 +126,4 @@ aws --endpoint-url=http://localhost:4566 sts get-caller-identity
 # → { "Account": "111111111111", ... }
 ```
 
-See [Multi-Tenancy](/docs/architecture/multi-tenancy) for details.
+See [Multi-Tenancy](/architecture/multi-tenancy) for details.

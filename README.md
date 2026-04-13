@@ -60,7 +60,7 @@ var client = new AmazonSQSClient(
 await client.CreateQueueAsync("my-queue");
 ```
 
-See the [Getting Started guide](https://damianh.github.io/microstack/docs/getting-started) for more examples.
+See the [Getting Started guide](https://damianh.github.io/microstack/getting-started) for more examples.
 
 ## Aspire Integration
 
@@ -82,7 +82,7 @@ builder.AddProject<Projects.MyApi>("api")
 builder.Build().Run();
 ```
 
-See [Integration Testing](https://damianh.github.io/microstack/docs/testing) for Aspire-based test patterns.
+See [Integration Testing](https://damianh.github.io/microstack/testing) for Aspire-based test patterns.
 
 ## Supported Services
 
@@ -97,7 +97,7 @@ See [Integration Testing](https://damianh.github.io/microstack/docs/testing) for
 | **Management** | CloudFormation, CloudWatch (Logs + Metrics), SSM Parameter Store, AppSync |
 | **Other** | SES, ECR, Glue, Athena |
 
-See [Services Overview](https://damianh.github.io/microstack/docs/services/overview) for the full list of supported operations per service.
+See [Services Overview](https://damianh.github.io/microstack/services/overview) for the full list of supported operations per service.
 
 ## Internal API
 
@@ -114,7 +114,7 @@ curl -X POST http://localhost:4566/_ministack/config \
   -d '{"stepfunctions._sfn_mock_config": "{...}"}'
 ```
 
-See [Internal API](https://damianh.github.io/microstack/docs/internal-api) for full details.
+See [Internal API](https://damianh.github.io/microstack/internal-api) for full details.
 
 ## Configuration
 
@@ -128,7 +128,7 @@ See [Internal API](https://damianh.github.io/microstack/docs/internal-api) for f
 | `STATE_DIR` | `<temp>/ministack-state` | Directory for persisted state |
 | `SERVICES` | *(all)* | Comma-separated list of services to enable |
 
-See [Configuration](https://damianh.github.io/microstack/docs/configuration) for all options including S3 persistence, service aliases, and Docker Compose examples.
+See [Configuration](https://damianh.github.io/microstack/configuration) for all options including S3 persistence, service aliases, and Docker Compose examples.
 
 ## Multi-Tenancy
 
@@ -140,7 +140,7 @@ var client2 = new AmazonSQSClient(new BasicAWSCredentials("222222222222", "test"
 // Each account has fully isolated resources
 ```
 
-See [Multi-Tenancy](https://damianh.github.io/microstack/docs/architecture/multi-tenancy) for details.
+See [Multi-Tenancy](https://damianh.github.io/microstack/architecture/multi-tenancy) for details.
 
 ## Docker
 
@@ -159,7 +159,7 @@ volumes:
   microstack-state:
 ```
 
-See [Docker](https://damianh.github.io/microstack/docs/docker) for more options.
+See [Docker](https://damianh.github.io/microstack/docker) for more options.
 
 ## Using with AWS CLI
 
@@ -172,7 +172,7 @@ aws --endpoint-url http://localhost:4566 sqs create-queue --queue-name my-queue
 aws --endpoint-url http://localhost:4566 dynamodb list-tables
 ```
 
-See [AWS CLI](https://damianh.github.io/microstack/docs/aws-cli) for profiles and more examples.
+See [AWS CLI](https://damianh.github.io/microstack/aws-cli) for profiles and more examples.
 
 ## License
 

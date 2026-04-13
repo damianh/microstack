@@ -45,7 +45,7 @@ var client = new AmazonSQSClient(new BasicAWSCredentials("test", "test"), config
 var response = await client.CreateQueueAsync("my-queue");
 ```
 
-See [Integration Testing](/docs/testing) for the full Aspire-based testing setup with `DistributedApplicationTestingBuilder`.
+See [Integration Testing](/testing) for the full Aspire-based testing setup with `DistributedApplicationTestingBuilder`.
 
 ## Quick Start with Docker
 
@@ -106,13 +106,13 @@ aws --endpoint-url http://localhost:4566 dynamodb create-table \
   --billing-mode PAY_PER_REQUEST
 ```
 
-See [AWS CLI](/docs/aws-cli) for named profiles, more examples, and multi-tenancy.
+See [AWS CLI](/aws-cli) for named profiles, more examples, and multi-tenancy.
 
 ## Next Steps
 
-- [Configuration](/docs/configuration) — Environment variables and options
-- [Docker](/docs/docker) — Container image details and Docker Compose
-- [Integration Testing](/docs/testing) — Aspire-based and in-process testing
-- [Internal API](/docs/internal-api) — Health, reset, and config endpoints
-- [AWS CLI](/docs/aws-cli) — CLI usage with profiles and examples
-- [Services Overview](/docs/services/overview) — All 39 supported services
+- [Configuration](/configuration) — Environment variables and options
+- [Docker](/docker) — Container image details and Docker Compose
+- [Integration Testing](/testing) — Aspire-based and in-process testing
+- [Internal API](/internal-api) — Health, reset, and config endpoints
+- [AWS CLI](/aws-cli) — CLI usage with profiles and examples
+- [Services Overview](/services/overview) — All 39 supported services
