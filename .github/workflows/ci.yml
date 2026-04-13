@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, port-ministack]
+    branches: [main]
   pull_request:
     branches: [main]
 
@@ -17,6 +17,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v4
@@ -39,3 +41,12 @@ jobs:
         with:
           name: test-results
           path: '**/results.trx'
+
+      - name: Pack NuGet packages
+        run: dotnet pack src/MicroStack.Aspire.Hosting/MicroStack.Aspire.Hosting.csproj -c Release --no-build --output ./packages
+
+      - name: Upload NuGet packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: nuget-packages
+          path: ./packages/*.nupkg

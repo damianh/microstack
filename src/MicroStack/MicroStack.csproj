@@ -18,7 +18,7 @@
   <PropertyGroup>
     <ContainerBaseImage>mcr.microsoft.com/dotnet/runtime-deps:10.0-alpine</ContainerBaseImage>
     <ContainerRepository>microstack</ContainerRepository>
-    <ContainerImageTag>latest</ContainerImageTag>
+    <ContainerImageTags>$(MinVerVersion);latest</ContainerImageTags>
     <!-- Multi-arch: amd64 + arm64 -->
     <ContainerRuntimeIdentifiers>linux-musl-x64;linux-musl-arm64</ContainerRuntimeIdentifiers>
   </PropertyGroup>

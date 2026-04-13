@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/MicroStack/MicroStack.csproj" />
+    <Project Path="src/MicroStack.Aspire.Hosting/MicroStack.Aspire.Hosting.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/MicroStack.Tests/MicroStack.Tests.csproj" />

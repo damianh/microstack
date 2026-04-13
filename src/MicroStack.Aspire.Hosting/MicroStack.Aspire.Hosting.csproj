@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <IsPackable>true</IsPackable>
+    <Description>MicroStack integration for .NET Aspire. Adds a MicroStack container resource to the Aspire app model for local AWS service emulation.</Description>
+    <PackageTags>aspire;integration;hosting;microstack;aws;localstack</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Aspire.Hosting" Version="13.2.2" />
+  </ItemGroup>
+
+</Project>
