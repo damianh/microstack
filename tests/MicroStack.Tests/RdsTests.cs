@@ -663,7 +663,7 @@ public sealed class RdsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         });
 
         var snaps2 = await _rds.DescribeDBSnapshotsAsync(new DescribeDBSnapshotsRequest());
-        snaps2.DBSnapshots.ShouldNotContain(s => s.DBSnapshotIdentifier == "qa-rds-snap-1");
+        (snaps2.DBSnapshots ?? []).ShouldNotContain(s => s.DBSnapshotIdentifier == "qa-rds-snap-1");
 
         await _rds.DeleteDBInstanceAsync(new DeleteDBInstanceRequest
         {
@@ -1030,7 +1030,7 @@ public sealed class RdsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             GlobalClusterIdentifier = "test-global-src",
         });
-        resp2.GlobalClusters[0].GlobalClusterMembers.ShouldBeEmpty();
+        (resp2.GlobalClusters[0].GlobalClusterMembers ?? []).ShouldBeEmpty();
 
         await _rds.DeleteGlobalClusterAsync(new DeleteGlobalClusterRequest
         {

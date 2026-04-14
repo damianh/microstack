@@ -78,7 +78,7 @@ public sealed class AlbTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         });
 
         var descAfter = await _elb.DescribeLoadBalancersAsync(new DescribeLoadBalancersRequest());
-        descAfter.LoadBalancers.ShouldNotContain(l => l.LoadBalancerArn == lbArn);
+        (descAfter.LoadBalancers ?? []).ShouldNotContain(l => l.LoadBalancerArn == lbArn);
     }
 
     [Fact]
@@ -211,7 +211,7 @@ public sealed class AlbTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         });
 
         var descAfter = await _elb.DescribeTargetGroupsAsync(new DescribeTargetGroupsRequest());
-        descAfter.TargetGroups.ShouldNotContain(t => t.TargetGroupArn == tgArn);
+        (descAfter.TargetGroups ?? []).ShouldNotContain(t => t.TargetGroupArn == tgArn);
     }
 
     [Fact]
@@ -404,7 +404,7 @@ public sealed class AlbTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             LoadBalancerArn = lbArn,
         });
-        descAfter.Listeners.ShouldNotContain(l => l.ListenerArn == lArn);
+        (descAfter.Listeners ?? []).ShouldNotContain(l => l.ListenerArn == lArn);
 
         await _elb.DeleteTargetGroupAsync(new DeleteTargetGroupRequest { TargetGroupArn = tgArn });
         await _elb.DeleteLoadBalancerAsync(new DeleteLoadBalancerRequest { LoadBalancerArn = lbArn });
@@ -1288,7 +1288,7 @@ public sealed class AlbTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             LoadBalancerArn = lbArn,
         });
-        before.TargetGroups.ShouldNotContain(tg => tg.TargetGroupArn == tgArn);
+        (before.TargetGroups ?? []).ShouldNotContain(tg => tg.TargetGroupArn == tgArn);
 
         // Create listener to link TG to LB
         var lArn = (await _elb.CreateListenerAsync(new CreateListenerRequest
