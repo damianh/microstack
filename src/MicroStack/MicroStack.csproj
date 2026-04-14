@@ -9,7 +9,7 @@
   <PropertyGroup>
     <PublishAot>true</PublishAot>
     <TrimMode>full</TrimMode>
-    <InvariantGlobalization>false</InvariantGlobalization>
+    <InvariantGlobalization>true</InvariantGlobalization>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <StripSymbols>true</StripSymbols>
     <OptimizationPreference>Size</OptimizationPreference>
