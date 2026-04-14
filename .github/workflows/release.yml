@@ -90,6 +90,7 @@ jobs:
         run: >
           dotnet publish src/MicroStack/MicroStack.csproj
           /t:PublishContainer
+          -r linux-musl-x64
           -c Release
           -p:ContainerRegistry=ghcr.io
           -p:ContainerRepository=${{ github.repository_owner }}/microstack
