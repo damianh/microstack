@@ -50,3 +50,12 @@ jobs:
         with:
           name: nuget-packages
           path: ./packages/*.nupkg
+
+      - name: Publish container image (local)
+        run: >
+          dotnet publish src/MicroStack/MicroStack.csproj
+          /t:PublishContainer
+          -c Release
+
+      - name: Report container image size
+        run: docker images microstack
