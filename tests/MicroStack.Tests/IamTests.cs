@@ -636,7 +636,7 @@ public sealed class IamTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
 
         var tags2 = await _iam.ListPolicyTagsAsync(
             new ListPolicyTagsRequest { PolicyArn = policyArn });
-        tags2.Tags.ShouldNotContain(t => t.Key == "env");
+        (tags2.Tags ?? []).ShouldNotContain(t => t.Key == "env");
     }
 
     // ── Update role ─────────────────────────────────────────────────────────────
@@ -902,6 +902,6 @@ public sealed class IamTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
                 EntityFilter = EntityType.Role,
             });
         (((resp3.PolicyRoles ?? []).Count >= 1)).ShouldBe(true);
-        resp3.PolicyUsers.ShouldBeEmpty();
+        (resp3.PolicyUsers ?? []).ShouldBeEmpty();
     }
 }

@@ -91,7 +91,7 @@ public sealed class S3Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         await _s3.DeleteBucketAsync("del-bucket-test");
 
         var list = await _s3.ListBucketsAsync();
-        list.Buckets.ShouldNotContain(b => b.BucketName == "del-bucket-test");
+        (list.Buckets ?? []).ShouldNotContain(b => b.BucketName == "del-bucket-test");
     }
 
     [Fact]
@@ -285,7 +285,7 @@ public sealed class S3Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         ((resp.CommonPrefixes ?? []).Count).ShouldBe(2);
         resp.CommonPrefixes!.ShouldContain("photos/2024/");
         resp.CommonPrefixes!.ShouldContain("photos/2025/");
-        resp.S3Objects.ShouldBeEmpty();
+        (resp.S3Objects ?? []).ShouldBeEmpty();
     }
 
     [Fact]

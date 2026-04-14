@@ -70,7 +70,7 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         await _ec2.DeleteVpcAsync(new DeleteVpcRequest { VpcId = vpcId });
 
         var descAfter = await _ec2.DescribeVpcsAsync(new DescribeVpcsRequest());
-        descAfter.Vpcs.ShouldNotContain(v => v.VpcId == vpcId);
+        (descAfter.Vpcs ?? []).ShouldNotContain(v => v.VpcId == vpcId);
     }
 
     [Fact]
@@ -276,7 +276,7 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         await _ec2.DeleteSecurityGroupAsync(new DeleteSecurityGroupRequest { GroupId = sgId });
 
         var descAfter = await _ec2.DescribeSecurityGroupsAsync(new DescribeSecurityGroupsRequest());
-        descAfter.SecurityGroups.ShouldNotContain(sg => sg.GroupId == sgId);
+        (descAfter.SecurityGroups ?? []).ShouldNotContain(sg => sg.GroupId == sgId);
     }
 
     [Fact]
@@ -347,7 +347,7 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             GroupIds = [sgId],
         });
-        descAfter.SecurityGroups[0].IpPermissions.ShouldNotContain(p => p.FromPort == 80);
+        (descAfter.SecurityGroups[0].IpPermissions ?? []).ShouldNotContain(p => p.FromPort == 80);
 
         await _ec2.DeleteSecurityGroupAsync(new DeleteSecurityGroupRequest { GroupId = sgId });
     }
@@ -373,7 +373,7 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         await _ec2.DeleteKeyPairAsync(new DeleteKeyPairRequest { KeyName = "qa-ec2-key" });
 
         var descAfter = await _ec2.DescribeKeyPairsAsync(new DescribeKeyPairsRequest());
-        descAfter.KeyPairs.ShouldNotContain(kp => kp.KeyName == "qa-ec2-key");
+        (descAfter.KeyPairs ?? []).ShouldNotContain(kp => kp.KeyName == "qa-ec2-key");
     }
 
     [Fact]
@@ -504,7 +504,7 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             RouteTableIds = [rtbId],
         });
-        descAfter.RouteTables[0].Associations.ShouldNotContain(a => a.RouteTableAssociationId == assocId);
+        (descAfter.RouteTables[0].Associations ?? []).ShouldNotContain(a => a.RouteTableAssociationId == assocId);
 
         await _ec2.DeleteRouteTableAsync(new DeleteRouteTableRequest { RouteTableId = rtbId });
         await _ec2.DeleteSubnetAsync(new DeleteSubnetRequest { SubnetId = subnetId });
@@ -551,7 +551,7 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             RouteTableIds = [rtbId],
         });
-        descAfter.RouteTables[0].Routes.ShouldNotContain(r => r.DestinationCidrBlock == "0.0.0.0/0");
+        (descAfter.RouteTables[0].Routes ?? []).ShouldNotContain(r => r.DestinationCidrBlock == "0.0.0.0/0");
 
         await _ec2.DeleteInternetGatewayAsync(new DeleteInternetGatewayRequest { InternetGatewayId = igwId });
         await _ec2.DeleteRouteTableAsync(new DeleteRouteTableRequest { RouteTableId = rtbId });
@@ -916,7 +916,7 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             InstanceIds = [iid],
         });
         var tags2 = desc2.Reservations[0].Instances[0].Tags;
-        tags2.ShouldNotContain(t => t.Key == "Name");
+        (tags2 ?? []).ShouldNotContain(t => t.Key == "Name");
 
         await _ec2.TerminateInstancesAsync(new TerminateInstancesRequest { InstanceIds = [iid] });
     }
@@ -987,7 +987,7 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             Filters = [new Filter("resource-id", ["i-doesnotexist"])],
         });
-        resp4.Tags.ShouldBeEmpty();
+        (resp4.Tags ?? []).ShouldBeEmpty();
 
         // All tags have correct resource type
         var resp5 = await _ec2.DescribeTagsAsync(new DescribeTagsRequest
@@ -1032,7 +1032,7 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         });
 
         var descAfter = await _ec2.DescribeNetworkInterfacesAsync(new DescribeNetworkInterfacesRequest());
-        descAfter.NetworkInterfaces.ShouldNotContain(e => e.NetworkInterfaceId == eniId);
+        (descAfter.NetworkInterfaces ?? []).ShouldNotContain(e => e.NetworkInterfaceId == eniId);
 
         await _ec2.DeleteSubnetAsync(new DeleteSubnetRequest { SubnetId = subnetId });
         await _ec2.DeleteVpcAsync(new DeleteVpcRequest { VpcId = vpcId });
@@ -1124,7 +1124,7 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         });
 
         var descAfter = await _ec2.DescribeVpcEndpointsAsync(new DescribeVpcEndpointsRequest());
-        descAfter.VpcEndpoints.ShouldNotContain(e => e.VpcEndpointId == vpceId);
+        (descAfter.VpcEndpoints ?? []).ShouldNotContain(e => e.VpcEndpointId == vpceId);
 
         await _ec2.DeleteVpcAsync(new DeleteVpcRequest { VpcId = vpcId });
     }
@@ -1167,7 +1167,7 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             {
                 VpcEndpointIds = [vpceId],
             });
-            desc.VpcEndpoints[0].RouteTableIds.ShouldNotContain(rtbId);
+            (desc.VpcEndpoints[0].RouteTableIds ?? []).ShouldNotContain(rtbId);
 
             await _ec2.DeleteVpcEndpointsAsync(new DeleteVpcEndpointsRequest { VpcEndpointIds = [vpceId] });
             await _ec2.DeleteRouteTableAsync(new DeleteRouteTableRequest { RouteTableId = rtbId });
@@ -1252,7 +1252,7 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             VolumeIds = [volId],
         });
         desc2.Volumes[0].State.ShouldBe(VolumeState.Available);
-        desc2.Volumes[0].Attachments.ShouldBeEmpty();
+        (desc2.Volumes[0].Attachments ?? []).ShouldBeEmpty();
     }
 
     [Fact]
@@ -1272,7 +1272,7 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             VolumeIds = [volId],
         });
-        desc.Volumes.ShouldBeEmpty();
+        (desc.Volumes ?? []).ShouldBeEmpty();
     }
 
     [Fact]
@@ -1416,7 +1416,7 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             SnapshotIds = [snap.Snapshot.SnapshotId],
         });
-        desc.Snapshots.ShouldBeEmpty();
+        (desc.Snapshots ?? []).ShouldBeEmpty();
     }
 
     [Fact]
@@ -1536,14 +1536,14 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
     public async Task DescribeSpotInstanceRequests()
     {
         var resp = await _ec2.DescribeSpotInstanceRequestsAsync(new DescribeSpotInstanceRequestsRequest());
-        resp.SpotInstanceRequests.ShouldBeEmpty();
+        (resp.SpotInstanceRequests ?? []).ShouldBeEmpty();
     }
 
     [Fact]
     public async Task DescribeCapacityReservations()
     {
         var resp = await _ec2.DescribeCapacityReservationsAsync(new DescribeCapacityReservationsRequest());
-        resp.CapacityReservations.ShouldBeEmpty();
+        (resp.CapacityReservations ?? []).ShouldBeEmpty();
     }
 
     // ── Describe Prefix Lists ───────────────────────────────────────────────────
@@ -1818,14 +1818,14 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             NetworkAclIds = [aclId],
         });
-        desc3.NetworkAcls[0].Entries.ShouldBeEmpty();
+        (desc3.NetworkAcls[0].Entries ?? []).ShouldBeEmpty();
 
         await _ec2.DeleteNetworkAclAsync(new DeleteNetworkAclRequest { NetworkAclId = aclId });
         var desc4 = await _ec2.DescribeNetworkAclsAsync(new DescribeNetworkAclsRequest
         {
             NetworkAclIds = [aclId],
         });
-        desc4.NetworkAcls.ShouldBeEmpty();
+        (desc4.NetworkAcls ?? []).ShouldBeEmpty();
     }
 
     [Fact]
@@ -1881,7 +1881,7 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             LogDestinationType = LogDestinationType.CloudWatchLogs,
             LogGroupName = "/aws/vpc/flowlogs",
         });
-        resp.Unsuccessful.ShouldBeEmpty();
+        (resp.Unsuccessful ?? []).ShouldBeEmpty();
         var flIds = resp.FlowLogIds;
         flIds.ShouldHaveSingleItem();
         flIds[0].ShouldStartWith("fl-");
@@ -1899,7 +1899,7 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             FlowLogIds = flIds,
         });
-        desc2.FlowLogs.ShouldBeEmpty();
+        (desc2.FlowLogs ?? []).ShouldBeEmpty();
     }
 
     // ── VPC Peering Tests ───────────────────────────────────────────────────────
@@ -2003,7 +2003,7 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             DhcpOptionsIds = [doptId],
         });
-        desc2.DhcpOptions.ShouldBeEmpty();
+        (desc2.DhcpOptions ?? []).ShouldBeEmpty();
     }
 
     [Fact]
@@ -2051,7 +2051,7 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             {
                 EgressOnlyInternetGatewayIds = [eigwId],
             });
-        desc2.EgressOnlyInternetGateways.ShouldBeEmpty();
+        (desc2.EgressOnlyInternetGateways ?? []).ShouldBeEmpty();
     }
 
     [Fact]
@@ -2113,14 +2113,14 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             {
                 VpnGatewayIds = [vgwId],
             });
-            desc2.VpnGateways[0].VpcAttachments.ShouldBeEmpty();
+            (desc2.VpnGateways[0].VpcAttachments ?? []).ShouldBeEmpty();
 
             await _ec2.DeleteVpnGatewayAsync(new DeleteVpnGatewayRequest { VpnGatewayId = vgwId });
             var desc3 = await _ec2.DescribeVpnGatewaysAsync(new DescribeVpnGatewaysRequest
             {
                 VpnGatewayIds = [vgwId],
             });
-            desc3.VpnGateways.ShouldBeEmpty();
+            (desc3.VpnGateways ?? []).ShouldBeEmpty();
         }
         finally
         {
@@ -2195,7 +2195,7 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             CustomerGatewayIds = [cgwId],
         });
-        desc2.CustomerGateways.ShouldBeEmpty();
+        (desc2.CustomerGateways ?? []).ShouldBeEmpty();
     }
 
     // ── Create Route with NAT Gateway ───────────────────────────────────────────
@@ -2322,8 +2322,8 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             PrefixListId = plId,
         });
         cidrs = entries.Entries.Select(e => e.Cidr).ToList();
-        cidrs.ShouldNotContain("10.0.0.0/8");
-        cidrs.ShouldContain("172.16.0.0/12");
+        (cidrs ?? []).ShouldNotContain("10.0.0.0/8");
+        (cidrs ?? []).ShouldContain("172.16.0.0/12");
 
         // Delete
         await _ec2.DeleteManagedPrefixListAsync(new DeleteManagedPrefixListRequest
@@ -2334,7 +2334,7 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             PrefixListIds = [plId],
         });
-        desc.PrefixLists.ShouldBeEmpty();
+        (desc.PrefixLists ?? []).ShouldBeEmpty();
     }
 
     // ── Launch Template Tests ───────────────────────────────────────────────────
@@ -2395,7 +2395,7 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             LaunchTemplateIds = [ltId],
         });
-        desc3.LaunchTemplates.ShouldBeEmpty();
+        (desc3.LaunchTemplates ?? []).ShouldBeEmpty();
     }
 
     [Fact]

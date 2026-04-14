@@ -201,7 +201,7 @@ public sealed class SesTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         });
 
         var resp = await _ses.ListIdentitiesAsync(new SesV1.Model.ListIdentitiesRequest());
-        resp.Identities.ShouldNotContain("delete@example.com");
+        (resp.Identities ?? []).ShouldNotContain("delete@example.com");
     }
 
     [Fact]
@@ -269,7 +269,7 @@ public sealed class SesTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         });
 
         var sets2 = await _ses.ListConfigurationSetsAsync(new SesV1.Model.ListConfigurationSetsRequest());
-        sets2.ConfigurationSets.ShouldNotContain(s => s.Name == "test-config");
+        (sets2.ConfigurationSets ?? []).ShouldNotContain(s => s.Name == "test-config");
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

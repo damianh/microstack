@@ -454,7 +454,7 @@ public sealed class SnsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         });
 
         (resp.Successful?.Count ?? 0).ShouldBe(3);
-        resp.Failed.ShouldBeEmpty();
+        (resp.Failed ?? []).ShouldBeEmpty();
     }
 
     [Fact]
@@ -512,7 +512,7 @@ public sealed class SnsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             MaxNumberOfMessages = 1,
             WaitTimeSeconds = 0,
         });
-        msgs.Messages.ShouldBeEmpty();
+        (msgs.Messages ?? []).ShouldBeEmpty();
 
         // Publish matching message (blue)
         await _sns.PublishAsync(new PublishRequest

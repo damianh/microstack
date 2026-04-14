@@ -179,7 +179,7 @@ public sealed class PersistenceTests : IClassFixture<MicroStackFixture>, IAsyncL
         // Reset and verify topic is gone
         handler.Reset();
         var topics = await _sns.ListTopicsAsync();
-        topics.Topics.ShouldNotContain(t => t.TopicArn == created.TopicArn);
+        (topics.Topics ?? []).ShouldNotContain(t => t.TopicArn == created.TopicArn);
 
         // Restore and verify topic is back
         handler.RestoreState(state.Value);
@@ -304,7 +304,7 @@ public sealed class PersistenceTests : IClassFixture<MicroStackFixture>, IAsyncL
             () => _sqs.GetQueueUrlAsync("persist-reset-q"));
 
         var topics = await _sns.ListTopicsAsync();
-        topics.Topics.ShouldBeEmpty();
+        (topics.Topics ?? []).ShouldBeEmpty();
 
         await Should.ThrowAsync<ParameterNotFoundException>(
             () => _ssm.GetParameterAsync(new GetParameterRequest { Name = "/persist/reset-key" }));
