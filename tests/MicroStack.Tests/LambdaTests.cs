@@ -1643,4 +1643,314 @@ public sealed class LambdaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
 
         consumed.ShouldBe(true, "All messages should have been consumed by Lambda ESM");
     }
+
+    // -- .NET Lambda Invocation Tests -----------------------------------------
+
+    [SkippableFact]
+    public async Task InvokeDotnetRequestResponse()
+    {
+        Skip.If(!IsDotnetBootstrapAvailable() || FindSimpleHandlerDir() is null,
+            "MicroStack.LambdaBootstrap or SimpleHandler build output not found.");
+
+        await CreateDotnetFunction("invoke-dotnet-func", "GreetHandler");
+
+        var result = await _lambda.InvokeAsync(new InvokeRequest
+        {
+            FunctionName = "invoke-dotnet-func",
+            Payload = """{"name": "DotNet"}""",
+        });
+
+        result.StatusCode.ShouldBe(200);
+        result.FunctionError.ShouldBeNull();
+
+        var payload = Encoding.UTF8.GetString(result.Payload.ToArray());
+        using var doc = JsonDocument.Parse(payload);
+        doc.RootElement.GetProperty("greeting").GetString().ShouldBe("hello DotNet");
+    }
+
+    [SkippableFact]
+    public async Task InvokeDotnetReturnsPayload()
+    {
+        Skip.If(!IsDotnetBootstrapAvailable() || FindSimpleHandlerDir() is null,
+            "MicroStack.LambdaBootstrap or SimpleHandler build output not found.");
+
+        await CreateDotnetFunction("invoke-dotnet-payload", "SumHandler");
+
+        var result = await _lambda.InvokeAsync(new InvokeRequest
+        {
+            FunctionName = "invoke-dotnet-payload",
+            Payload = """{"items": [1, 2, 3, 4, 5]}""",
+        });
+
+        result.StatusCode.ShouldBe(200);
+        result.FunctionError.ShouldBeNull();
+
+        var payload = Encoding.UTF8.GetString(result.Payload.ToArray());
+        using var doc = JsonDocument.Parse(payload);
+        doc.RootElement.GetProperty("count").GetInt32().ShouldBe(5);
+        doc.RootElement.GetProperty("sum").GetInt32().ShouldBe(15);
+    }
+
+    [SkippableFact]
+    public async Task InvokeDotnetWithEnvironmentVariables()
+    {
+        Skip.If(!IsDotnetBootstrapAvailable() || FindSimpleHandlerDir() is null,
+            "MicroStack.LambdaBootstrap or SimpleHandler build output not found.");
+
+        var envVars = new Dictionary<string, string>
+        {
+            ["MY_VAR"] = "hello-dotnet",
+            ["MY_REGION"] = "eu-west-1",
+        };
+
+        await CreateDotnetFunction("invoke-dotnet-env", "EnvHandler", envVars);
+
+        var result = await _lambda.InvokeAsync(new InvokeRequest
+        {
+            FunctionName = "invoke-dotnet-env",
+            Payload = "{}",
+        });
+
+        result.StatusCode.ShouldBe(200);
+        result.FunctionError.ShouldBeNull();
+
+        var payload = Encoding.UTF8.GetString(result.Payload.ToArray());
+        using var doc = JsonDocument.Parse(payload);
+        doc.RootElement.GetProperty("myvar").GetString().ShouldBe("hello-dotnet");
+        doc.RootElement.GetProperty("region").GetString().ShouldBe("eu-west-1");
+    }
+
+    [SkippableFact]
+    public async Task InvokeDotnetWarmStart()
+    {
+        Skip.If(!IsDotnetBootstrapAvailable() || FindSimpleHandlerDir() is null,
+            "MicroStack.LambdaBootstrap or SimpleHandler build output not found.");
+
+        await CreateDotnetFunction("invoke-dotnet-warm", "EchoHandler");
+
+        // First invocation (cold start)
+        var result1 = await _lambda.InvokeAsync(new InvokeRequest
+        {
+            FunctionName = "invoke-dotnet-warm",
+            Payload = """{"seq": 1}""",
+        });
+
+        result1.StatusCode.ShouldBe(200);
+        result1.FunctionError.ShouldBeNull();
+
+        // Second invocation — should be warm (same process)
+        var result2 = await _lambda.InvokeAsync(new InvokeRequest
+        {
+            FunctionName = "invoke-dotnet-warm",
+            Payload = """{"seq": 2}""",
+        });
+
+        result2.StatusCode.ShouldBe(200);
+        result2.FunctionError.ShouldBeNull();
+
+        var payload2 = Encoding.UTF8.GetString(result2.Payload.ToArray());
+        using var doc2 = JsonDocument.Parse(payload2);
+        doc2.RootElement.GetProperty("seq").GetInt32().ShouldBe(2);
+    }
+
+    [SkippableFact]
+    public async Task InvokeDotnetErrorReturnsUnhandled()
+    {
+        Skip.If(!IsDotnetBootstrapAvailable() || FindSimpleHandlerDir() is null,
+            "MicroStack.LambdaBootstrap or SimpleHandler build output not found.");
+
+        await CreateDotnetFunction("invoke-dotnet-error", "ErrorHandler");
+
+        var result = await _lambda.InvokeAsync(new InvokeRequest
+        {
+            FunctionName = "invoke-dotnet-error",
+            Payload = "{}",
+        });
+
+        result.StatusCode.ShouldBe(200);
+        result.FunctionError.ShouldBe("Unhandled");
+
+        var payload = Encoding.UTF8.GetString(result.Payload.ToArray());
+        using var doc = JsonDocument.Parse(payload);
+        doc.RootElement.GetProperty("errorMessage").GetString()!.ShouldContain("something went wrong");
+    }
+
+    [SkippableFact]
+    public async Task InvokeDotnetWithContext()
+    {
+        Skip.If(!IsDotnetBootstrapAvailable() || FindSimpleHandlerDir() is null,
+            "MicroStack.LambdaBootstrap or SimpleHandler build output not found.");
+
+        await CreateDotnetFunction("invoke-dotnet-context", "ContextHandler");
+
+        var result = await _lambda.InvokeAsync(new InvokeRequest
+        {
+            FunctionName = "invoke-dotnet-context",
+            Payload = "{}",
+        });
+
+        result.StatusCode.ShouldBe(200);
+        result.FunctionError.ShouldBeNull();
+
+        var payload = Encoding.UTF8.GetString(result.Payload.ToArray());
+        using var doc = JsonDocument.Parse(payload);
+        doc.RootElement.GetProperty("function_name").GetString().ShouldBe("invoke-dotnet-context");
+        doc.RootElement.GetProperty("memory_limit").GetInt32().ShouldBe(128);
+        doc.RootElement.GetProperty("has_request_id").GetBoolean().ShouldBe(true);
+    }
+
+    [SkippableFact]
+    public async Task UpdateCodeInvalidatesDotnetWorker()
+    {
+        Skip.If(!IsDotnetBootstrapAvailable() || FindSimpleHandlerDir() is null,
+            "MicroStack.LambdaBootstrap or SimpleHandler build output not found.");
+
+        // Create function with EchoHandler
+        await CreateDotnetFunction("invoke-dotnet-update", "EchoHandler");
+
+        // First invocation — echo returns input
+        var result1 = await _lambda.InvokeAsync(new InvokeRequest
+        {
+            FunctionName = "invoke-dotnet-update",
+            Payload = """{"version": 1}""",
+        });
+
+        result1.StatusCode.ShouldBe(200);
+        result1.FunctionError.ShouldBeNull();
+        var payload1 = Encoding.UTF8.GetString(result1.Payload.ToArray());
+        using var doc1 = JsonDocument.Parse(payload1);
+        doc1.RootElement.GetProperty("version").GetInt32().ShouldBe(1);
+
+        // Update the function code (same DLL, different handler)
+        var handlerDir = FindSimpleHandlerDir()!;
+        using var newZip = MakeDotnetZip(handlerDir);
+        await _lambda.UpdateFunctionCodeAsync(new UpdateFunctionCodeRequest
+        {
+            FunctionName = "invoke-dotnet-update",
+            ZipFile = newZip,
+        });
+
+        // Update config to use GreetHandler
+        await _lambda.UpdateFunctionConfigurationAsync(new UpdateFunctionConfigurationRequest
+        {
+            FunctionName = "invoke-dotnet-update",
+            Handler = "SimpleHandler::SimpleHandler.Function::GreetHandler",
+        });
+
+        // Second invocation should use new handler (greet)
+        var result2 = await _lambda.InvokeAsync(new InvokeRequest
+        {
+            FunctionName = "invoke-dotnet-update",
+            Payload = """{"name": "Updated"}""",
+        });
+
+        result2.StatusCode.ShouldBe(200);
+        result2.FunctionError.ShouldBeNull();
+        var payload2 = Encoding.UTF8.GetString(result2.Payload.ToArray());
+        using var doc2 = JsonDocument.Parse(payload2);
+        doc2.RootElement.GetProperty("greeting").GetString().ShouldBe("hello Updated");
+    }
+
+    // -- .NET Lambda helper methods -------------------------------------------
+
+    /// <summary>
+    /// Checks whether the MicroStack.LambdaBootstrap is built and findable via the dev-fallback
+    /// path resolution logic (walking up from the test assembly to src/).
+    /// </summary>
+    private static bool IsDotnetBootstrapAvailable()
+    {
+        var dir = AppContext.BaseDirectory;
+        for (var i = 0; i < 10; i++)
+        {
+            if (dir is null) break;
+
+            var bootstrapBinDir = Path.Combine(dir, "src", "MicroStack.LambdaBootstrap", "bin");
+            if (Directory.Exists(bootstrapBinDir))
+            {
+                foreach (var configDir in Directory.GetDirectories(bootstrapBinDir))
+                {
+                    var candidate = Path.Combine(configDir, "net10.0", "MicroStack.LambdaBootstrap.dll");
+                    if (File.Exists(candidate)) return true;
+                }
+            }
+
+            dir = Path.GetDirectoryName(dir);
+        }
+
+        // Also check MICROSTACK_LAMBDA_BOOTSTRAP_PATH env var
+        var envPath = System.Environment.GetEnvironmentVariable("MICROSTACK_LAMBDA_BOOTSTRAP_PATH");
+        return !string.IsNullOrEmpty(envPath) && File.Exists(envPath);
+    }
+
+    /// <summary>
+    /// Locates the published SimpleHandler DLL directory (build output, not publish).
+    /// Returns null if not found.
+    /// </summary>
+    private static string? FindSimpleHandlerDir()
+    {
+        var dir = AppContext.BaseDirectory;
+        for (var i = 0; i < 10; i++)
+        {
+            if (dir is null) break;
+
+            var handlerBinDir = Path.Combine(dir, "tests", "TestLambdaFunctions", "SimpleHandler", "bin");
+            if (Directory.Exists(handlerBinDir))
+            {
+                foreach (var configDir in Directory.GetDirectories(handlerBinDir))
+                {
+                    var tfmDir = Path.Combine(configDir, "net10.0");
+                    var candidate = Path.Combine(tfmDir, "SimpleHandler.dll");
+                    if (File.Exists(candidate)) return tfmDir;
+                }
+            }
+
+            dir = Path.GetDirectoryName(dir);
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Creates an in-memory ZIP containing all files from the given directory.
+    /// </summary>
+    private static MemoryStream MakeDotnetZip(string publishDir)
+    {
+        var ms = new MemoryStream();
+        using (var archive = new ZipArchive(ms, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            foreach (var filePath in Directory.GetFiles(publishDir))
+            {
+                var entryName = Path.GetFileName(filePath);
+                var entry = archive.CreateEntry(entryName);
+                using var entryStream = entry.Open();
+                using var fileStream = File.OpenRead(filePath);
+                fileStream.CopyTo(entryStream);
+            }
+        }
+
+        ms.Position = 0;
+        return ms;
+    }
+
+    private async Task<CreateFunctionResponse> CreateDotnetFunction(string name, string handlerMethod, Dictionary<string, string>? envVars = null)
+    {
+        var handlerDir = FindSimpleHandlerDir()!;
+        using var zip = MakeDotnetZip(handlerDir);
+
+        var request = new CreateFunctionRequest
+        {
+            FunctionName = name,
+            Runtime = new Amazon.Lambda.Runtime("dotnet10"),
+            Role = LambdaRole,
+            Handler = $"SimpleHandler::SimpleHandler.Function::{handlerMethod}",
+            Code = new FunctionCode { ZipFile = zip },
+        };
+
+        if (envVars is not null)
+        {
+            request.Environment = new Amazon.Lambda.Model.Environment { Variables = envVars };
+        }
+
+        return await _lambda.CreateFunctionAsync(request);
+    }
 }

@@ -2135,7 +2135,8 @@ internal sealed class LambdaServiceHandler : IServiceHandler
     private static bool IsSupportedRuntime(string runtime)
     {
         return runtime.StartsWith("python", StringComparison.OrdinalIgnoreCase)
-            || runtime.StartsWith("nodejs", StringComparison.OrdinalIgnoreCase);
+            || runtime.StartsWith("nodejs", StringComparison.OrdinalIgnoreCase)
+            || runtime.StartsWith("dotnet", StringComparison.OrdinalIgnoreCase);
     }
 
     // -- Event Source Mappings -------------------------------------------------

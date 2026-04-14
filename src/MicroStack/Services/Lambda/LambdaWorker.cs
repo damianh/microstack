@@ -26,6 +26,7 @@ internal sealed class LambdaWorker : IDisposable
 
     private const int InitTimeoutMs = 15_000;
     private const int InvokeTimeoutMs = 30_000;
+    private const string BootstrapTargetFramework = "net10.0";
 
     internal LambdaWorker(string functionName, Dictionary<string, object?> config, byte[] codeZip)
     {
@@ -182,23 +183,36 @@ internal sealed class LambdaWorker : IDisposable
             }
         }
 
-        string scriptPath;
         string executableName;
         string arguments;
 
         if (runtime.StartsWith("python", StringComparison.OrdinalIgnoreCase))
         {
-            scriptPath = Path.Combine(_tempDir, "_worker.py");
+            var scriptPath = Path.Combine(_tempDir, "_worker.py");
             File.WriteAllText(scriptPath, PythonWorkerScript, Encoding.UTF8);
             executableName = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "python" : "python3";
             arguments = scriptPath;
         }
         else if (runtime.StartsWith("nodejs", StringComparison.OrdinalIgnoreCase))
         {
-            scriptPath = Path.Combine(_tempDir, "_worker.js");
+            var scriptPath = Path.Combine(_tempDir, "_worker.js");
             File.WriteAllText(scriptPath, NodeJsWorkerScript, Encoding.UTF8);
             executableName = "node";
             arguments = scriptPath;
+        }
+        else if (runtime.StartsWith("dotnet", StringComparison.OrdinalIgnoreCase))
+        {
+            var bootstrapPath = ResolveBootstrapPath();
+            if (bootstrapPath is null)
+            {
+                throw new InvalidOperationException(
+                    "MicroStack.LambdaBootstrap could not be found. " +
+                    "Set the MICROSTACK_LAMBDA_BOOTSTRAP_PATH environment variable to the path of MicroStack.LambdaBootstrap.dll, " +
+                    "or ensure the bootstrap project has been built.");
+            }
+
+            executableName = "dotnet";
+            arguments = $"exec \"{bootstrapPath}\"";
         }
         else
         {
@@ -234,16 +248,34 @@ internal sealed class LambdaWorker : IDisposable
         _stderrThread.Start();
 
         // Send init payload
-        var initPayload = new Dictionary<string, object?>
+        // For dotnet runtimes, pass the full handler string (e.g. "Assembly::Namespace.Class::Method").
+        // For python/node runtimes, pass the split module + handler function name.
+        Dictionary<string, object?> initPayload;
+        if (runtime.StartsWith("dotnet", StringComparison.OrdinalIgnoreCase))
         {
-            ["code_dir"] = codeDir.Replace('\\', '/'),
-            ["module"] = module,
-            ["handler"] = handlerFn,
-            ["env"] = envVars,
-            ["function_name"] = _functionName,
-            ["memory"] = memorySize,
-            ["arn"] = functionArn,
-        };
+            initPayload = new Dictionary<string, object?>
+            {
+                ["code_dir"] = codeDir.Replace('\\', '/'),
+                ["handler"] = handler,
+                ["env"] = envVars,
+                ["function_name"] = _functionName,
+                ["memory"] = memorySize,
+                ["arn"] = functionArn,
+            };
+        }
+        else
+        {
+            initPayload = new Dictionary<string, object?>
+            {
+                ["code_dir"] = codeDir.Replace('\\', '/'),
+                ["module"] = module,
+                ["handler"] = handlerFn,
+                ["env"] = envVars,
+                ["function_name"] = _functionName,
+                ["memory"] = memorySize,
+                ["arn"] = functionArn,
+            };
+        }
 
         var initJson = DictionaryObjectJsonConverter.SerializeValue(initPayload);
         _process.StandardInput.WriteLine(initJson);
@@ -479,6 +511,77 @@ internal sealed class LambdaWorker : IDisposable
         }
 
         return dict;
+    }
+
+    // -- Bootstrap path resolution ---------------------------------------------
+
+    private static string? _cachedBootstrapPath;
+    private static readonly Lock _bootstrapLock = new();
+
+    /// <summary>
+    /// Resolves the path to the MicroStack.LambdaBootstrap.dll.
+    /// Resolution order:
+    ///   1. Environment variable MICROSTACK_LAMBDA_BOOTSTRAP_PATH (explicit override)
+    ///   2. Sibling directory: {MicroStack assembly dir}/lambda-bootstrap/MicroStack.LambdaBootstrap.dll
+    ///   3. Development fallback: walk up from the MicroStack assembly looking for the src/ build output
+    /// Returns null if the bootstrap cannot be found.
+    /// </summary>
+    private static string? ResolveBootstrapPath()
+    {
+        lock (_bootstrapLock)
+        {
+            if (_cachedBootstrapPath is not null)
+            {
+                return _cachedBootstrapPath;
+            }
+
+            // 1. Explicit environment variable override
+            var envPath = System.Environment.GetEnvironmentVariable("MICROSTACK_LAMBDA_BOOTSTRAP_PATH");
+            if (!string.IsNullOrEmpty(envPath) && File.Exists(envPath))
+            {
+                _cachedBootstrapPath = envPath;
+                return envPath;
+            }
+
+            // 2. Published sibling: {assembly dir}/lambda-bootstrap/MicroStack.LambdaBootstrap.dll
+            var assemblyDir = AppContext.BaseDirectory;
+            var siblingPath = Path.Combine(assemblyDir, "lambda-bootstrap", "MicroStack.LambdaBootstrap.dll");
+            if (File.Exists(siblingPath))
+            {
+                _cachedBootstrapPath = siblingPath;
+                return siblingPath;
+            }
+
+            // 3. Development fallback: search up from the assembly directory for src/MicroStack.LambdaBootstrap/bin/
+            var dir = assemblyDir;
+            for (var i = 0; i < 10; i++)
+            {
+                if (dir is null)
+                {
+                    break;
+                }
+
+                // Look for src/MicroStack.LambdaBootstrap/bin/*/net10.0/MicroStack.LambdaBootstrap.dll
+                var bootstrapBinDir = Path.Combine(dir, "src", "MicroStack.LambdaBootstrap", "bin");
+                if (Directory.Exists(bootstrapBinDir))
+                {
+                    foreach (var configDir in Directory.GetDirectories(bootstrapBinDir))
+                    {
+                        var tfmDir = Path.Combine(configDir, BootstrapTargetFramework);
+                        var candidate = Path.Combine(tfmDir, "MicroStack.LambdaBootstrap.dll");
+                        if (File.Exists(candidate))
+                        {
+                            _cachedBootstrapPath = candidate;
+                            return candidate;
+                        }
+                    }
+                }
+
+                dir = Path.GetDirectoryName(dir);
+            }
+
+            return null;
+        }
     }
 
     // -- Embedded worker scripts ------------------------------------------------

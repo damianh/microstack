@@ -53,10 +53,15 @@
     </PackageReference>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.13.0" />
     <PackageReference Include="Shouldly" Version="4.3.0" />
+    <PackageReference Include="Xunit.SkippableFact" Version="1.5.23" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\MicroStack\MicroStack.csproj" />
+    <!-- Build the bootstrap and SimpleHandler without referencing their assemblies directly.
+         This ensures they are compiled before tests run, so bootstrap path resolution works. -->
+    <ProjectReference Include="..\..\src\MicroStack.LambdaBootstrap\MicroStack.LambdaBootstrap.csproj" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\TestLambdaFunctions\SimpleHandler\SimpleHandler.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>
 
 </Project>
