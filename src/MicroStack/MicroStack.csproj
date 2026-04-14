@@ -11,6 +11,8 @@
     <TrimMode>full</TrimMode>
     <InvariantGlobalization>false</InvariantGlobalization>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <StripSymbols>true</StripSymbols>
+    <OptimizationPreference>Size</OptimizationPreference>
   </PropertyGroup>
 
   <!-- OCI container image publishing via 'dotnet publish /t:PublishContainer' -->
