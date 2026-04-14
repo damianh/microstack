@@ -15,6 +15,8 @@ MicroStack emulates 39 AWS services on a single port. Each service handler imple
 
 Buckets, objects, multipart upload, versioning, lifecycle, CORS, tagging, object lock, encryption, ACLs, policies, website hosting. Optional disk persistence via `S3_PERSIST=1`.
 
+See [full S3 documentation](s3).
+
 **Protocol:** REST/XML (path-based routing by HTTP method and URL path)
 
 **Operations:** CreateBucket, DeleteBucket, ListBuckets, HeadBucket, PutObject, GetObject, DeleteObject, HeadObject, CopyObject, ListObjects (v1+v2), DeleteObjects, CreateMultipartUpload, UploadPart, CompleteMultipartUpload, AbortMultipartUpload, ListMultipartUploads, ListParts, GetBucketVersioning, PutBucketVersioning, ListObjectVersions, GetBucketEncryption, PutBucketEncryption, DeleteBucketEncryption, GetBucketLifecycleConfiguration, PutBucketLifecycleConfiguration, DeleteBucketLifecycle, GetBucketCors, PutBucketCors, DeleteBucketCors, GetBucketAcl, PutBucketAcl, GetBucketTagging, PutBucketTagging, DeleteBucketTagging, GetBucketPolicy, PutBucketPolicy, DeleteBucketPolicy, GetBucketLogging, PutBucketLogging, GetBucketWebsite, PutBucketWebsite, DeleteBucketWebsite, PutObjectLockConfiguration, GetObjectLockConfiguration, PutObjectRetention, GetObjectRetention, PutObjectLegalHold, GetObjectLegalHold, GetObjectTagging, PutObjectTagging, DeleteObjectTagging, GetPublicAccessBlock, PutPublicAccessBlock, DeletePublicAccessBlock, PutBucketOwnershipControls, GetBucketOwnershipControls, DeleteBucketOwnershipControls
@@ -22,6 +24,8 @@ Buckets, objects, multipart upload, versioning, lifecycle, CORS, tagging, object
 ### SQS
 
 Standard and FIFO queues, message batching, dead-letter queues, visibility timeout, tags.
+
+See [full SQS documentation](sqs).
 
 **Protocol:** JSON + Query/XML
 
@@ -31,6 +35,8 @@ Standard and FIFO queues, message batching, dead-letter queues, visibility timeo
 
 Tables, items, queries, scans, transactions, batch operations, TTL, continuous backups, streams, GSIs.
 
+See [full DynamoDB documentation](dynamodb).
+
 **Protocol:** JSON (`X-Amz-Target` header)
 
 **Operations:** CreateTable, DeleteTable, DescribeTable, ListTables, UpdateTable, PutItem, GetItem, DeleteItem, UpdateItem, Query, Scan, BatchWriteItem, BatchGetItem, TransactWriteItems, TransactGetItems, DescribeTimeToLive, UpdateTimeToLive, DescribeContinuousBackups, UpdateContinuousBackups, DescribeEndpoints, TagResource, UntagResource, ListTagsOfResource
@@ -38,6 +44,8 @@ Tables, items, queries, scans, transactions, batch operations, TTL, continuous b
 ### SNS
 
 Topics, subscriptions, publish/fanout to SQS and Lambda. FIFO topics with deduplication.
+
+See [full SNS documentation](sns).
 
 **Protocol:** Query/XML
 
@@ -47,6 +55,8 @@ Topics, subscriptions, publish/fanout to SQS and Lambda. FIFO topics with dedupl
 
 Functions, invocations, versions, aliases, layers, event source mappings (SQS/DynamoDB/Kinesis). Python and Node.js runtimes via warm worker pool.
 
+See [full Lambda documentation](lambda).
+
 **Protocol:** REST/JSON (path-based)
 
 **Operations:** CreateFunction, DeleteFunction, GetFunction, GetFunctionConfiguration, ListFunctions, Invoke, UpdateFunctionCode, UpdateFunctionConfiguration, AddPermission, RemovePermission, GetPolicy, ListVersionsByFunction, PublishVersion, CreateAlias, GetAlias, UpdateAlias, DeleteAlias, ListAliases, TagResource, UntagResource, ListTags, CreateEventSourceMapping, DeleteEventSourceMapping, GetEventSourceMapping, ListEventSourceMappings, UpdateEventSourceMapping, CreateFunctionUrlConfig, GetFunctionUrlConfig, UpdateFunctionUrlConfig, DeleteFunctionUrlConfig, ListFunctionUrlConfigs, PutFunctionConcurrency, GetFunctionConcurrency, DeleteFunctionConcurrency, PutFunctionEventInvokeConfig, GetFunctionEventInvokeConfig, DeleteFunctionEventInvokeConfig, PublishLayerVersion, GetLayerVersion, GetLayerVersionByArn, ListLayerVersions, DeleteLayerVersion, ListLayers, AddLayerVersionPermission, RemoveLayerVersionPermission, GetLayerVersionPolicy
@@ -54,6 +64,8 @@ Functions, invocations, versions, aliases, layers, event source mappings (SQS/Dy
 ### Step Functions
 
 Full ASL interpreter with Retry/Catch, waitForTaskToken, Activities, TestState API. All state types: Pass, Task, Choice, Wait, Succeed, Fail, Map, Parallel. SFN mock config compatible.
+
+See [full Step Functions documentation](step-functions).
 
 **Protocol:** JSON (`X-Amz-Target` header)
 
@@ -65,6 +77,8 @@ Full ASL interpreter with Retry/Catch, waitForTaskToken, Activities, TestState A
 
 Users, roles, policies, access keys, groups, instance profiles, service-linked roles, OIDC providers.
 
+See [full IAM documentation](iam).
+
 **Protocol:** Query/XML
 
 **Operations:** CreateUser, GetUser, ListUsers, DeleteUser, CreateRole, GetRole, ListRoles, DeleteRole, UpdateRole, UpdateAssumeRolePolicy, CreatePolicy, GetPolicy, GetPolicyVersion, ListPolicyVersions, CreatePolicyVersion, DeletePolicyVersion, ListPolicies, DeletePolicy, ListEntitiesForPolicy, AttachRolePolicy, DetachRolePolicy, ListAttachedRolePolicies, PutRolePolicy, GetRolePolicy, DeleteRolePolicy, ListRolePolicies, AttachUserPolicy, DetachUserPolicy, ListAttachedUserPolicies, CreateAccessKey, ListAccessKeys, DeleteAccessKey, CreateInstanceProfile, DeleteInstanceProfile, GetInstanceProfile, AddRoleToInstanceProfile, RemoveRoleFromInstanceProfile, ListInstanceProfiles, ListInstanceProfilesForRole, TagRole, UntagRole, ListRoleTags, TagUser, UntagUser, ListUserTags, TagPolicy, UntagPolicy, ListPolicyTags, SimulatePrincipalPolicy, SimulateCustomPolicy, CreateGroup, GetGroup, DeleteGroup, ListGroups, AddUserToGroup, RemoveUserFromGroup, ListGroupsForUser, PutUserPolicy, GetUserPolicy, DeleteUserPolicy, ListUserPolicies, CreateServiceLinkedRole, DeleteServiceLinkedRole, GetServiceLinkedRoleDeletionStatus, CreateOpenIDConnectProvider, GetOpenIDConnectProvider, DeleteOpenIDConnectProvider
@@ -73,11 +87,15 @@ Users, roles, policies, access keys, groups, instance profiles, service-linked r
 
 **Protocol:** JSON + Query/XML
 
+See [full STS documentation](sts).
+
 **Operations:** GetCallerIdentity, AssumeRole, AssumeRoleWithWebIdentity, GetSessionToken, GetAccessKeyInfo
 
 ### KMS
 
 Symmetric and RSA keys, encryption, signing, aliases, key rotation, key policies.
+
+See [full KMS documentation](kms).
 
 **Protocol:** JSON
 
@@ -87,6 +105,8 @@ Symmetric and RSA keys, encryption, signing, aliases, key rotation, key policies
 
 Secrets with versioning, rotation staging, batch retrieval, resource policies.
 
+See [full Secrets Manager documentation](secrets-manager).
+
 **Protocol:** JSON
 
 **Operations:** CreateSecret, GetSecretValue, BatchGetSecretValue, ListSecrets, DeleteSecret, RestoreSecret, UpdateSecret, DescribeSecret, PutSecretValue, UpdateSecretVersionStage, TagResource, UntagResource, ListSecretVersionIds, RotateSecret, GetRandomPassword, ReplicateSecretToRegions, PutResourcePolicy, GetResourcePolicy, DeleteResourcePolicy, ValidateResourcePolicy
@@ -94,6 +114,8 @@ Secrets with versioning, rotation staging, batch retrieval, resource policies.
 ### Cognito User Pools
 
 User pools, users, groups, app clients, JWT tokens, MFA, auth flows.
+
+See [full Cognito documentation](cognito).
 
 **Protocol:** JSON
 
@@ -103,6 +125,8 @@ User pools, users, groups, app clients, JWT tokens, MFA, auth flows.
 
 Identity pools, federated identities, credentials.
 
+See [full Cognito documentation](cognito).
+
 **Protocol:** JSON
 
 **Operations:** CreateIdentityPool, DeleteIdentityPool, DescribeIdentityPool, ListIdentityPools, UpdateIdentityPool, GetId, GetCredentialsForIdentity, GetOpenIdToken, SetIdentityPoolRoles, GetIdentityPoolRoles, ListIdentities, DescribeIdentity, MergeDeveloperIdentities, UnlinkDeveloperIdentity, UnlinkIdentity, TagResource, UntagResource, ListTagsForResource
@@ -111,6 +135,8 @@ Identity pools, federated identities, credentials.
 
 Certificates with auto-issuance, DNS validation, SANs.
 
+See [full ACM documentation](acm).
+
 **Protocol:** JSON
 
 **Operations:** RequestCertificate, DescribeCertificate, ListCertificates, DeleteCertificate, GetCertificate, ImportCertificate, AddTagsToCertificate, RemoveTagsFromCertificate, ListTagsForCertificate, UpdateCertificateOptions, RenewCertificate, ResendValidationEmail
@@ -118,6 +144,8 @@ Certificates with auto-issuance, DNS validation, SANs.
 ### WAF v2
 
 Web ACLs, IP sets, rule groups, resource associations. LockToken enforced.
+
+See [full WAF v2 documentation](waf).
 
 **Protocol:** JSON
 
@@ -129,6 +157,8 @@ Web ACLs, IP sets, rule groups, resource associations. LockToken enforced.
 
 Instances, VPCs, subnets, security groups, EBS volumes, snapshots, key pairs, route tables, internet gateways, NAT gateways, elastic IPs, network ACLs, VPC endpoints, launch templates, and more.
 
+See [full EC2 documentation](ec2).
+
 **Protocol:** Query/XML
 
 **Operations:** RunInstances, DescribeInstances, TerminateInstances, StopInstances, StartInstances, RebootInstances, DescribeInstanceAttribute, DescribeInstanceTypes, DescribeImages, CreateSecurityGroup, DeleteSecurityGroup, DescribeSecurityGroups, AuthorizeSecurityGroupIngress, RevokeSecurityGroupIngress, AuthorizeSecurityGroupEgress, RevokeSecurityGroupEgress, DescribeSecurityGroupRules, CreateKeyPair, DeleteKeyPair, DescribeKeyPairs, ImportKeyPair, DescribeVpcs, CreateVpc, DeleteVpc, DescribeVpcAttribute, ModifyVpcAttribute, DescribeSubnets, CreateSubnet, DeleteSubnet, ModifySubnetAttribute, CreateInternetGateway, DeleteInternetGateway, DescribeInternetGateways, AttachInternetGateway, DetachInternetGateway, DescribeAvailabilityZones, AllocateAddress, ReleaseAddress, AssociateAddress, DisassociateAddress, DescribeAddresses, CreateTags, DeleteTags, DescribeTags, CreateRouteTable, DeleteRouteTable, DescribeRouteTables, AssociateRouteTable, DisassociateRouteTable, ReplaceRouteTableAssociation, CreateRoute, ReplaceRoute, DeleteRoute, CreateNetworkInterface, DeleteNetworkInterface, DescribeNetworkInterfaces, AttachNetworkInterface, DetachNetworkInterface, CreateVpcEndpoint, DeleteVpcEndpoints, DescribeVpcEndpoints, ModifyVpcEndpoint, DescribePrefixLists, CreateVolume, DeleteVolume, DescribeVolumes, DescribeVolumeStatus, AttachVolume, DetachVolume, ModifyVolume, CreateSnapshot, DeleteSnapshot, DescribeSnapshots, CopySnapshot, CreateNatGateway, DescribeNatGateways, DeleteNatGateway, CreateNetworkAcl, DescribeNetworkAcls, DeleteNetworkAcl, CreateNetworkAclEntry, DeleteNetworkAclEntry, ReplaceNetworkAclEntry, CreateFlowLogs, DescribeFlowLogs, DeleteFlowLogs, CreateVpcPeeringConnection, AcceptVpcPeeringConnection, DescribeVpcPeeringConnections, DeleteVpcPeeringConnection, CreateDhcpOptions, AssociateDhcpOptions, DescribeDhcpOptions, DeleteDhcpOptions, CreateManagedPrefixList, DescribeManagedPrefixLists, GetManagedPrefixListEntries, ModifyManagedPrefixList, DeleteManagedPrefixList, CreateLaunchTemplate, CreateLaunchTemplateVersion, DescribeLaunchTemplates, DescribeLaunchTemplateVersions, ModifyLaunchTemplate, DeleteLaunchTemplate, DescribeAccountAttributes
@@ -136,6 +166,8 @@ Instances, VPCs, subnets, security groups, EBS volumes, snapshots, key pairs, ro
 ### Route 53
 
 Hosted zones, record sets, health checks, tags.
+
+See [full Route 53 documentation](route53).
 
 **Protocol:** REST/XML (path-based)
 
@@ -145,6 +177,8 @@ Hosted zones, record sets, health checks, tags.
 
 Distributions, invalidations, origin access controls. ETag-based optimistic concurrency.
 
+See [full CloudFront documentation](cloudfront).
+
 **Protocol:** REST/XML (path-based)
 
 **Operations:** CreateDistribution, GetDistribution, GetDistributionConfig, ListDistributions, UpdateDistribution, DeleteDistribution, CreateInvalidation, ListInvalidations, GetInvalidation, CreateOriginAccessControl, GetOriginAccessControl, GetOriginAccessControlConfig, ListOriginAccessControls, UpdateOriginAccessControl, DeleteOriginAccessControl, TagResource, UntagResource, ListTagsForResource
@@ -152,6 +186,8 @@ Distributions, invalidations, origin access controls. ETag-based optimistic conc
 ### ALB (ELBv2)
 
 Load balancers, target groups, listeners, rules. ALB→Lambda live traffic routing.
+
+See [full ALB documentation](alb).
 
 **Protocol:** Query/XML
 
@@ -161,21 +197,27 @@ Load balancers, target groups, listeners, rules. ALB→Lambda live traffic routi
 
 REST APIs (v1) with MOCK and AWS_PROXY integrations. HTTP APIs (v2) with Lambda proxy. Data plane via `{apiId}.execute-api.localhost`.
 
+See [full API Gateway documentation](api-gateway).
+
 **Protocol:** REST/JSON (path-based)
 
 ### Service Discovery (Cloud Map)
 
 Namespaces, services, instances with Route 53 integration.
 
+See [full Service Discovery documentation](service-discovery).
+
 **Protocol:** JSON
 
-**Operations:** CreateHttpNamespace, CreatePrivateDnsNamespace, CreatePublicDnsNamespace, CreateService, DeleteNamespace, DeleteService, DeregisterInstance, DiscoverInstances, DiscoverInstancesRevision, GetInstance, GetInstancesHealthStatus, GetNamespace, GetOperation, GetService, ListInstances, ListNamespaces, ListOperations, ListServices, ListTagsForResource, RegisterInstance, TagResource, UntagResource, UpdateHttpNamespace, UpdateInstanceCustomHealthStatus, UpdatePrivateDnsNamespace, UpdatePublicDnsNamespace, UpdateService
+**Operations:** CreateHttpNamespace, CreatePrivateDnsNamespace, CreatePublicDnsNamespace, CreateService, DeleteNamespace, DeleteService, DeregisterInstance, DiscoverInstances, DiscoverInstancesRevision, GetInstance, GetInstancesHealthStatus, GetNamespace, GetOperation, GetService, GetServiceAttributes, ListInstances, ListNamespaces, ListOperations, ListServices, ListTagsForResource, RegisterInstance, TagResource, UntagResource, UpdateHttpNamespace, UpdateInstanceCustomHealthStatus, UpdatePrivateDnsNamespace, UpdatePublicDnsNamespace, UpdateService, UpdateServiceAttributes, DeleteServiceAttributes
 
 ## Messaging & Streaming
 
 ### EventBridge
 
 Event buses, rules, targets, archives, replays, connections, API destinations, endpoints, partner events.
+
+See [full EventBridge documentation](eventbridge).
 
 **Protocol:** JSON
 
@@ -185,6 +227,8 @@ Event buses, rules, targets, archives, replays, connections, API destinations, e
 
 Streams, shards, records, consumers. Partition key routing, AWS limits enforced.
 
+See [full Kinesis documentation](kinesis).
+
 **Protocol:** JSON
 
 **Operations:** CreateStream, DeleteStream, DescribeStream, DescribeStreamSummary, ListStreams, ListShards, PutRecord, PutRecords, GetShardIterator, GetRecords, IncreaseStreamRetentionPeriod, DecreaseStreamRetentionPeriod, AddTagsToStream, RemoveTagsFromStream, ListTagsForStream, MergeShards, SplitShard, UpdateShardCount, RegisterStreamConsumer, DeregisterStreamConsumer, ListStreamConsumers, DescribeStreamConsumer, StartStreamEncryption, StopStreamEncryption, EnableEnhancedMonitoring, DisableEnhancedMonitoring
@@ -192,6 +236,8 @@ Streams, shards, records, consumers. Partition key routing, AWS limits enforced.
 ### Firehose
 
 Delivery streams, records. S3 destinations write to the local S3 emulator.
+
+See [full Firehose documentation](firehose).
 
 **Protocol:** JSON
 
@@ -203,6 +249,8 @@ Delivery streams, records. S3 destinations write to the local S3 emulator.
 
 Stacks, change sets, exports, cross-stack references. JSON and YAML templates with intrinsic functions and pseudo-parameters.
 
+See [full CloudFormation documentation](cloudformation).
+
 **Protocol:** Query/XML
 
 **Operations:** CreateStack, DescribeStacks, ListStacks, DeleteStack, UpdateStack, DescribeStackEvents, DescribeStackResource, DescribeStackResources, ListStackResources, GetTemplate, ValidateTemplate, ListExports, CreateChangeSet, DescribeChangeSet, ExecuteChangeSet, DeleteChangeSet, ListChangeSets, GetTemplateSummary, UpdateTerminationProtection, SetStackPolicy, GetStackPolicy, ListImports
@@ -210,6 +258,8 @@ Stacks, change sets, exports, cross-stack references. JSON and YAML templates wi
 ### CloudWatch Logs
 
 Log groups, streams, events, metric filters, subscription filters, destinations, queries.
+
+See [full CloudWatch Logs documentation](cloudwatch-logs).
 
 **Protocol:** JSON
 
@@ -219,6 +269,8 @@ Log groups, streams, events, metric filters, subscription filters, destinations,
 
 Metrics, alarms (standard + composite), dashboards. CBOR and JSON protocol.
 
+See [full CloudWatch Metrics documentation](cloudwatch).
+
 **Protocol:** Query/XML + Smithy RPC v2 CBOR
 
 **Operations:** PutMetricData, GetMetricStatistics, GetMetricData, ListMetrics, PutMetricAlarm, PutCompositeAlarm, DescribeAlarms, DescribeAlarmsForMetric, DescribeAlarmHistory, DeleteAlarms, EnableAlarmActions, DisableAlarmActions, SetAlarmState, TagResource, UntagResource, ListTagsForResource, PutDashboard, GetDashboard, DeleteDashboards, ListDashboards
@@ -226,6 +278,8 @@ Metrics, alarms (standard + composite), dashboards. CBOR and JSON protocol.
 ### SSM Parameter Store
 
 Parameters (String, SecureString, StringList), history, labels, tags.
+
+See [full SSM documentation](ssm).
 
 **Protocol:** JSON
 
@@ -237,6 +291,8 @@ Parameters (String, SecureString, StringList), history, labels, tags.
 
 Clusters, task definitions, tasks, services, capacity providers. Full Terraform ECS coverage.
 
+See [full ECS documentation](ecs).
+
 **Protocol:** JSON
 
 **Operations:** CreateCluster, DeleteCluster, DescribeClusters, ListClusters, UpdateCluster, UpdateClusterSettings, PutClusterCapacityProviders, RegisterTaskDefinition, DeregisterTaskDefinition, DescribeTaskDefinition, ListTaskDefinitions, ListTaskDefinitionFamilies, DeleteTaskDefinitions, CreateService, DeleteService, DescribeServices, UpdateService, ListServices, ListServicesByNamespace, RunTask, StopTask, DescribeTasks, ListTasks, ExecuteCommand, UpdateTaskProtection, GetTaskProtection, TagResource, UntagResource, ListTagsForResource, ListAccountSettings, PutAccountSetting, PutAccountSettingDefault, DeleteAccountSetting, CreateCapacityProvider, DeleteCapacityProvider, UpdateCapacityProvider, DescribeCapacityProviders, PutAttributes, DeleteAttributes, ListAttributes, DescribeServiceDeployments, ListServiceDeployments, DescribeServiceRevisions, SubmitTaskStateChange, SubmitContainerStateChange, SubmitAttachmentStateChanges, DiscoverPollEndpoint
@@ -245,6 +301,8 @@ Clusters, task definitions, tasks, services, capacity providers. Full Terraform 
 
 Clusters, instance groups, steps, bootstrap actions.
 
+See [full EMR documentation](emr).
+
 **Protocol:** JSON
 
 **Operations:** RunJobFlow, DescribeCluster, ListClusters, TerminateJobFlows, ModifyCluster, SetTerminationProtection, SetVisibleToAllUsers, AddJobFlowSteps, DescribeStep, ListSteps, CancelSteps, AddInstanceFleet, ListInstanceFleets, ModifyInstanceFleet, AddInstanceGroups, ListInstanceGroups, ModifyInstanceGroups, ListBootstrapActions, AddTags, RemoveTags, GetBlockPublicAccessConfiguration, PutBlockPublicAccessConfiguration
@@ -252,6 +310,8 @@ Clusters, instance groups, steps, bootstrap actions.
 ### ECR
 
 Repositories, images, lifecycle policies, layer upload.
+
+See [full ECR documentation](ecr).
 
 **Protocol:** JSON
 
@@ -263,6 +323,8 @@ Repositories, images, lifecycle policies, layer upload.
 
 DB instances, clusters, global clusters, proxies, parameter groups, subnet groups, snapshots, event subscriptions.
 
+See [full RDS documentation](rds).
+
 **Protocol:** Query/XML
 
 **Operations:** CreateDBInstance, DescribeDBInstances, ModifyDBInstance, DeleteDBInstance, RebootDBInstance, StopDBInstance, StartDBInstance, CreateDBCluster, DescribeDBClusters, ModifyDBCluster, DeleteDBCluster, StopDBCluster, StartDBCluster, CreateDBSubnetGroup, DescribeDBSubnetGroups, ModifyDBSubnetGroup, DeleteDBSubnetGroup, CreateDBParameterGroup, DescribeDBParameterGroups, DeleteDBParameterGroup, DescribeDBParameters, ModifyDBParameterGroup, CreateDBClusterParameterGroup, DescribeDBClusterParameterGroups, DeleteDBClusterParameterGroup, CreateDBSnapshot, DescribeDBSnapshots, DeleteDBSnapshot, CopyDBSnapshot, CreateDBClusterSnapshot, DescribeDBClusterSnapshots, DeleteDBClusterSnapshot, AddTagsToResource, ListTagsForResource, RemoveTagsFromResource, CreateEventSubscription, DescribeEventSubscriptions, DeleteEventSubscription, CreateDBProxy, DescribeDBProxies, DeleteDBProxy, CreateOptionGroup, DescribeOptionGroups, DeleteOptionGroup, CreateGlobalCluster, DescribeGlobalClusters, ModifyGlobalCluster, DeleteGlobalCluster, RemoveFromGlobalCluster, DescribeOrderableDBInstanceOptions, DescribeEngineDefaultClusterParameters, DescribeDBEngineVersions
@@ -271,11 +333,15 @@ DB instances, clusters, global clusters, proxies, parameter groups, subnet group
 
 **Protocol:** REST/JSON (path-based)
 
+See [full RDS Data API documentation](rds-data).
+
 **Operations:** ExecuteStatement, BatchExecuteStatement, BeginTransaction, CommitTransaction, RollbackTransaction
 
 ### ElastiCache
 
 Cache clusters, replication groups, subnet groups, parameter groups, users, user groups, snapshots.
+
+See [full ElastiCache documentation](elasticache).
 
 **Protocol:** Query/XML
 
@@ -287,6 +353,8 @@ Cache clusters, replication groups, subnet groups, parameter groups, users, user
 
 Databases, tables, crawlers, jobs, triggers, partitions, connections, schema registry.
 
+See [full Glue documentation](glue).
+
 **Protocol:** JSON
 
 **Operations:** CreateDatabase, GetDatabase, GetDatabases, DeleteDatabase, UpdateDatabase, CreateTable, GetTable, GetTables, DeleteTable, UpdateTable, BatchDeleteTable, BatchGetTable, CreatePartition, GetPartition, GetPartitions, DeletePartition, BatchCreatePartition, BatchDeletePartition, UpdatePartition, CreateCrawler, GetCrawler, GetCrawlers, DeleteCrawler, UpdateCrawler, StartCrawler, StopCrawler, GetCrawlerMetrics, CreateJob, GetJob, GetJobs, DeleteJob, UpdateJob, StartJobRun, GetJobRun, GetJobRuns, BatchStopJobRun, CreateRegistry, GetRegistry, ListRegistries, DeleteRegistry, CreateSchema, GetSchema, ListSchemas, DeleteSchema, RegisterSchemaVersion, GetSchemaVersion, ListSchemaVersions, TagResource, UntagResource, GetTags
@@ -294,6 +362,8 @@ Databases, tables, crawlers, jobs, triggers, partitions, connections, schema reg
 ### Athena
 
 Work groups, named queries, query executions, data catalogs, prepared statements.
+
+See [full Athena documentation](athena).
 
 **Protocol:** JSON
 
@@ -305,6 +375,8 @@ Work groups, named queries, query executions, data catalogs, prepared statements
 
 Email identities, templates, configuration sets (v1 + v2). Emails stored in-memory, not sent.
 
+See [full SES documentation](ses).
+
 **Protocol:** Query/XML + REST/JSON (v2)
 
 **Operations:** SendEmail, SendRawEmail, SendTemplatedEmail, SendBulkTemplatedEmail, VerifyEmailIdentity, VerifyEmailAddress, VerifyDomainIdentity, VerifyDomainDkim, ListIdentities, GetIdentityVerificationAttributes, DeleteIdentity, GetSendQuota, GetSendStatistics, ListVerifiedEmailAddresses, CreateConfigurationSet, DeleteConfigurationSet, DescribeConfigurationSet, ListConfigurationSets, CreateTemplate, GetTemplate, DeleteTemplate, ListTemplates, UpdateTemplate, GetIdentityDkimAttributes, SetIdentityNotificationTopic, SetIdentityFeedbackForwardingEnabled
@@ -313,13 +385,27 @@ Email identities, templates, configuration sets (v1 + v2). Emails stored in-memo
 
 File systems, mount targets, access points.
 
+See [full EFS documentation](efs).
+
 **Protocol:** REST/JSON (path-based)
 
 ### AppSync
 
 GraphQL APIs, types, resolvers, data sources, API keys.
 
+See [full AppSync documentation](appsync).
+
 **Protocol:** REST/JSON (path-based)
+
+### S3Files
+
+S3-backed virtual file systems, mount targets, access points, policies, and synchronization configuration.
+
+See [full S3Files documentation](s3files).
+
+**Protocol:** REST/JSON (path-based)
+
+**Operations:** CreateFileSystem, GetFileSystem, ListFileSystems, DeleteFileSystem, CreateMountTarget, GetMountTarget, ListMountTargets, DeleteMountTarget, UpdateMountTarget, CreateAccessPoint, GetAccessPoint, ListAccessPoints, DeleteAccessPoint, GetFileSystemPolicy, PutFileSystemPolicy, DeleteFileSystemPolicy, GetSynchronizationConfiguration, PutSynchronizationConfiguration, TagResource, UntagResource, ListTagsForResource
 
 ## Protocol Support
 
