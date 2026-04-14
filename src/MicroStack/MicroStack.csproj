@@ -16,9 +16,9 @@
   </PropertyGroup>
 
   <!-- OCI container image publishing via 'dotnet publish /t:PublishContainer' -->
-  <!-- Uses runtime-deps (not aspnet) because AOT produces a self-contained native binary -->
+  <!-- AOT produces a fully self-contained native binary; bare Alpine is sufficient -->
   <PropertyGroup>
-    <ContainerBaseImage>mcr.microsoft.com/dotnet/runtime-deps:10.0-alpine</ContainerBaseImage>
+    <ContainerBaseImage>alpine:3.21</ContainerBaseImage>
     <ContainerRepository>microstack</ContainerRepository>
     <ContainerImageTags>$(MinVerVersion);latest</ContainerImageTags>
     <!-- Multi-arch: amd64 + arm64 -->
