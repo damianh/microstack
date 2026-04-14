@@ -185,8 +185,8 @@ internal sealed class Ec2ServiceHandler : IServiceHandler
             "DescribeInstanceAttribute" => DescribeInstanceAttribute(p),
             "DescribeInstanceTypes" => DescribeInstanceTypes(p),
             "DescribeInstanceCreditSpecifications" => DescribeInstanceCreditSpecifications(p),
-            "DescribeSpotInstanceRequests" => Xml(200, "DescribeSpotInstanceRequestsResponse", "<spotInstanceRequestSet/>"),
-            "DescribeCapacityReservations" => Xml(200, "DescribeCapacityReservationsResponse", "<capacityReservationSet/>"),
+            "DescribeSpotInstanceRequests" => Xml(200, "DescribeSpotInstanceRequestsResponse", "<spotInstanceRequestSet></spotInstanceRequestSet>"),
+            "DescribeCapacityReservations" => Xml(200, "DescribeCapacityReservationsResponse", "<capacityReservationSet></capacityReservationSet>"),
             "DescribeImages" => DescribeImages(p),
             "CreateSecurityGroup" => CreateSecurityGroup(p),
             "DeleteSecurityGroup" => DeleteSecurityGroup(p),
@@ -305,9 +305,9 @@ internal sealed class Ec2ServiceHandler : IServiceHandler
             "DescribeLaunchTemplateVersions" => DescribeLaunchTemplateVersions(p),
             "ModifyLaunchTemplate" => ModifyLaunchTemplate(p),
             "DeleteLaunchTemplate" => DeleteLaunchTemplate(p),
-            "DescribeAccountAttributes" => Xml(200, "DescribeAccountAttributesResponse", "<accountAttributeSet/>"),
-            "DescribeInstanceMaintenanceOptions" => Xml(200, "DescribeInstanceMaintenanceOptionsResponse", "<instanceMaintenanceOptionSet/>"),
-            "DescribeInstanceTopology" => Xml(200, "DescribeInstanceTopologyResponse", "<instanceSet/>"),
+            "DescribeAccountAttributes" => Xml(200, "DescribeAccountAttributesResponse", "<accountAttributeSet></accountAttributeSet>"),
+            "DescribeInstanceMaintenanceOptions" => Xml(200, "DescribeInstanceMaintenanceOptionsResponse", "<instanceMaintenanceOptionSet></instanceMaintenanceOptionSet>"),
+            "DescribeInstanceTopology" => Xml(200, "DescribeInstanceTopologyResponse", "<instanceSet></instanceSet>"),
             _ => Error("InvalidAction", $"Unknown EC2 action: {action}", 400),
         };
     }
@@ -371,7 +371,7 @@ internal sealed class Ec2ServiceHandler : IServiceHandler
         }
 
         var reservationId = "r-" + Guid.NewGuid().ToString("N")[..17];
-        var inner = $"<instancesSet>{sb}</instancesSet><reservationId>{reservationId}</reservationId><ownerId>{AccountContext.GetAccountId()}</ownerId><groupSet/>";
+        var inner = $"<instancesSet>{sb}</instancesSet><reservationId>{reservationId}</reservationId><ownerId>{AccountContext.GetAccountId()}</ownerId><groupSet></groupSet>";
         return Xml(200, "RunInstancesResponse", inner);
     }
 
@@ -387,7 +387,7 @@ internal sealed class Ec2ServiceHandler : IServiceHandler
             if (!MatchesInstanceFilters(inst, filters)) continue;
 
             var iid = (string)inst["InstanceId"];
-            sb.Append($"<item><reservationId>r-{iid[2..]}</reservationId><ownerId>{AccountContext.GetAccountId()}</ownerId><groupSet/><instancesSet>{InstanceXml(inst)}</instancesSet></item>");
+            sb.Append($"<item><reservationId>r-{iid[2..]}</reservationId><ownerId>{AccountContext.GetAccountId()}</ownerId><groupSet></groupSet><instancesSet>{InstanceXml(inst)}</instancesSet></item>");
         }
 
         return Xml(200, "DescribeInstancesResponse", $"<reservationSet>{sb}</reservationSet>");
@@ -465,11 +465,11 @@ internal sealed class Ec2ServiceHandler : IServiceHandler
             "instanceType" => $"<instanceType><value>{inst.GetValueOrDefault("InstanceType", "t2.micro")}</value></instanceType>",
             "instanceInitiatedShutdownBehavior" => "<instanceInitiatedShutdownBehavior><value>stop</value></instanceInitiatedShutdownBehavior>",
             "disableApiTermination" => "<disableApiTermination><value>false</value></disableApiTermination>",
-            "userData" => "<userData/>",
+            "userData" => "<userData></userData>",
             "rootDeviceName" => "<rootDeviceName><value>/dev/xvda</value></rootDeviceName>",
             "sourceDestCheck" => "<sourceDestCheck><value>true</value></sourceDestCheck>",
             "ebsOptimized" => "<ebsOptimized><value>false</value></ebsOptimized>",
-            _ => $"<{attribute}/>",
+            _ => $"<{attribute}></{attribute}>",
         };
 
         return Xml(200, "DescribeInstanceAttributeResponse", $"<instanceId>{instanceId}</instanceId>{valueXml}");
@@ -1345,7 +1345,7 @@ internal sealed class Ec2ServiceHandler : IServiceHandler
     {
         var ids = ParseMemberList(p, "VpcEndpointId");
         foreach (var id in ids) _vpcEndpoints.TryRemove(id, out _);
-        return Xml(200, "DeleteVpcEndpointsResponse", "<unsuccessful/>");
+        return Xml(200, "DeleteVpcEndpointsResponse", "<unsuccessful></unsuccessful>");
     }
 
     private ServiceResponse DescribeVpcEndpoints(Dictionary<string, string[]> p)
@@ -1468,7 +1468,7 @@ internal sealed class Ec2ServiceHandler : IServiceHandler
         foreach (var vol in _volumes.Values.ToList())
         {
             if (filterIds.Count > 0 && !filterIds.Contains((string)vol["VolumeId"])) continue;
-            sb.Append($"<item><volumeId>{vol["VolumeId"]}</volumeId><availabilityZone>{vol["AvailabilityZone"]}</availabilityZone><volumeStatus><status>ok</status><details><item><name>io-enabled</name><status>passed</status></item></details></volumeStatus><actionsSet/><eventsSet/></item>");
+            sb.Append($"<item><volumeId>{vol["VolumeId"]}</volumeId><availabilityZone>{vol["AvailabilityZone"]}</availabilityZone><volumeStatus><status>ok</status><details><item><name>io-enabled</name><status>passed</status></item></details></volumeStatus><actionsSet></actionsSet><eventsSet></eventsSet></item>");
         }
         return Xml(200, "DescribeVolumeStatusResponse", $"<volumeStatusSet>{sb}</volumeStatusSet>");
     }
@@ -1656,7 +1656,7 @@ internal sealed class Ec2ServiceHandler : IServiceHandler
             ["State"] = "available", ["CreateTime"] = now, ["Tags"] = tags,
         };
         if (tags.Count > 0) _tags[natId] = tags;
-        return Xml(200, "CreateNatGatewayResponse", $"<natGateway><natGatewayId>{natId}</natGatewayId><subnetId>{subnetId}</subnetId><vpcId>{vpcId}</vpcId><state>available</state><connectivityType>{connectivity}</connectivityType><createTime>{now}</createTime><natGatewayAddressSet/><tagSet/></natGateway>");
+        return Xml(200, "CreateNatGatewayResponse", $"<natGateway><natGatewayId>{natId}</natGatewayId><subnetId>{subnetId}</subnetId><vpcId>{vpcId}</vpcId><state>available</state><connectivityType>{connectivity}</connectivityType><createTime>{now}</createTime><natGatewayAddressSet></natGatewayAddressSet><tagSet></tagSet></natGateway>");
     }
 
     private ServiceResponse DescribeNatGateways(Dictionary<string, string[]> p)
@@ -1670,7 +1670,7 @@ internal sealed class Ec2ServiceHandler : IServiceHandler
             if (filters.TryGetValue("state", out var stateF) && !stateF.Contains((string)nat["State"])) continue;
             if (filters.TryGetValue("vpc-id", out var vpcF) && !vpcF.Contains((string)nat["VpcId"])) continue;
             if (filters.TryGetValue("subnet-id", out var subF) && !subF.Contains((string)nat["SubnetId"])) continue;
-            sb.Append($"<item><natGatewayId>{nat["NatGatewayId"]}</natGatewayId><subnetId>{nat["SubnetId"]}</subnetId><vpcId>{nat["VpcId"]}</vpcId><state>{nat["State"]}</state><connectivityType>{nat["ConnectivityType"]}</connectivityType><createTime>{nat["CreateTime"]}</createTime><natGatewayAddressSet/><tagSet/></item>");
+            sb.Append($"<item><natGatewayId>{nat["NatGatewayId"]}</natGatewayId><subnetId>{nat["SubnetId"]}</subnetId><vpcId>{nat["VpcId"]}</vpcId><state>{nat["State"]}</state><connectivityType>{nat["ConnectivityType"]}</connectivityType><createTime>{nat["CreateTime"]}</createTime><natGatewayAddressSet></natGatewayAddressSet><tagSet></tagSet></item>");
         }
         return Xml(200, "DescribeNatGatewaysResponse", $"<natGatewaySet>{sb}</natGatewaySet>");
     }
@@ -1702,7 +1702,7 @@ internal sealed class Ec2ServiceHandler : IServiceHandler
             ["Tags"] = tags, ["OwnerId"] = accountId,
         };
         if (tags.Count > 0) _tags[aclId] = tags;
-        return Xml(200, "CreateNetworkAclResponse", $"<networkAcl><networkAclId>{aclId}</networkAclId><vpcId>{vpcId}</vpcId><default>false</default><entrySet/><associationSet/><tagSet/><ownerId>{accountId}</ownerId></networkAcl>");
+        return Xml(200, "CreateNetworkAclResponse", $"<networkAcl><networkAclId>{aclId}</networkAclId><vpcId>{vpcId}</vpcId><default>false</default><entrySet></entrySet><associationSet></associationSet><tagSet></tagSet><ownerId>{accountId}</ownerId></networkAcl>");
     }
 
     private ServiceResponse DescribeNetworkAcls(Dictionary<string, string[]> p)
@@ -1728,7 +1728,7 @@ internal sealed class Ec2ServiceHandler : IServiceHandler
             foreach (var a in assocs)
                 assocsSb.Append($"<item><networkAclAssociationId>{a["NetworkAclAssociationId"]}</networkAclAssociationId><networkAclId>{acl["NetworkAclId"]}</networkAclId><subnetId>{a["SubnetId"]}</subnetId></item>");
             var isDefault = (bool)acl["IsDefault"] ? "true" : "false";
-            sb.Append($"<item><networkAclId>{acl["NetworkAclId"]}</networkAclId><vpcId>{acl["VpcId"]}</vpcId><default>{isDefault}</default><entrySet>{entriesSb}</entrySet><associationSet>{assocsSb}</associationSet><tagSet/><ownerId>{acl["OwnerId"]}</ownerId></item>");
+            sb.Append($"<item><networkAclId>{acl["NetworkAclId"]}</networkAclId><vpcId>{acl["VpcId"]}</vpcId><default>{isDefault}</default><entrySet>{entriesSb}</entrySet><associationSet>{assocsSb}</associationSet><tagSet></tagSet><ownerId>{acl["OwnerId"]}</ownerId></item>");
         }
         return Xml(200, "DescribeNetworkAclsResponse", $"<networkAclSet>{sb}</networkAclSet>");
     }
@@ -1833,7 +1833,7 @@ internal sealed class Ec2ServiceHandler : IServiceHandler
         }
         var idsSb = new StringBuilder();
         foreach (var fid in created) idsSb.Append($"<item>{fid}</item>");
-        return Xml(200, "CreateFlowLogsResponse", $"<flowLogIdSet>{idsSb}</flowLogIdSet><unsuccessful/>");
+        return Xml(200, "CreateFlowLogsResponse", $"<flowLogIdSet>{idsSb}</flowLogIdSet><unsuccessful></unsuccessful>");
     }
 
     private ServiceResponse DescribeFlowLogs(Dictionary<string, string[]> p)
@@ -1854,7 +1854,7 @@ internal sealed class Ec2ServiceHandler : IServiceHandler
     {
         var ids = ParseMemberList(p, "FlowLogId");
         foreach (var fid in ids) _flowLogs.TryRemove(fid, out _);
-        return Xml(200, "DeleteFlowLogsResponse", "<unsuccessful/>");
+        return Xml(200, "DeleteFlowLogsResponse", "<unsuccessful></unsuccessful>");
     }
 
     // ── VPC Peering ───────────────────────────────────────────────────────────
@@ -1879,7 +1879,7 @@ internal sealed class Ec2ServiceHandler : IServiceHandler
             ["Status"] = new Dictionary<string, object> { ["Code"] = "pending-acceptance", ["Message"] = "Pending Acceptance by " + peerOwnerId },
             ["ExpirationTime"] = NowTs(), ["Tags"] = new List<Dictionary<string, string>>(),
         };
-        return Xml(200, "CreateVpcPeeringConnectionResponse", $"<vpcPeeringConnection><vpcPeeringConnectionId>{pcxId}</vpcPeeringConnectionId><requesterVpcInfo><vpcId>{vpcId}</vpcId><ownerId>{accountId}</ownerId><region>{Region}</region></requesterVpcInfo><accepterVpcInfo><vpcId>{peerVpcId}</vpcId><ownerId>{peerOwnerId}</ownerId><region>{peerRegion}</region></accepterVpcInfo><status><code>pending-acceptance</code></status><tagSet/></vpcPeeringConnection>");
+        return Xml(200, "CreateVpcPeeringConnectionResponse", $"<vpcPeeringConnection><vpcPeeringConnectionId>{pcxId}</vpcPeeringConnectionId><requesterVpcInfo><vpcId>{vpcId}</vpcId><ownerId>{accountId}</ownerId><region>{Region}</region></requesterVpcInfo><accepterVpcInfo><vpcId>{peerVpcId}</vpcId><ownerId>{peerOwnerId}</ownerId><region>{peerRegion}</region></accepterVpcInfo><status><code>pending-acceptance</code></status><tagSet></tagSet></vpcPeeringConnection>");
     }
 
     private ServiceResponse AcceptVpcPeeringConnection(Dictionary<string, string[]> p)
@@ -1890,7 +1890,7 @@ internal sealed class Ec2ServiceHandler : IServiceHandler
         pcx["Status"] = new Dictionary<string, object> { ["Code"] = "active", ["Message"] = "Active" };
         var req = (Dictionary<string, object>)pcx["RequesterVpcInfo"];
         var acc = (Dictionary<string, object>)pcx["AccepterVpcInfo"];
-        return Xml(200, "AcceptVpcPeeringConnectionResponse", $"<vpcPeeringConnection><vpcPeeringConnectionId>{pcxId}</vpcPeeringConnectionId><requesterVpcInfo><vpcId>{req["VpcId"]}</vpcId><ownerId>{req["OwnerId"]}</ownerId><region>{req["Region"]}</region></requesterVpcInfo><accepterVpcInfo><vpcId>{acc["VpcId"]}</vpcId><ownerId>{acc["OwnerId"]}</ownerId><region>{acc["Region"]}</region></accepterVpcInfo><status><code>active</code></status><tagSet/></vpcPeeringConnection>");
+        return Xml(200, "AcceptVpcPeeringConnectionResponse", $"<vpcPeeringConnection><vpcPeeringConnectionId>{pcxId}</vpcPeeringConnectionId><requesterVpcInfo><vpcId>{req["VpcId"]}</vpcId><ownerId>{req["OwnerId"]}</ownerId><region>{req["Region"]}</region></requesterVpcInfo><accepterVpcInfo><vpcId>{acc["VpcId"]}</vpcId><ownerId>{acc["OwnerId"]}</ownerId><region>{acc["Region"]}</region></accepterVpcInfo><status><code>active</code></status><tagSet></tagSet></vpcPeeringConnection>");
     }
 
     private ServiceResponse DescribeVpcPeeringConnections(Dictionary<string, string[]> p)
@@ -1905,7 +1905,7 @@ internal sealed class Ec2ServiceHandler : IServiceHandler
             if (filters.TryGetValue("status-code", out var scF) && !scF.Contains((string)status["Code"])) continue;
             var req = (Dictionary<string, object>)pcx["RequesterVpcInfo"];
             var acc = (Dictionary<string, object>)pcx["AccepterVpcInfo"];
-            sb.Append($"<item><vpcPeeringConnectionId>{pcx["VpcPeeringConnectionId"]}</vpcPeeringConnectionId><requesterVpcInfo><vpcId>{req["VpcId"]}</vpcId><ownerId>{req["OwnerId"]}</ownerId><region>{req["Region"]}</region></requesterVpcInfo><accepterVpcInfo><vpcId>{acc["VpcId"]}</vpcId><ownerId>{acc["OwnerId"]}</ownerId><region>{acc["Region"]}</region></accepterVpcInfo><status><code>{status["Code"]}</code><message>{status["Message"]}</message></status><tagSet/></item>");
+            sb.Append($"<item><vpcPeeringConnectionId>{pcx["VpcPeeringConnectionId"]}</vpcPeeringConnectionId><requesterVpcInfo><vpcId>{req["VpcId"]}</vpcId><ownerId>{req["OwnerId"]}</ownerId><region>{req["Region"]}</region></requesterVpcInfo><accepterVpcInfo><vpcId>{acc["VpcId"]}</vpcId><ownerId>{acc["OwnerId"]}</ownerId><region>{acc["Region"]}</region></accepterVpcInfo><status><code>{status["Code"]}</code><message>{status["Message"]}</message></status><tagSet></tagSet></item>");
         }
         return Xml(200, "DescribeVpcPeeringConnectionsResponse", $"<vpcPeeringConnectionSet>{sb}</vpcPeeringConnectionSet>");
     }
@@ -1954,7 +1954,7 @@ internal sealed class Ec2ServiceHandler : IServiceHandler
                 valsSb.Append($"<item><value>{v}</value></item>");
             configsXml.Append($"<item><key>{c["Key"]}</key><valueSet>{valsSb}</valueSet></item>");
         }
-        return Xml(200, "CreateDhcpOptionsResponse", $"<dhcpOptions><dhcpOptionsId>{doptId}</dhcpOptionsId><dhcpConfigurationSet>{configsXml}</dhcpConfigurationSet><ownerId>{accountId}</ownerId><tagSet/></dhcpOptions>");
+        return Xml(200, "CreateDhcpOptionsResponse", $"<dhcpOptions><dhcpOptionsId>{doptId}</dhcpOptionsId><dhcpConfigurationSet>{configsXml}</dhcpConfigurationSet><ownerId>{accountId}</ownerId><tagSet></tagSet></dhcpOptions>");
     }
 
     private ServiceResponse AssociateDhcpOptions(Dictionary<string, string[]> p)
@@ -1985,7 +1985,7 @@ internal sealed class Ec2ServiceHandler : IServiceHandler
                     valsSb.Append($"<item><value>{v}</value></item>");
                 configsXml.Append($"<item><key>{c["Key"]}</key><valueSet>{valsSb}</valueSet></item>");
             }
-            sb.Append($"<item><dhcpOptionsId>{dopt["DhcpOptionsId"]}</dhcpOptionsId><dhcpConfigurationSet>{configsXml}</dhcpConfigurationSet><ownerId>{dopt["OwnerId"]}</ownerId><tagSet/></item>");
+            sb.Append($"<item><dhcpOptionsId>{dopt["DhcpOptionsId"]}</dhcpOptionsId><dhcpConfigurationSet>{configsXml}</dhcpConfigurationSet><ownerId>{dopt["OwnerId"]}</ownerId><tagSet></tagSet></item>");
         }
         return Xml(200, "DescribeDhcpOptionsResponse", $"<dhcpOptionsSet>{sb}</dhcpOptionsSet>");
     }
@@ -2014,7 +2014,7 @@ internal sealed class Ec2ServiceHandler : IServiceHandler
             ["State"] = "attached", ["Tags"] = tags,
         };
         if (tags.Count > 0) _tags[eigwId] = tags;
-        return Xml(200, "CreateEgressOnlyInternetGatewayResponse", $"<egressOnlyInternetGateway><egressOnlyInternetGatewayId>{eigwId}</egressOnlyInternetGatewayId><attachmentSet><item><vpcId>{vpcId}</vpcId><state>attached</state></item></attachmentSet><tagSet/></egressOnlyInternetGateway>");
+        return Xml(200, "CreateEgressOnlyInternetGatewayResponse", $"<egressOnlyInternetGateway><egressOnlyInternetGatewayId>{eigwId}</egressOnlyInternetGatewayId><attachmentSet><item><vpcId>{vpcId}</vpcId><state>attached</state></item></attachmentSet><tagSet></tagSet></egressOnlyInternetGateway>");
     }
 
     private ServiceResponse DescribeEgressOnlyInternetGateways(Dictionary<string, string[]> p)
@@ -2024,7 +2024,7 @@ internal sealed class Ec2ServiceHandler : IServiceHandler
         foreach (var eigw in _egressIgws.Values.ToList())
         {
             if (ids.Count > 0 && !ids.Contains((string)eigw["EgressOnlyInternetGatewayId"])) continue;
-            sb.Append($"<item><egressOnlyInternetGatewayId>{eigw["EgressOnlyInternetGatewayId"]}</egressOnlyInternetGatewayId><attachmentSet><item><vpcId>{eigw["VpcId"]}</vpcId><state>{eigw["State"]}</state></item></attachmentSet><tagSet/></item>");
+            sb.Append($"<item><egressOnlyInternetGatewayId>{eigw["EgressOnlyInternetGatewayId"]}</egressOnlyInternetGatewayId><attachmentSet><item><vpcId>{eigw["VpcId"]}</vpcId><state>{eigw["State"]}</state></item></attachmentSet><tagSet></tagSet></item>");
         }
         return Xml(200, "DescribeEgressOnlyInternetGatewaysResponse", $"<egressOnlyInternetGatewaySet>{sb}</egressOnlyInternetGatewaySet>");
     }
@@ -2506,7 +2506,7 @@ internal sealed class Ec2ServiceHandler : IServiceHandler
         var egress = new StringBuilder();
         foreach (var r in (List<Dictionary<string, object>>)sg["IpPermissionsEgress"])
             egress.Append(PermXml(r));
-        return $"<item><ownerId>{sg["OwnerId"]}</ownerId><groupId>{sg["GroupId"]}</groupId><groupName>{sg["GroupName"]}</groupName><groupDescription>{sg["Description"]}</groupDescription><vpcId>{sg["VpcId"]}</vpcId><ipPermissions>{ingress}</ipPermissions><ipPermissionsEgress>{egress}</ipPermissionsEgress><tagSet/></item>";
+        return $"<item><ownerId>{sg["OwnerId"]}</ownerId><groupId>{sg["GroupId"]}</groupId><groupName>{sg["GroupName"]}</groupName><groupDescription>{sg["Description"]}</groupDescription><vpcId>{sg["VpcId"]}</vpcId><ipPermissions>{ingress}</ipPermissions><ipPermissionsEgress>{egress}</ipPermissionsEgress><tagSet></tagSet></item>";
     }
 
     private static string PermXml(Dictionary<string, object> r)
@@ -2516,7 +2516,7 @@ internal sealed class Ec2ServiceHandler : IServiceHandler
             ranges.Append($"<item><cidrIp>{ip["CidrIp"]}</cidrIp></item>");
         var fromPort = r.ContainsKey("FromPort") ? $"<fromPort>{r["FromPort"]}</fromPort>" : "";
         var toPort = r.ContainsKey("ToPort") ? $"<toPort>{r["ToPort"]}</toPort>" : "";
-        return $"<item><ipProtocol>{r.GetValueOrDefault("IpProtocol", "-1")}</ipProtocol>{fromPort}{toPort}<ipRanges>{ranges}</ipRanges><ipv6Ranges/><prefixListIds/><groups/></item>";
+        return $"<item><ipProtocol>{r.GetValueOrDefault("IpProtocol", "-1")}</ipProtocol>{fromPort}{toPort}<ipRanges>{ranges}</ipRanges><ipv6Ranges></ipv6Ranges><prefixListIds></prefixListIds><groups></groups></item>";
     }
 
     private static string VpcXml(Dictionary<string, object> vpc)
@@ -2534,7 +2534,7 @@ internal sealed class Ec2ServiceHandler : IServiceHandler
             extra.Append($"<defaultSecurityGroupId>{dsg}</defaultSecurityGroupId>");
         if (vpc.TryGetValue("MainRouteTableId", out var mrt) && !string.IsNullOrEmpty((string)mrt))
             extra.Append($"<mainRouteTableId>{mrt}</mainRouteTableId>");
-        return $"<{tag}><vpcId>{vpc["VpcId"]}</vpcId><state>{vpc["State"]}</state><cidrBlock>{vpc["CidrBlock"]}</cidrBlock><dhcpOptionsId>{vpc["DhcpOptionsId"]}</dhcpOptionsId><instanceTenancy>{vpc["InstanceTenancy"]}</instanceTenancy><isDefault>{isDefault}</isDefault><ownerId>{vpc["OwnerId"]}</ownerId>{extra}<tagSet/></{tag}>";
+        return $"<{tag}><vpcId>{vpc["VpcId"]}</vpcId><state>{vpc["State"]}</state><cidrBlock>{vpc["CidrBlock"]}</cidrBlock><dhcpOptionsId>{vpc["DhcpOptionsId"]}</dhcpOptionsId><instanceTenancy>{vpc["InstanceTenancy"]}</instanceTenancy><isDefault>{isDefault}</isDefault><ownerId>{vpc["OwnerId"]}</ownerId>{extra}<tagSet></tagSet></{tag}>";
     }
 
     private static string SubnetXml(Dictionary<string, object> subnet)
@@ -2548,7 +2548,7 @@ internal sealed class Ec2ServiceHandler : IServiceHandler
         var accountId = AccountContext.GetAccountId();
         var defaultForAz = (bool)subnet["DefaultForAz"] ? "true" : "false";
         var mapPublic = (bool)subnet["MapPublicIpOnLaunch"] ? "true" : "false";
-        return $"<{tag}><subnetId>{subnet["SubnetId"]}</subnetId><subnetArn>arn:aws:ec2:{region}:{accountId}:subnet/{subnet["SubnetId"]}</subnetArn><state>{subnet["State"]}</state><vpcId>{subnet["VpcId"]}</vpcId><cidrBlock>{subnet["CidrBlock"]}</cidrBlock><availableIpAddressCount>{subnet["AvailableIpAddressCount"]}</availableIpAddressCount><availabilityZone>{subnet["AvailabilityZone"]}</availabilityZone><defaultForAz>{defaultForAz}</defaultForAz><mapPublicIpOnLaunch>{mapPublic}</mapPublicIpOnLaunch><ownerId>{subnet["OwnerId"]}</ownerId><tagSet/></{tag}>";
+        return $"<{tag}><subnetId>{subnet["SubnetId"]}</subnetId><subnetArn>arn:aws:ec2:{region}:{accountId}:subnet/{subnet["SubnetId"]}</subnetArn><state>{subnet["State"]}</state><vpcId>{subnet["VpcId"]}</vpcId><cidrBlock>{subnet["CidrBlock"]}</cidrBlock><availableIpAddressCount>{subnet["AvailableIpAddressCount"]}</availableIpAddressCount><availabilityZone>{subnet["AvailabilityZone"]}</availabilityZone><defaultForAz>{defaultForAz}</defaultForAz><mapPublicIpOnLaunch>{mapPublic}</mapPublicIpOnLaunch><ownerId>{subnet["OwnerId"]}</ownerId><tagSet></tagSet></{tag}>";
     }
 
     private static string IgwXml(Dictionary<string, object> igw)
@@ -2561,7 +2561,7 @@ internal sealed class Ec2ServiceHandler : IServiceHandler
         var attachments = new StringBuilder();
         foreach (var a in (List<Dictionary<string, string>>)igw["Attachments"])
             attachments.Append($"<item><vpcId>{a["VpcId"]}</vpcId><state>{a["State"]}</state></item>");
-        return $"<{tag}><internetGatewayId>{igw["InternetGatewayId"]}</internetGatewayId><ownerId>{igw["OwnerId"]}</ownerId><attachmentSet>{attachments}</attachmentSet><tagSet/></{tag}>";
+        return $"<{tag}><internetGatewayId>{igw["InternetGatewayId"]}</internetGatewayId><ownerId>{igw["OwnerId"]}</ownerId><attachmentSet>{attachments}</attachmentSet><tagSet></tagSet></{tag}>";
     }
 
     private static string RtbXml(Dictionary<string, object> rtb)
@@ -2596,7 +2596,7 @@ internal sealed class Ec2ServiceHandler : IServiceHandler
             var isMain = a.ContainsKey("Main") && (bool)a["Main"] ? "true" : "false";
             assocsSb.Append($"<item><routeTableAssociationId>{a["RouteTableAssociationId"]}</routeTableAssociationId><routeTableId>{a["RouteTableId"]}</routeTableId><main>{isMain}</main>{subnetPart}<associationState><state>associated</state></associationState></item>");
         }
-        return $"<{tag}><routeTableId>{rtb["RouteTableId"]}</routeTableId><vpcId>{rtb["VpcId"]}</vpcId><ownerId>{rtb["OwnerId"]}</ownerId><routeSet>{routesSb}</routeSet><associationSet>{assocsSb}</associationSet><propagatingVgwSet/><tagSet/></{tag}>";
+        return $"<{tag}><routeTableId>{rtb["RouteTableId"]}</routeTableId><vpcId>{rtb["VpcId"]}</vpcId><ownerId>{rtb["OwnerId"]}</ownerId><routeSet>{routesSb}</routeSet><associationSet>{assocsSb}</associationSet><propagatingVgwSet></propagatingVgwSet><tagSet></tagSet></{tag}>";
     }
 
     private static string EniXml(Dictionary<string, object> eni)
@@ -2618,7 +2618,7 @@ internal sealed class Ec2ServiceHandler : IServiceHandler
         var privateIp = (string)eni["PrivateIpAddress"];
         var region = MicroStackOptions.Instance.Region;
         var sourceDestCheck = eni.TryGetValue("SourceDestCheck", out var sdc) && sdc is bool sdcBool ? (sdcBool ? "true" : "false") : "true";
-        return $"<{tag}><networkInterfaceId>{eni["NetworkInterfaceId"]}</networkInterfaceId><subnetId>{eni["SubnetId"]}</subnetId><vpcId>{eni["VpcId"]}</vpcId><availabilityZone>{eni.GetValueOrDefault("AvailabilityZone", region + "a")}</availabilityZone><description>{eni["Description"]}</description><ownerId>{eni["OwnerId"]}</ownerId><status>{eni["Status"]}</status><privateIpAddress>{privateIp}</privateIpAddress><sourceDestCheck>{sourceDestCheck}</sourceDestCheck><interfaceType>{eni.GetValueOrDefault("InterfaceType", "interface")}</interfaceType><macAddress>{eni["MacAddress"]}</macAddress><groupSet>{groups}</groupSet><privateIpAddressesSet><item><privateIpAddress>{privateIp}</privateIpAddress><primary>true</primary></item></privateIpAddressesSet>{attachment}<tagSet/></{tag}>";
+        return $"<{tag}><networkInterfaceId>{eni["NetworkInterfaceId"]}</networkInterfaceId><subnetId>{eni["SubnetId"]}</subnetId><vpcId>{eni["VpcId"]}</vpcId><availabilityZone>{eni.GetValueOrDefault("AvailabilityZone", region + "a")}</availabilityZone><description>{eni["Description"]}</description><ownerId>{eni["OwnerId"]}</ownerId><status>{eni["Status"]}</status><privateIpAddress>{privateIp}</privateIpAddress><sourceDestCheck>{sourceDestCheck}</sourceDestCheck><interfaceType>{eni.GetValueOrDefault("InterfaceType", "interface")}</interfaceType><macAddress>{eni["MacAddress"]}</macAddress><groupSet>{groups}</groupSet><privateIpAddressesSet><item><privateIpAddress>{privateIp}</privateIpAddress><primary>true</primary></item></privateIpAddressesSet>{attachment}<tagSet></tagSet></{tag}>";
     }
 
     private static string VpceXml(Dictionary<string, object> ep)
@@ -2634,7 +2634,7 @@ internal sealed class Ec2ServiceHandler : IServiceHandler
         var subnetIds = new StringBuilder();
         foreach (var s in (List<string>)ep.GetValueOrDefault("SubnetIds", new List<string>())!)
             subnetIds.Append($"<item>{s}</item>");
-        return $"<{tag}><vpcEndpointId>{ep["VpcEndpointId"]}</vpcEndpointId><vpcEndpointType>{ep["VpcEndpointType"]}</vpcEndpointType><vpcId>{ep["VpcId"]}</vpcId><serviceName>{ep["ServiceName"]}</serviceName><state>{ep["State"]}</state><ownerId>{ep["OwnerId"]}</ownerId><routeTableIdSet>{rtbIds}</routeTableIdSet><subnetIdSet>{subnetIds}</subnetIdSet><tagSet/></{tag}>";
+        return $"<{tag}><vpcEndpointId>{ep["VpcEndpointId"]}</vpcEndpointId><vpcEndpointType>{ep["VpcEndpointType"]}</vpcEndpointType><vpcId>{ep["VpcId"]}</vpcId><serviceName>{ep["ServiceName"]}</serviceName><state>{ep["State"]}</state><ownerId>{ep["OwnerId"]}</ownerId><routeTableIdSet>{rtbIds}</routeTableIdSet><subnetIdSet>{subnetIds}</subnetIdSet><tagSet></tagSet></{tag}>";
     }
 
     private static string VolumeInnerXml(Dictionary<string, object> vol)
@@ -2645,23 +2645,23 @@ internal sealed class Ec2ServiceHandler : IServiceHandler
             var dot = (bool)a["DeleteOnTermination"] ? "true" : "false";
             attachments.Append($"<item><volumeId>{a["VolumeId"]}</volumeId><instanceId>{a["InstanceId"]}</instanceId><device>{a["Device"]}</device><status>{a["State"]}</status><attachTime>{a["AttachTime"]}</attachTime><deleteOnTermination>{dot}</deleteOnTermination></item>");
         }
-        var snap = !string.IsNullOrEmpty((string)vol["SnapshotId"]) ? $"<snapshotId>{vol["SnapshotId"]}</snapshotId>" : "<snapshotId/>";
+        var snap = !string.IsNullOrEmpty((string)vol["SnapshotId"]) ? $"<snapshotId>{vol["SnapshotId"]}</snapshotId>" : "<snapshotId></snapshotId>";
         var iops = (int)vol["Iops"] != 0 ? $"<iops>{vol["Iops"]}</iops>" : "";
         var encrypted = (bool)vol["Encrypted"] ? "true" : "false";
         var multiAttach = (bool)vol["MultiAttachEnabled"] ? "true" : "false";
-        return $"<volumeId>{vol["VolumeId"]}</volumeId><size>{vol["Size"]}</size><availabilityZone>{vol["AvailabilityZone"]}</availabilityZone><status>{vol["State"]}</status><createTime>{vol["CreateTime"]}</createTime><volumeType>{vol["VolumeType"]}</volumeType>{snap}{iops}<encrypted>{encrypted}</encrypted><multiAttachEnabled>{multiAttach}</multiAttachEnabled><attachmentSet>{attachments}</attachmentSet><tagSet/>";
+        return $"<volumeId>{vol["VolumeId"]}</volumeId><size>{vol["Size"]}</size><availabilityZone>{vol["AvailabilityZone"]}</availabilityZone><status>{vol["State"]}</status><createTime>{vol["CreateTime"]}</createTime><volumeType>{vol["VolumeType"]}</volumeType>{snap}{iops}<encrypted>{encrypted}</encrypted><multiAttachEnabled>{multiAttach}</multiAttachEnabled><attachmentSet>{attachments}</attachmentSet><tagSet></tagSet>";
     }
 
     private static string SnapshotInnerXml(Dictionary<string, object> snap)
     {
         var encrypted = (bool)snap["Encrypted"] ? "true" : "false";
-        return $"<snapshotId>{snap["SnapshotId"]}</snapshotId><volumeId>{snap["VolumeId"]}</volumeId><status>{snap["State"]}</status><startTime>{snap["StartTime"]}</startTime><progress>{snap["Progress"]}</progress><ownerId>{snap["OwnerId"]}</ownerId><volumeSize>{snap["VolumeSize"]}</volumeSize><description>{Esc((string)snap["Description"])}</description><encrypted>{encrypted}</encrypted><storageTier>{snap["StorageTier"]}</storageTier><tagSet/>";
+        return $"<snapshotId>{snap["SnapshotId"]}</snapshotId><volumeId>{snap["VolumeId"]}</volumeId><status>{snap["State"]}</status><startTime>{snap["StartTime"]}</startTime><progress>{snap["Progress"]}</progress><ownerId>{snap["OwnerId"]}</ownerId><volumeSize>{snap["VolumeSize"]}</volumeSize><description>{Esc((string)snap["Description"])}</description><encrypted>{encrypted}</encrypted><storageTier>{snap["StorageTier"]}</storageTier><tagSet></tagSet>";
     }
 
     private static string PrefixListXml(Dictionary<string, object> pl, string tag)
     {
         var accountId = AccountContext.GetAccountId();
-        return $"<{tag}><prefixListId>{pl["PrefixListId"]}</prefixListId><prefixListName>{pl.GetValueOrDefault("PrefixListName", "")}</prefixListName><state>{pl.GetValueOrDefault("State", "create-complete")}</state><addressFamily>{pl.GetValueOrDefault("AddressFamily", "IPv4")}</addressFamily><maxEntries>{pl.GetValueOrDefault("MaxEntries", 10)}</maxEntries><version>{pl.GetValueOrDefault("Version", 1)}</version><prefixListArn>{pl.GetValueOrDefault("PrefixListArn", "")}</prefixListArn><ownerId>{pl.GetValueOrDefault("OwnerId", accountId)}</ownerId><tagSet/></{tag}>";
+        return $"<{tag}><prefixListId>{pl["PrefixListId"]}</prefixListId><prefixListName>{pl.GetValueOrDefault("PrefixListName", "")}</prefixListName><state>{pl.GetValueOrDefault("State", "create-complete")}</state><addressFamily>{pl.GetValueOrDefault("AddressFamily", "IPv4")}</addressFamily><maxEntries>{pl.GetValueOrDefault("MaxEntries", 10)}</maxEntries><version>{pl.GetValueOrDefault("Version", 1)}</version><prefixListArn>{pl.GetValueOrDefault("PrefixListArn", "")}</prefixListArn><ownerId>{pl.GetValueOrDefault("OwnerId", accountId)}</ownerId><tagSet></tagSet></{tag}>";
     }
 
     private static string VgwXml(Dictionary<string, object> vgw, string tag)
@@ -2669,12 +2669,12 @@ internal sealed class Ec2ServiceHandler : IServiceHandler
         var attachments = new StringBuilder();
         foreach (var a in (List<Dictionary<string, object>>)vgw["Attachments"])
             attachments.Append($"<item><vpcId>{a["VpcId"]}</vpcId><state>{a["State"]}</state></item>");
-        return $"<{tag}><vpnGatewayId>{vgw["VpnGatewayId"]}</vpnGatewayId><state>{vgw["State"]}</state><type>{vgw["Type"]}</type><availabilityZone>{vgw.GetValueOrDefault("AvailabilityZone", "")}</availabilityZone><amazonSideAsn>{vgw.GetValueOrDefault("AmazonSideAsn", "64512")}</amazonSideAsn><attachments>{attachments}</attachments><tagSet/></{tag}>";
+        return $"<{tag}><vpnGatewayId>{vgw["VpnGatewayId"]}</vpnGatewayId><state>{vgw["State"]}</state><type>{vgw["Type"]}</type><availabilityZone>{vgw.GetValueOrDefault("AvailabilityZone", "")}</availabilityZone><amazonSideAsn>{vgw.GetValueOrDefault("AmazonSideAsn", "64512")}</amazonSideAsn><attachments>{attachments}</attachments><tagSet></tagSet></{tag}>";
     }
 
     private static string CgwXml(Dictionary<string, object> cgw, string tag)
     {
-        return $"<{tag}><customerGatewayId>{cgw["CustomerGatewayId"]}</customerGatewayId><bgpAsn>{cgw["BgpAsn"]}</bgpAsn><ipAddress>{cgw["IpAddress"]}</ipAddress><type>{cgw["Type"]}</type><state>{cgw["State"]}</state><tagSet/></{tag}>";
+        return $"<{tag}><customerGatewayId>{cgw["CustomerGatewayId"]}</customerGatewayId><bgpAsn>{cgw["BgpAsn"]}</bgpAsn><ipAddress>{cgw["IpAddress"]}</ipAddress><type>{cgw["Type"]}</type><state>{cgw["State"]}</state><tagSet></tagSet></{tag}>";
     }
 
     // ── Launch Template helpers ───────────────────────────────────────────────
