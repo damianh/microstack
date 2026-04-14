@@ -8,6 +8,15 @@
     <LangVersion>latest</LangVersion>
   </PropertyGroup>
 
+  <!-- NuGet package icon -->
+  <PropertyGroup Condition="'$(IsPackable)' == 'true'">
+    <PackageIcon>logo.png</PackageIcon>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(IsPackable)' == 'true'">
+    <None Include="$(MSBuildThisFileDirectory)assets\logo.png" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="MinVer" Version="7.0.0" PrivateAssets="all" />
   </ItemGroup>

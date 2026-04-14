@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/logo.png" alt="MicroStack" width="128" />
+</p>
+
 # MicroStack
 
 [![CI](https://github.com/damianh/microstack/actions/workflows/ci.yml/badge.svg)](https://github.com/damianh/microstack/actions/workflows/ci.yml)

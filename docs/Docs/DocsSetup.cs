@@ -12,6 +12,9 @@ public static class DocsSetup
         Title = "MicroStack",
         Description = "A lightweight local AWS service emulator for .NET.",
         BasePath = "/microstack",
+        LogoSrc = "/logo.png",
+        LogoAlt = "MicroStack",
+        FaviconHref = "/logo.png",
         EnableSyntaxHighlighting = true,
         Social =
         [
