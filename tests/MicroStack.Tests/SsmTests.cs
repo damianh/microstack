@@ -69,7 +69,7 @@ public sealed class SsmTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             Name = "/app/db/host",
         });
 
-        Assert.Equal("localhost", resp.Parameter.Value);
+        resp.Parameter.Value.ShouldBe("localhost");
     }
 
     // -- GetParametersByPath --------------------------------------------------
@@ -97,7 +97,7 @@ public sealed class SsmTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             Recursive = true,
         });
 
-        Assert.True(resp.Parameters.Count >= 2);
+        (resp.Parameters.Count >= 2).ShouldBe(true);
     }
 
     // -- Overwrite ------------------------------------------------------------
@@ -125,7 +125,7 @@ public sealed class SsmTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             Name = "/app/overwrite",
         });
 
-        Assert.Equal("v2", resp.Parameter.Value);
+        resp.Parameter.Value.ShouldBe("v2");
     }
 
     // -- PutGet with SecureString ---------------------------------------------
@@ -145,9 +145,9 @@ public sealed class SsmTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             Name = "/ssm2/pg/host",
         });
 
-        Assert.Equal("db.local", resp.Parameter.Value);
-        Assert.Equal(ParameterType.String, resp.Parameter.Type);
-        Assert.Equal(1, resp.Parameter.Version);
+        resp.Parameter.Value.ShouldBe("db.local");
+        resp.Parameter.Type.ShouldBe(ParameterType.String);
+        resp.Parameter.Version.ShouldBe(1);
 
         await _ssm.PutParameterAsync(new PutParameterRequest
         {
@@ -162,7 +162,7 @@ public sealed class SsmTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             WithDecryption = true,
         });
 
-        Assert.Equal("secret123", respEnc.Parameter.Value);
+        respEnc.Parameter.Value.ShouldBe("secret123");
     }
 
     // -- Overwrite + Version tracking -----------------------------------------
@@ -182,7 +182,7 @@ public sealed class SsmTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             Name = "/ssm2/ov/p",
         });
 
-        Assert.Equal(1, r1.Parameter.Version);
+        r1.Parameter.Version.ShouldBe(1);
 
         await _ssm.PutParameterAsync(new PutParameterRequest
         {
@@ -197,8 +197,8 @@ public sealed class SsmTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             Name = "/ssm2/ov/p",
         });
 
-        Assert.Equal("v2", r2.Parameter.Value);
-        Assert.Equal(2, r2.Parameter.Version);
+        r2.Parameter.Value.ShouldBe("v2");
+        r2.Parameter.Version.ShouldBe(2);
 
         await _ssm.PutParameterAsync(new PutParameterRequest
         {
@@ -213,7 +213,7 @@ public sealed class SsmTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             Name = "/ssm2/ov/p",
         });
 
-        Assert.Equal(3, r3.Parameter.Version);
+        r3.Parameter.Version.ShouldBe(3);
     }
 
     // -- GetByPath recursive vs non-recursive ---------------------------------
@@ -249,9 +249,9 @@ public sealed class SsmTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         });
 
         var names = resp.Parameters.ConvertAll(p => p.Name);
-        Assert.Contains("/ssm2/path/x", names);
-        Assert.Contains("/ssm2/path/y", names);
-        Assert.Contains("/ssm2/path/sub/z", names);
+        names.ShouldContain("/ssm2/path/x");
+        names.ShouldContain("/ssm2/path/y");
+        names.ShouldContain("/ssm2/path/sub/z");
 
         var respShallow = await _ssm.GetParametersByPathAsync(new GetParametersByPathRequest
         {
@@ -260,8 +260,8 @@ public sealed class SsmTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         });
 
         var namesShallow = respShallow.Parameters.ConvertAll(p => p.Name);
-        Assert.Contains("/ssm2/path/x", namesShallow);
-        Assert.DoesNotContain("/ssm2/path/sub/z", namesShallow);
+        namesShallow.ShouldContain("/ssm2/path/x");
+        namesShallow.ShouldNotContain("/ssm2/path/sub/z");
     }
 
     // -- GetParameters (batch) ------------------------------------------------
@@ -288,10 +288,10 @@ public sealed class SsmTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             Names = ["/ssm2/multi/a", "/ssm2/multi/b", "/ssm2/multi/nope"],
         });
 
-        Assert.Equal(2, resp.Parameters.Count);
-        Assert.Contains(resp.Parameters, p => p.Name == "/ssm2/multi/a");
-        Assert.Contains(resp.Parameters, p => p.Name == "/ssm2/multi/b");
-        Assert.Contains("/ssm2/multi/nope", resp.InvalidParameters ?? []);
+        resp.Parameters.Count.ShouldBe(2);
+        resp.Parameters.ShouldContain(p => p.Name == "/ssm2/multi/a");
+        resp.Parameters.ShouldContain(p => p.Name == "/ssm2/multi/b");
+        resp.InvalidParameters.ShouldContain("/ssm2/multi/nope");
     }
 
     // -- DeleteParameter / DeleteParameters -----------------------------------
@@ -311,13 +311,13 @@ public sealed class SsmTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             Name = "/ssm2/del/tmp",
         });
 
-        var ex = await Assert.ThrowsAsync<ParameterNotFoundException>(() =>
+        var ex = await Should.ThrowAsync<ParameterNotFoundException>(() =>
             _ssm.GetParameterAsync(new GetParameterRequest
             {
                 Name = "/ssm2/del/tmp",
             }));
 
-        Assert.Equal("ParameterNotFound", ex.ErrorCode);
+        ex.ErrorCode.ShouldBe("ParameterNotFound");
 
         await _ssm.PutParameterAsync(new PutParameterRequest
         {
@@ -338,8 +338,8 @@ public sealed class SsmTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             Names = ["/ssm2/del/b1", "/ssm2/del/b2", "/ssm2/del/ghost"],
         });
 
-        Assert.Equal(2, (resp.DeletedParameters ?? []).Count);
-        Assert.Contains("/ssm2/del/ghost", resp.InvalidParameters ?? []);
+        ((resp.DeletedParameters ?? []).Count).ShouldBe(2);
+        resp.InvalidParameters.ShouldContain("/ssm2/del/ghost");
     }
 
     // -- DescribeParameters with filter ---------------------------------------
@@ -376,8 +376,8 @@ public sealed class SsmTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         });
 
         var names = (resp.Parameters ?? []).ConvertAll(p => p.Name);
-        Assert.Contains("/ssm2/desc/alpha", names);
-        Assert.Contains("/ssm2/desc/beta", names);
+        names.ShouldContain("/ssm2/desc/alpha");
+        names.ShouldContain("/ssm2/desc/beta");
     }
 
     // -- GetParameterHistory --------------------------------------------------
@@ -417,11 +417,11 @@ public sealed class SsmTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         });
 
         var history = resp.Parameters ?? [];
-        Assert.Equal(3, history.Count);
-        Assert.Equal("h1", history[0].Value);
-        Assert.Equal(1, history[0].Version);
-        Assert.Equal("h3", history[2].Value);
-        Assert.Equal(3, history[2].Version);
+        history.Count.ShouldBe(3);
+        history[0].Value.ShouldBe("h1");
+        history[0].Version.ShouldBe(1);
+        history[2].Value.ShouldBe("h3");
+        history[2].Version.ShouldBe(3);
     }
 
     // -- Tags -----------------------------------------------------------------
@@ -454,8 +454,8 @@ public sealed class SsmTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         });
 
         var tagMap = resp.TagList.ToDictionary(t => t.Key, t => t.Value);
-        Assert.Equal("platform", tagMap["team"]);
-        Assert.Equal("staging", tagMap["env"]);
+        tagMap["team"].ShouldBe("platform");
+        tagMap["env"].ShouldBe("staging");
 
         await _ssm.RemoveTagsFromResourceAsync(new RemoveTagsFromResourceRequest
         {
@@ -471,8 +471,8 @@ public sealed class SsmTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         });
 
         var tagMap2 = resp2.TagList.ToDictionary(t => t.Key, t => t.Value);
-        Assert.DoesNotContain("team", tagMap2.Keys);
-        Assert.Equal("staging", tagMap2["env"]);
+        tagMap2.Keys.ShouldNotContain("team");
+        tagMap2["env"].ShouldBe("staging");
     }
 
     // -- LabelParameterVersion ------------------------------------------------
@@ -504,8 +504,8 @@ public sealed class SsmTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             Labels = ["stable"],
         });
 
-        Assert.Equal(1, resp.ParameterVersion);
-        Assert.Empty(resp.InvalidLabels);
+        resp.ParameterVersion.ShouldBe(1);
+        resp.InvalidLabels.ShouldBeEmpty();
     }
 
     // -- AddRemoveTags --------------------------------------------------------
@@ -540,8 +540,8 @@ public sealed class SsmTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         });
 
         var tagMap = tags.TagList.ToDictionary(t => t.Key, t => t.Value);
-        Assert.Equal("prod", tagMap["env"]);
-        Assert.Equal("backend", tagMap["team"]);
+        tagMap["env"].ShouldBe("prod");
+        tagMap["team"].ShouldBe("backend");
 
         await _ssm.RemoveTagsFromResourceAsync(new RemoveTagsFromResourceRequest
         {
@@ -557,8 +557,8 @@ public sealed class SsmTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         });
 
         var tagMap2 = tags2.TagList.ToDictionary(t => t.Key, t => t.Value);
-        Assert.DoesNotContain("team", tagMap2.Keys);
-        Assert.Equal("prod", tagMap2["env"]);
+        tagMap2.Keys.ShouldNotContain("team");
+        tagMap2["env"].ShouldBe("prod");
     }
 
     // -- GetParameterHistory (alternate test) ----------------------------------
@@ -595,12 +595,12 @@ public sealed class SsmTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         });
 
         var history = resp.Parameters ?? [];
-        Assert.Equal(3, history.Count);
+        history.Count.ShouldBe(3);
 
         var values = history.ConvertAll(h => h.Value);
-        Assert.Contains("v1", values);
-        Assert.Contains("v2", values);
-        Assert.Contains("v3", values);
+        values.ShouldContain("v1");
+        values.ShouldContain("v2");
+        values.ShouldContain("v3");
     }
 
     // -- DescribeParameters with Path filter -----------------------------------
@@ -642,9 +642,9 @@ public sealed class SsmTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         });
 
         var names = (resp.Parameters ?? []).ConvertAll(p => p.Name);
-        Assert.Contains("/qa/ssm/filter/a", names);
-        Assert.Contains("/qa/ssm/filter/b", names);
-        Assert.DoesNotContain("/qa/ssm/other/c", names);
+        names.ShouldContain("/qa/ssm/filter/a");
+        names.ShouldContain("/qa/ssm/filter/b");
+        names.ShouldNotContain("/qa/ssm/other/c");
     }
 
     // -- SecureString not decrypted by default --------------------------------
@@ -665,7 +665,7 @@ public sealed class SsmTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             WithDecryption = false,
         });
 
-        Assert.NotEqual("mysecret", resp.Parameter.Value);
+        resp.Parameter.Value.ShouldNotBe("mysecret");
 
         var resp2 = await _ssm.GetParameterAsync(new GetParameterRequest
         {
@@ -673,6 +673,6 @@ public sealed class SsmTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             WithDecryption = true,
         });
 
-        Assert.Equal("mysecret", resp2.Parameter.Value);
+        resp2.Parameter.Value.ShouldBe("mysecret");
     }
 }

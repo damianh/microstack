@@ -180,9 +180,9 @@ public sealed class ApiGatewayV2Tests : IClassFixture<MicroStackFixture>, IAsync
             Name = "test-api",
             ProtocolType = ProtocolType.HTTP,
         });
-        Assert.NotEmpty(resp.ApiId);
-        Assert.Equal("test-api", resp.Name);
-        Assert.Equal(ProtocolType.HTTP, resp.ProtocolType);
+        resp.ApiId.ShouldNotBeEmpty();
+        resp.Name.ShouldBe("test-api");
+        resp.ProtocolType.ShouldBe(ProtocolType.HTTP);
     }
 
     [Fact]
@@ -194,8 +194,8 @@ public sealed class ApiGatewayV2Tests : IClassFixture<MicroStackFixture>, IAsync
             ProtocolType = ProtocolType.HTTP,
         });
         var resp = await _apigw.GetApiAsync(new GetApiRequest { ApiId = created.ApiId });
-        Assert.Equal(created.ApiId, resp.ApiId);
-        Assert.Equal("get-api-test", resp.Name);
+        resp.ApiId.ShouldBe(created.ApiId);
+        resp.Name.ShouldBe("get-api-test");
     }
 
     [Fact]
@@ -213,8 +213,8 @@ public sealed class ApiGatewayV2Tests : IClassFixture<MicroStackFixture>, IAsync
         });
         var resp = await _apigw.GetApisAsync(new GetApisRequest());
         var names = resp.Items.Select(a => a.Name).ToList();
-        Assert.Contains("list-api-a", names);
-        Assert.Contains("list-api-b", names);
+        names.ShouldContain("list-api-a");
+        names.ShouldContain("list-api-b");
     }
 
     [Fact]
@@ -231,7 +231,7 @@ public sealed class ApiGatewayV2Tests : IClassFixture<MicroStackFixture>, IAsync
             Name = "update-api-after",
         });
         var resp = await _apigw.GetApiAsync(new GetApiRequest { ApiId = created.ApiId });
-        Assert.Equal("update-api-after", resp.Name);
+        resp.Name.ShouldBe("update-api-after");
     }
 
     [Fact]
@@ -243,9 +243,9 @@ public sealed class ApiGatewayV2Tests : IClassFixture<MicroStackFixture>, IAsync
             ProtocolType = ProtocolType.HTTP,
         });
         await _apigw.DeleteApiAsync(new DeleteApiRequest { ApiId = created.ApiId });
-        var ex = await Assert.ThrowsAsync<Amazon.ApiGatewayV2.Model.NotFoundException>(
+        var ex = await Should.ThrowAsync<Amazon.ApiGatewayV2.Model.NotFoundException>(
             () => _apigw.GetApiAsync(new GetApiRequest { ApiId = created.ApiId }));
-        Assert.Equal(HttpStatusCode.NotFound, ex.StatusCode);
+        ex.StatusCode.ShouldBe(HttpStatusCode.NotFound);
     }
 
     // ── Control Plane: Routes ────────────────────────────────────────────────────
@@ -263,8 +263,8 @@ public sealed class ApiGatewayV2Tests : IClassFixture<MicroStackFixture>, IAsync
             ApiId = api.ApiId,
             RouteKey = "GET /items",
         });
-        Assert.NotEmpty(resp.RouteId);
-        Assert.Equal("GET /items", resp.RouteKey);
+        resp.RouteId.ShouldNotBeEmpty();
+        resp.RouteKey.ShouldBe("GET /items");
     }
 
     [Fact]
@@ -287,8 +287,8 @@ public sealed class ApiGatewayV2Tests : IClassFixture<MicroStackFixture>, IAsync
         });
         var resp = await _apigw.GetRoutesAsync(new GetRoutesRequest { ApiId = api.ApiId });
         var keys = resp.Items.Select(r => r.RouteKey).ToList();
-        Assert.Contains("GET /a", keys);
-        Assert.Contains("POST /b", keys);
+        keys.ShouldContain("GET /a");
+        keys.ShouldContain("POST /b");
     }
 
     [Fact]
@@ -309,8 +309,8 @@ public sealed class ApiGatewayV2Tests : IClassFixture<MicroStackFixture>, IAsync
             ApiId = api.ApiId,
             RouteId = created.RouteId,
         });
-        Assert.Equal(created.RouteId, resp.RouteId);
-        Assert.Equal("DELETE /things", resp.RouteKey);
+        resp.RouteId.ShouldBe(created.RouteId);
+        resp.RouteKey.ShouldBe("DELETE /things");
     }
 
     [Fact]
@@ -337,7 +337,7 @@ public sealed class ApiGatewayV2Tests : IClassFixture<MicroStackFixture>, IAsync
             ApiId = api.ApiId,
             RouteId = created.RouteId,
         });
-        Assert.Equal("GET /new", resp.RouteKey);
+        resp.RouteKey.ShouldBe("GET /new");
     }
 
     [Fact]
@@ -359,7 +359,7 @@ public sealed class ApiGatewayV2Tests : IClassFixture<MicroStackFixture>, IAsync
             RouteId = created.RouteId,
         });
         var resp = await _apigw.GetRoutesAsync(new GetRoutesRequest { ApiId = api.ApiId });
-        Assert.DoesNotContain(resp.Items, r => r.RouteId == created.RouteId);
+        resp.Items.ShouldNotContain(r => r.RouteId == created.RouteId);
     }
 
     // ── Control Plane: Integrations ──────────────────────────────────────────────
@@ -379,9 +379,9 @@ public sealed class ApiGatewayV2Tests : IClassFixture<MicroStackFixture>, IAsync
             IntegrationUri = "arn:aws:lambda:us-east-1:000000000000:function:my-fn",
             PayloadFormatVersion = "2.0",
         });
-        Assert.NotEmpty(resp.IntegrationId);
-        Assert.Equal(IntegrationType.AWS_PROXY, resp.IntegrationType);
-        Assert.Equal("2.0", resp.PayloadFormatVersion);
+        resp.IntegrationId.ShouldNotBeEmpty();
+        resp.IntegrationType.ShouldBe(IntegrationType.AWS_PROXY);
+        resp.PayloadFormatVersion.ShouldBe("2.0");
     }
 
     [Fact]
@@ -399,7 +399,7 @@ public sealed class ApiGatewayV2Tests : IClassFixture<MicroStackFixture>, IAsync
             IntegrationUri = "arn:aws:lambda:us-east-1:000000000000:function:fn1",
         });
         var resp = await _apigw.GetIntegrationsAsync(new GetIntegrationsRequest { ApiId = api.ApiId });
-        Assert.True(resp.Items.Count >= 1);
+        (resp.Items.Count >= 1).ShouldBe(true);
     }
 
     [Fact]
@@ -422,8 +422,8 @@ public sealed class ApiGatewayV2Tests : IClassFixture<MicroStackFixture>, IAsync
             ApiId = api.ApiId,
             IntegrationId = created.IntegrationId,
         });
-        Assert.Equal(created.IntegrationId, resp.IntegrationId);
-        Assert.Equal(IntegrationType.HTTP_PROXY, resp.IntegrationType);
+        resp.IntegrationId.ShouldBe(created.IntegrationId);
+        resp.IntegrationType.ShouldBe(IntegrationType.HTTP_PROXY);
     }
 
     [Fact]
@@ -446,7 +446,7 @@ public sealed class ApiGatewayV2Tests : IClassFixture<MicroStackFixture>, IAsync
             IntegrationId = created.IntegrationId,
         });
         var resp = await _apigw.GetIntegrationsAsync(new GetIntegrationsRequest { ApiId = api.ApiId });
-        Assert.DoesNotContain(resp.Items, i => i.IntegrationId == created.IntegrationId);
+        resp.Items.ShouldNotContain(i => i.IntegrationId == created.IntegrationId);
     }
 
     // ── Control Plane: Stages ────────────────────────────────────────────────────
@@ -464,7 +464,7 @@ public sealed class ApiGatewayV2Tests : IClassFixture<MicroStackFixture>, IAsync
             ApiId = api.ApiId,
             StageName = "prod",
         });
-        Assert.Equal("prod", resp.StageName);
+        resp.StageName.ShouldBe("prod");
     }
 
     [Fact]
@@ -487,8 +487,8 @@ public sealed class ApiGatewayV2Tests : IClassFixture<MicroStackFixture>, IAsync
         });
         var resp = await _apigw.GetStagesAsync(new GetStagesRequest { ApiId = api.ApiId });
         var names = resp.Items.Select(s => s.StageName).ToList();
-        Assert.Contains("v1", names);
-        Assert.Contains("v2", names);
+        names.ShouldContain("v1");
+        names.ShouldContain("v2");
     }
 
     [Fact]
@@ -509,7 +509,7 @@ public sealed class ApiGatewayV2Tests : IClassFixture<MicroStackFixture>, IAsync
             ApiId = api.ApiId,
             StageName = "dev",
         });
-        Assert.Equal("dev", resp.StageName);
+        resp.StageName.ShouldBe("dev");
     }
 
     [Fact]
@@ -536,7 +536,7 @@ public sealed class ApiGatewayV2Tests : IClassFixture<MicroStackFixture>, IAsync
             ApiId = api.ApiId,
             StageName = "staging",
         });
-        Assert.Equal("updated", resp.Description);
+        resp.Description.ShouldBe("updated");
     }
 
     [Fact]
@@ -558,7 +558,7 @@ public sealed class ApiGatewayV2Tests : IClassFixture<MicroStackFixture>, IAsync
             StageName = "temp",
         });
         var resp = await _apigw.GetStagesAsync(new GetStagesRequest { ApiId = api.ApiId });
-        Assert.DoesNotContain(resp.Items, s => s.StageName == "temp");
+        resp.Items.ShouldNotContain(s => s.StageName == "temp");
     }
 
     // ── Control Plane: Deployments ───────────────────────────────────────────────
@@ -575,8 +575,8 @@ public sealed class ApiGatewayV2Tests : IClassFixture<MicroStackFixture>, IAsync
         {
             ApiId = api.ApiId,
         });
-        Assert.NotEmpty(resp.DeploymentId);
-        Assert.Equal(DeploymentStatus.DEPLOYED, resp.DeploymentStatus);
+        resp.DeploymentId.ShouldNotBeEmpty();
+        resp.DeploymentStatus.ShouldBe(DeploymentStatus.DEPLOYED);
     }
 
     [Fact]
@@ -598,7 +598,7 @@ public sealed class ApiGatewayV2Tests : IClassFixture<MicroStackFixture>, IAsync
             Description = "second",
         });
         var resp = await _apigw.GetDeploymentsAsync(new GetDeploymentsRequest { ApiId = api.ApiId });
-        Assert.True(resp.Items.Count >= 2);
+        (resp.Items.Count >= 2).ShouldBe(true);
     }
 
     [Fact]
@@ -619,7 +619,7 @@ public sealed class ApiGatewayV2Tests : IClassFixture<MicroStackFixture>, IAsync
             ApiId = api.ApiId,
             DeploymentId = created.DeploymentId,
         });
-        Assert.Equal(created.DeploymentId, resp.DeploymentId);
+        resp.DeploymentId.ShouldBe(created.DeploymentId);
     }
 
     [Fact]
@@ -640,7 +640,7 @@ public sealed class ApiGatewayV2Tests : IClassFixture<MicroStackFixture>, IAsync
             DeploymentId = created.DeploymentId,
         });
         var resp = await _apigw.GetDeploymentsAsync(new GetDeploymentsRequest { ApiId = api.ApiId });
-        Assert.DoesNotContain(resp.Items, d => d.DeploymentId == created.DeploymentId);
+        resp.Items.ShouldNotContain(d => d.DeploymentId == created.DeploymentId);
     }
 
     // ── Control Plane: Tags ─────────────────────────────────────────────────────
@@ -660,8 +660,8 @@ public sealed class ApiGatewayV2Tests : IClassFixture<MicroStackFixture>, IAsync
             Tags = new Dictionary<string, string> { ["env"] = "test", ["owner"] = "team-a" },
         });
         var resp = await _apigw.GetTagsAsync(new GetTagsRequest { ResourceArn = resourceArn });
-        Assert.Equal("test", resp.Tags["env"]);
-        Assert.Equal("team-a", resp.Tags["owner"]);
+        resp.Tags["env"].ShouldBe("test");
+        resp.Tags["owner"].ShouldBe("team-a");
     }
 
     [Fact]
@@ -684,8 +684,8 @@ public sealed class ApiGatewayV2Tests : IClassFixture<MicroStackFixture>, IAsync
             TagKeys = ["remove-me"],
         });
         var resp = await _apigw.GetTagsAsync(new GetTagsRequest { ResourceArn = resourceArn });
-        Assert.DoesNotContain("remove-me", resp.Tags.Keys);
-        Assert.Equal("yes", resp.Tags["keep-me"]);
+        resp.Tags.Keys.ShouldNotContain("remove-me");
+        resp.Tags["keep-me"].ShouldBe("yes");
     }
 
     // ── Control Plane: Error cases ──────────────────────────────────────────────
@@ -693,21 +693,21 @@ public sealed class ApiGatewayV2Tests : IClassFixture<MicroStackFixture>, IAsync
     [Fact]
     public async Task ApiNotFound()
     {
-        var ex = await Assert.ThrowsAsync<Amazon.ApiGatewayV2.Model.NotFoundException>(
+        var ex = await Should.ThrowAsync<Amazon.ApiGatewayV2.Model.NotFoundException>(
             () => _apigw.GetApiAsync(new GetApiRequest { ApiId = "00000000" }));
-        Assert.Equal(HttpStatusCode.NotFound, ex.StatusCode);
+        ex.StatusCode.ShouldBe(HttpStatusCode.NotFound);
     }
 
     [Fact]
     public async Task RouteOnDeletedApi()
     {
-        var ex = await Assert.ThrowsAsync<Amazon.ApiGatewayV2.Model.NotFoundException>(
+        var ex = await Should.ThrowAsync<Amazon.ApiGatewayV2.Model.NotFoundException>(
             () => _apigw.CreateRouteAsync(new CreateRouteRequest
             {
                 ApiId = "00000000",
                 RouteKey = "GET /x",
             }));
-        Assert.Equal(HttpStatusCode.NotFound, ex.StatusCode);
+        ex.StatusCode.ShouldBe(HttpStatusCode.NotFound);
     }
 
     [Fact]
@@ -718,9 +718,9 @@ public sealed class ApiGatewayV2Tests : IClassFixture<MicroStackFixture>, IAsync
             Name = "http-proto-api",
             ProtocolType = ProtocolType.HTTP,
         });
-        Assert.Equal(ProtocolType.HTTP, resp.ProtocolType);
+        resp.ProtocolType.ShouldBe(ProtocolType.HTTP);
         var fetched = await _apigw.GetApiAsync(new GetApiRequest { ApiId = resp.ApiId });
-        Assert.Equal(ProtocolType.HTTP, fetched.ProtocolType);
+        fetched.ProtocolType.ShouldBe(ProtocolType.HTTP);
     }
 
     // ── Control Plane: Authorizer CRUD ──────────────────────────────────────────
@@ -747,8 +747,8 @@ public sealed class ApiGatewayV2Tests : IClassFixture<MicroStackFixture>, IAsync
                 Issuer = "https://idp.example.com",
             },
         });
-        Assert.Equal(AuthorizerType.JWT, created.AuthorizerType);
-        Assert.Equal("my-jwt-auth", created.Name);
+        created.AuthorizerType.ShouldBe(AuthorizerType.JWT);
+        created.Name.ShouldBe("my-jwt-auth");
         var authId = created.AuthorizerId;
 
         // Get single
@@ -757,12 +757,12 @@ public sealed class ApiGatewayV2Tests : IClassFixture<MicroStackFixture>, IAsync
             ApiId = api.ApiId,
             AuthorizerId = authId,
         });
-        Assert.Equal(authId, got.AuthorizerId);
-        Assert.Equal("https://idp.example.com", got.JwtConfiguration.Issuer);
+        got.AuthorizerId.ShouldBe(authId);
+        got.JwtConfiguration.Issuer.ShouldBe("https://idp.example.com");
 
         // List
         var listed = await _apigw.GetAuthorizersAsync(new GetAuthorizersRequest { ApiId = api.ApiId });
-        Assert.Contains(listed.Items, a => a.AuthorizerId == authId);
+        listed.Items.ShouldContain(a => a.AuthorizerId == authId);
 
         // Update
         var updated = await _apigw.UpdateAuthorizerAsync(new UpdateAuthorizerRequest
@@ -771,7 +771,7 @@ public sealed class ApiGatewayV2Tests : IClassFixture<MicroStackFixture>, IAsync
             AuthorizerId = authId,
             Name = "renamed-auth",
         });
-        Assert.Equal("renamed-auth", updated.Name);
+        updated.Name.ShouldBe("renamed-auth");
 
         // Delete
         await _apigw.DeleteAuthorizerAsync(new DeleteAuthorizerRequest
@@ -780,7 +780,7 @@ public sealed class ApiGatewayV2Tests : IClassFixture<MicroStackFixture>, IAsync
             AuthorizerId = authId,
         });
         var listed2 = await _apigw.GetAuthorizersAsync(new GetAuthorizersRequest { ApiId = api.ApiId });
-        Assert.DoesNotContain(listed2.Items, a => a.AuthorizerId == authId);
+        listed2.Items.ShouldNotContain(a => a.AuthorizerId == authId);
     }
 
     // ── Control Plane: UpdateIntegration ─────────────────────────────────────────
@@ -810,7 +810,7 @@ public sealed class ApiGatewayV2Tests : IClassFixture<MicroStackFixture>, IAsync
             ApiId = api.ApiId,
             IntegrationId = created.IntegrationId,
         });
-        Assert.Contains("new-fn", resp.IntegrationUri);
+        resp.IntegrationUri.ShouldContain("new-fn");
     }
 
     // ── Control Plane: DeleteRoute V2 ────────────────────────────────────────────
@@ -834,7 +834,7 @@ public sealed class ApiGatewayV2Tests : IClassFixture<MicroStackFixture>, IAsync
             RouteId = route.RouteId,
         });
         var routes = await _apigw.GetRoutesAsync(new GetRoutesRequest { ApiId = api.ApiId });
-        Assert.DoesNotContain(routes.Items, r => r.RouteId == route.RouteId);
+        routes.Items.ShouldNotContain(r => r.RouteId == route.RouteId);
     }
 
     // ── Control Plane: Stage Variables ───────────────────────────────────────────
@@ -862,8 +862,8 @@ public sealed class ApiGatewayV2Tests : IClassFixture<MicroStackFixture>, IAsync
             ApiId = api.ApiId,
             StageName = "dev",
         });
-        Assert.Equal("development", stage.StageVariables["env"]);
-        Assert.Equal("1", stage.StageVariables["version"]);
+        stage.StageVariables["env"].ShouldBe("development");
+        stage.StageVariables["version"].ShouldBe("1");
     }
 
     // ── Control Plane: Stage Timestamps ──────────────────────────────────────────
@@ -882,10 +882,8 @@ public sealed class ApiGatewayV2Tests : IClassFixture<MicroStackFixture>, IAsync
             StageName = "test-stage",
         });
         // SDK parses ISO 8601 timestamps into DateTime
-        Assert.True(stage.CreatedDate > DateTime.MinValue,
-            $"CreatedDate should be a valid datetime, got {stage.CreatedDate}");
-        Assert.True(stage.LastUpdatedDate > DateTime.MinValue,
-            $"LastUpdatedDate should be a valid datetime, got {stage.LastUpdatedDate}");
+        (stage.CreatedDate > DateTime.MinValue).ShouldBe(true, $"CreatedDate should be a valid datetime, got {stage.CreatedDate}");
+        (stage.LastUpdatedDate > DateTime.MinValue).ShouldBe(true, $"LastUpdatedDate should be a valid datetime, got {stage.LastUpdatedDate}");
     }
 
     // ── Data Plane: Execute No Route ────────────────────────────────────────────
@@ -905,7 +903,7 @@ public sealed class ApiGatewayV2Tests : IClassFixture<MicroStackFixture>, IAsync
         });
 
         var resp = await ExecuteApiRequest(api.ApiId, HttpMethod.Get, "/$default/nonexistent");
-        Assert.Equal(HttpStatusCode.NotFound, resp.StatusCode);
+        resp.StatusCode.ShouldBe(HttpStatusCode.NotFound);
     }
 
     // ── Data Plane: Lambda Proxy Tests ──────────────────────────────────────────
@@ -927,9 +925,9 @@ public sealed class ApiGatewayV2Tests : IClassFixture<MicroStackFixture>, IAsync
         var (apiId, _, _) = await CreateApiWithLambdaRoute(funcArn, "GET /hello");
 
         var resp = await ExecuteApiRequest(apiId, HttpMethod.Get, "/$default/hello");
-        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+        resp.StatusCode.ShouldBe(HttpStatusCode.OK);
         var body = JsonSerializer.Deserialize<JsonElement>(await resp.Content.ReadAsStringAsync());
-        Assert.Equal("/hello", body.GetProperty("path").GetString());
+        body.GetProperty("path").GetString().ShouldBe("/hello");
     }
 
     [Fact]
@@ -944,7 +942,7 @@ public sealed class ApiGatewayV2Tests : IClassFixture<MicroStackFixture>, IAsync
         var (apiId, _, _) = await CreateApiWithLambdaRoute(funcArn, "$default");
 
         var resp = await ExecuteApiRequest(apiId, HttpMethod.Post, "/$default/any/path/here");
-        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+        resp.StatusCode.ShouldBe(HttpStatusCode.OK);
     }
 
     [Fact]
@@ -960,9 +958,9 @@ public sealed class ApiGatewayV2Tests : IClassFixture<MicroStackFixture>, IAsync
         var (apiId, _, _) = await CreateApiWithLambdaRoute(funcArn, "GET /items/{id}");
 
         var resp = await ExecuteApiRequest(apiId, HttpMethod.Get, "/$default/items/abc123");
-        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+        resp.StatusCode.ShouldBe(HttpStatusCode.OK);
         var body = JsonSerializer.Deserialize<JsonElement>(await resp.Content.ReadAsStringAsync());
-        Assert.Equal("/items/abc123", body.GetProperty("rawPath").GetString());
+        body.GetProperty("rawPath").GetString().ShouldBe("/items/abc123");
     }
 
     [Fact]
@@ -978,9 +976,9 @@ public sealed class ApiGatewayV2Tests : IClassFixture<MicroStackFixture>, IAsync
         var (apiId, _, _) = await CreateApiWithLambdaRoute(funcArn, "GET /items/{itemId}");
 
         var resp = await ExecuteApiRequest(apiId, HttpMethod.Get, "/$default/items/my-item-42");
-        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+        resp.StatusCode.ShouldBe(HttpStatusCode.OK);
         var body = JsonSerializer.Deserialize<JsonElement>(await resp.Content.ReadAsStringAsync());
-        Assert.Equal("my-item-42", body.GetProperty("itemId").GetString());
+        body.GetProperty("itemId").GetString().ShouldBe("my-item-42");
     }
 
     [Fact]
@@ -996,9 +994,9 @@ public sealed class ApiGatewayV2Tests : IClassFixture<MicroStackFixture>, IAsync
         var (apiId, _, _) = await CreateApiWithLambdaRoute(funcArn, "GET /files/{proxy+}");
 
         var resp = await ExecuteApiRequest(apiId, HttpMethod.Get, "/$default/files/a/b/c.txt");
-        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+        resp.StatusCode.ShouldBe(HttpStatusCode.OK);
         var body = JsonSerializer.Deserialize<JsonElement>(await resp.Content.ReadAsStringAsync());
-        Assert.Equal("a/b/c.txt", body.GetProperty("proxy").GetString());
+        body.GetProperty("proxy").GetString().ShouldBe("a/b/c.txt");
     }
 
     [Fact]
@@ -1020,16 +1018,16 @@ public sealed class ApiGatewayV2Tests : IClassFixture<MicroStackFixture>, IAsync
         var resp = await ExecuteApiRequest(apiId, HttpMethod.Get,
             "/$default/search?q=hello&tag=a&tag=b",
             new Dictionary<string, string> { ["X-Custom-Header"] = "test-value" });
-        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+        resp.StatusCode.ShouldBe(HttpStatusCode.OK);
         var body = JsonSerializer.Deserialize<JsonElement>(await resp.Content.ReadAsStringAsync());
-        Assert.Equal("hello", body.GetProperty("qs").GetProperty("q").GetString());
+        body.GetProperty("qs").GetProperty("q").GetString().ShouldBe("hello");
         var tagVal = body.GetProperty("qs").GetProperty("tag").GetString();
-        Assert.Equal("a,b", tagVal);
+        tagVal.ShouldBe("a,b");
         var rawQs = body.GetProperty("rawQs").GetString()!;
-        Assert.Contains("q=hello", rawQs);
-        Assert.Contains("tag=a", rawQs);
-        Assert.Contains("tag=b", rawQs);
-        Assert.Equal("test-value", body.GetProperty("customHeader").GetString());
+        rawQs.ShouldContain("q=hello");
+        rawQs.ShouldContain("tag=a");
+        rawQs.ShouldContain("tag=b");
+        body.GetProperty("customHeader").GetString().ShouldBe("test-value");
     }
 
     [Fact]
@@ -1047,10 +1045,10 @@ public sealed class ApiGatewayV2Tests : IClassFixture<MicroStackFixture>, IAsync
 
         var resp = await ExecuteApiRequest(apiId, HttpMethod.Get,
             "/$default/projects/bunya/items/prod-42");
-        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+        resp.StatusCode.ShouldBe(HttpStatusCode.OK);
         var body = JsonSerializer.Deserialize<JsonElement>(await resp.Content.ReadAsStringAsync());
-        Assert.Equal("bunya", body.GetProperty("projectKey").GetString());
-        Assert.Equal("prod-42", body.GetProperty("itemId").GetString());
+        body.GetProperty("projectKey").GetString().ShouldBe("bunya");
+        body.GetProperty("itemId").GetString().ShouldBe("prod-42");
     }
 
     [Fact]
@@ -1066,9 +1064,9 @@ public sealed class ApiGatewayV2Tests : IClassFixture<MicroStackFixture>, IAsync
         var (apiId, _, _) = await CreateApiWithLambdaRoute(funcArn, "GET /products");
 
         var resp = await ExecuteApiRequest(apiId, HttpMethod.Get, "/$default/products");
-        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+        resp.StatusCode.ShouldBe(HttpStatusCode.OK);
         var body = JsonSerializer.Deserialize<JsonElement>(await resp.Content.ReadAsStringAsync());
-        Assert.Equal(JsonValueKind.Null, body.GetProperty("pp").ValueKind);
+        body.GetProperty("pp").ValueKind.ShouldBe(JsonValueKind.Null);
     }
 
     [Fact]
@@ -1084,9 +1082,9 @@ public sealed class ApiGatewayV2Tests : IClassFixture<MicroStackFixture>, IAsync
         var (apiId, _, _) = await CreateApiWithLambdaRoute(funcArn, "GET /items/{itemId}");
 
         var resp = await ExecuteApiRequest(apiId, HttpMethod.Get, "/$default/items/hello%20world");
-        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+        resp.StatusCode.ShouldBe(HttpStatusCode.OK);
         var body = JsonSerializer.Deserialize<JsonElement>(await resp.Content.ReadAsStringAsync());
-        Assert.Equal("hello world", body.GetProperty("itemId").GetString());
+        body.GetProperty("itemId").GetString().ShouldBe("hello world");
     }
 
     [Fact]
@@ -1101,9 +1099,9 @@ public sealed class ApiGatewayV2Tests : IClassFixture<MicroStackFixture>, IAsync
         var (apiId, _, _) = await CreateApiWithLambdaRoute(funcArn, "GET /files/{proxy+}");
 
         var resp = await ExecuteApiRequest(apiId, HttpMethod.Get, "/$default/files/a/b/c");
-        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+        resp.StatusCode.ShouldBe(HttpStatusCode.OK);
         var body = await resp.Content.ReadAsStringAsync();
-        Assert.Equal("/files/a/b/c", body);
+        body.ShouldBe("/files/a/b/c");
     }
 
     [Fact]
@@ -1118,8 +1116,8 @@ public sealed class ApiGatewayV2Tests : IClassFixture<MicroStackFixture>, IAsync
         var (apiId, _, _) = await CreateApiWithLambdaRoute(funcArn, "GET /ping");
 
         var resp = await ExecuteApiRequest(apiId, HttpMethod.Get, "/$default/ping");
-        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+        resp.StatusCode.ShouldBe(HttpStatusCode.OK);
         var body = await resp.Content.ReadAsStringAsync();
-        Assert.Equal("GET /ping", body);
+        body.ShouldBe("GET /ping");
     }
 }

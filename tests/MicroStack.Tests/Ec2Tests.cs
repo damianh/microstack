@@ -49,7 +49,7 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
     public async Task DescribeVpcsDefault()
     {
         var resp = await _ec2.DescribeVpcsAsync(new DescribeVpcsRequest());
-        Assert.Contains(resp.Vpcs, v => v.IsDefault == true);
+        resp.Vpcs.ShouldContain(v => v.IsDefault == true);
     }
 
     [Fact]
@@ -57,20 +57,20 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
     {
         var createResp = await _ec2.CreateVpcAsync(new CreateVpcRequest { CidrBlock = "10.1.0.0/16" });
         var vpcId = createResp.Vpc.VpcId;
-        Assert.StartsWith("vpc-", vpcId);
+        vpcId.ShouldStartWith("vpc-");
 
         var descResp = await _ec2.DescribeVpcsAsync(new DescribeVpcsRequest
         {
             VpcIds = [vpcId],
         });
-        Assert.Single(descResp.Vpcs);
-        Assert.Equal("10.1.0.0/16", descResp.Vpcs[0].CidrBlock);
-        Assert.False(descResp.Vpcs[0].IsDefault);
+        descResp.Vpcs.ShouldHaveSingleItem();
+        descResp.Vpcs[0].CidrBlock.ShouldBe("10.1.0.0/16");
+        descResp.Vpcs[0].IsDefault.ShouldBe(false);
 
         await _ec2.DeleteVpcAsync(new DeleteVpcRequest { VpcId = vpcId });
 
         var descAfter = await _ec2.DescribeVpcsAsync(new DescribeVpcsRequest());
-        Assert.DoesNotContain(descAfter.Vpcs, v => v.VpcId == vpcId);
+        descAfter.Vpcs.ShouldNotContain(v => v.VpcId == vpcId);
     }
 
     [Fact]
@@ -84,14 +84,14 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             VpcId = vpcId,
             Attribute = VpcAttributeName.EnableDnsSupport,
         });
-        Assert.NotNull(dnsSupport.EnableDnsSupport);
+        dnsSupport.EnableDnsSupport.ShouldNotBeNull();
 
         var dnsHostnames = await _ec2.DescribeVpcAttributeAsync(new DescribeVpcAttributeRequest
         {
             VpcId = vpcId,
             Attribute = VpcAttributeName.EnableDnsHostnames,
         });
-        Assert.NotNull(dnsHostnames.EnableDnsHostnames);
+        dnsHostnames.EnableDnsHostnames.ShouldNotBeNull();
 
         await _ec2.DeleteVpcAsync(new DeleteVpcRequest { VpcId = vpcId });
     }
@@ -133,9 +133,9 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
                     new Filter("default", ["true"]),
                 ],
             });
-            Assert.Single(acls.NetworkAcls);
-            Assert.True(acls.NetworkAcls[0].IsDefault);
-            Assert.Equal(vpcId, acls.NetworkAcls[0].VpcId);
+            acls.NetworkAcls.ShouldHaveSingleItem();
+            acls.NetworkAcls[0].IsDefault.ShouldBe(true);
+            acls.NetworkAcls[0].VpcId.ShouldBe(vpcId);
 
             // Default SG
             var sgs = await _ec2.DescribeSecurityGroupsAsync(new DescribeSecurityGroupsRequest
@@ -146,8 +146,8 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
                     new Filter("group-name", ["default"]),
                 ],
             });
-            Assert.Single(sgs.SecurityGroups);
-            Assert.Equal(vpcId, sgs.SecurityGroups[0].VpcId);
+            sgs.SecurityGroups.ShouldHaveSingleItem();
+            sgs.SecurityGroups[0].VpcId.ShouldBe(vpcId);
 
             // Main route table
             var rtbs = await _ec2.DescribeRouteTablesAsync(new DescribeRouteTablesRequest
@@ -158,8 +158,8 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
                     new Filter("association.main", ["true"]),
                 ],
             });
-            Assert.Single(rtbs.RouteTables);
-            Assert.Equal(vpcId, rtbs.RouteTables[0].VpcId);
+            rtbs.RouteTables.ShouldHaveSingleItem();
+            rtbs.RouteTables[0].VpcId.ShouldBe(vpcId);
         }
         finally
         {
@@ -173,7 +173,7 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
     public async Task DescribeSubnetsDefault()
     {
         var resp = await _ec2.DescribeSubnetsAsync(new DescribeSubnetsRequest());
-        Assert.True(resp.Subnets.Count >= 1);
+        (resp.Subnets.Count >= 1).ShouldBe(true);
     }
 
     [Fact]
@@ -188,14 +188,14 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             CidrBlock = "10.2.1.0/24",
         });
         var subnetId = subnet.Subnet.SubnetId;
-        Assert.StartsWith("subnet-", subnetId);
+        subnetId.ShouldStartWith("subnet-");
 
         var desc = await _ec2.DescribeSubnetsAsync(new DescribeSubnetsRequest
         {
             SubnetIds = [subnetId],
         });
-        Assert.Single(desc.Subnets);
-        Assert.Equal("10.2.1.0/24", desc.Subnets[0].CidrBlock);
+        desc.Subnets.ShouldHaveSingleItem();
+        desc.Subnets[0].CidrBlock.ShouldBe("10.2.1.0/24");
 
         await _ec2.DeleteSubnetAsync(new DeleteSubnetRequest { SubnetId = subnetId });
         await _ec2.DeleteVpcAsync(new DeleteVpcRequest { VpcId = vpcId });
@@ -223,7 +223,7 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             SubnetIds = [subnetId],
         });
-        Assert.True(desc.Subnets[0].MapPublicIpOnLaunch);
+        desc.Subnets[0].MapPublicIpOnLaunch.ShouldBe(true);
 
         await _ec2.DeleteSubnetAsync(new DeleteSubnetRequest { SubnetId = subnetId });
         await _ec2.DeleteVpcAsync(new DeleteVpcRequest { VpcId = vpcId });
@@ -236,21 +236,21 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             Filters = [new Filter("vpc-id", ["vpc-00000001"])],
         });
-        Assert.True(resp.Subnets.Count >= 3);
+        (resp.Subnets.Count >= 3).ShouldBe(true);
 
         var byAz = resp.Subnets.ToDictionary(s => s.AvailabilityZone);
-        Assert.Contains("us-east-1a", byAz.Keys);
-        Assert.Contains("us-east-1b", byAz.Keys);
-        Assert.Contains("us-east-1c", byAz.Keys);
+        byAz.Keys.ShouldContain("us-east-1a");
+        byAz.Keys.ShouldContain("us-east-1b");
+        byAz.Keys.ShouldContain("us-east-1c");
 
-        Assert.Equal("172.31.0.0/20", byAz["us-east-1a"].CidrBlock);
-        Assert.Equal("172.31.16.0/20", byAz["us-east-1b"].CidrBlock);
-        Assert.Equal("172.31.32.0/20", byAz["us-east-1c"].CidrBlock);
+        byAz["us-east-1a"].CidrBlock.ShouldBe("172.31.0.0/20");
+        byAz["us-east-1b"].CidrBlock.ShouldBe("172.31.16.0/20");
+        byAz["us-east-1c"].CidrBlock.ShouldBe("172.31.32.0/20");
 
         foreach (var s in resp.Subnets)
         {
-            Assert.True(s.DefaultForAz);
-            Assert.True(s.MapPublicIpOnLaunch);
+            s.DefaultForAz.ShouldBe(true);
+            s.MapPublicIpOnLaunch.ShouldBe(true);
         }
     }
 
@@ -265,18 +265,18 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             Description = "test sg",
         });
         var sgId = create.GroupId;
-        Assert.StartsWith("sg-", sgId);
+        sgId.ShouldStartWith("sg-");
 
         var desc = await _ec2.DescribeSecurityGroupsAsync(new DescribeSecurityGroupsRequest
         {
             GroupIds = [sgId],
         });
-        Assert.Equal("qa-ec2-sg", desc.SecurityGroups[0].GroupName);
+        desc.SecurityGroups[0].GroupName.ShouldBe("qa-ec2-sg");
 
         await _ec2.DeleteSecurityGroupAsync(new DeleteSecurityGroupRequest { GroupId = sgId });
 
         var descAfter = await _ec2.DescribeSecurityGroupsAsync(new DescribeSecurityGroupsRequest());
-        Assert.DoesNotContain(descAfter.SecurityGroups, sg => sg.GroupId == sgId);
+        descAfter.SecurityGroups.ShouldNotContain(sg => sg.GroupId == sgId);
     }
 
     [Fact]
@@ -288,13 +288,13 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             Description = "d",
         });
 
-        var ex = await Assert.ThrowsAsync<AmazonEC2Exception>(() =>
+        var ex = await Should.ThrowAsync<AmazonEC2Exception>(() =>
             _ec2.CreateSecurityGroupAsync(new CreateSecurityGroupRequest
             {
                 GroupName = "qa-ec2-sg-dup",
                 Description = "d",
             }));
-        Assert.Equal("InvalidGroup.Duplicate", ex.ErrorCode);
+        ex.ErrorCode.ShouldBe("InvalidGroup.Duplicate");
     }
 
     [Fact]
@@ -326,7 +326,7 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             GroupIds = [sgId],
         });
-        Assert.Contains(desc.SecurityGroups[0].IpPermissions, p => p.FromPort == 80);
+        desc.SecurityGroups[0].IpPermissions.ShouldContain(p => p.FromPort == 80);
 
         await _ec2.RevokeSecurityGroupIngressAsync(new RevokeSecurityGroupIngressRequest
         {
@@ -347,7 +347,7 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             GroupIds = [sgId],
         });
-        Assert.DoesNotContain(descAfter.SecurityGroups[0].IpPermissions ?? [], p => p.FromPort == 80);
+        descAfter.SecurityGroups[0].IpPermissions.ShouldNotContain(p => p.FromPort == 80);
 
         await _ec2.DeleteSecurityGroupAsync(new DeleteSecurityGroupRequest { GroupId = sgId });
     }
@@ -361,19 +361,19 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             KeyName = "qa-ec2-key",
         });
-        Assert.Equal("qa-ec2-key", create.KeyPair.KeyName);
-        Assert.NotEmpty(create.KeyPair.KeyMaterial);
+        create.KeyPair.KeyName.ShouldBe("qa-ec2-key");
+        create.KeyPair.KeyMaterial.ShouldNotBeEmpty();
 
         var desc = await _ec2.DescribeKeyPairsAsync(new DescribeKeyPairsRequest
         {
             KeyNames = ["qa-ec2-key"],
         });
-        Assert.Single(desc.KeyPairs);
+        desc.KeyPairs.ShouldHaveSingleItem();
 
         await _ec2.DeleteKeyPairAsync(new DeleteKeyPairRequest { KeyName = "qa-ec2-key" });
 
         var descAfter = await _ec2.DescribeKeyPairsAsync(new DescribeKeyPairsRequest());
-        Assert.DoesNotContain(descAfter.KeyPairs ?? [], kp => kp.KeyName == "qa-ec2-key");
+        descAfter.KeyPairs.ShouldNotContain(kp => kp.KeyName == "qa-ec2-key");
     }
 
     [Fact]
@@ -381,9 +381,9 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
     {
         await _ec2.CreateKeyPairAsync(new CreateKeyPairRequest { KeyName = "qa-ec2-key-dup" });
 
-        var ex = await Assert.ThrowsAsync<AmazonEC2Exception>(() =>
+        var ex = await Should.ThrowAsync<AmazonEC2Exception>(() =>
             _ec2.CreateKeyPairAsync(new CreateKeyPairRequest { KeyName = "qa-ec2-key-dup" }));
-        Assert.Equal("InvalidKeyPair.Duplicate", ex.ErrorCode);
+        ex.ErrorCode.ShouldBe("InvalidKeyPair.Duplicate");
     }
 
     [Fact]
@@ -395,14 +395,14 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             KeyName = "qa-ec2-import-key",
             PublicKeyMaterial = publicKeyMaterial,
         });
-        Assert.Equal("qa-ec2-import-key", resp.KeyName);
-        Assert.NotEmpty(resp.KeyFingerprint);
+        resp.KeyName.ShouldBe("qa-ec2-import-key");
+        resp.KeyFingerprint.ShouldNotBeEmpty();
 
         var desc = await _ec2.DescribeKeyPairsAsync(new DescribeKeyPairsRequest
         {
             KeyNames = ["qa-ec2-import-key"],
         });
-        Assert.Single(desc.KeyPairs);
+        desc.KeyPairs.ShouldHaveSingleItem();
 
         await _ec2.DeleteKeyPairAsync(new DeleteKeyPairRequest { KeyName = "qa-ec2-import-key" });
     }
@@ -414,7 +414,7 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
     {
         var igw = await _ec2.CreateInternetGatewayAsync(new CreateInternetGatewayRequest());
         var igwId = igw.InternetGateway.InternetGatewayId;
-        Assert.StartsWith("igw-", igwId);
+        igwId.ShouldStartWith("igw-");
 
         var vpc = await _ec2.CreateVpcAsync(new CreateVpcRequest { CidrBlock = "10.3.0.0/16" });
         var vpcId = vpc.Vpc.VpcId;
@@ -429,7 +429,7 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             InternetGatewayIds = [igwId],
         });
-        Assert.Single(desc.InternetGateways[0].Attachments);
+        desc.InternetGateways[0].Attachments.ShouldHaveSingleItem();
 
         await _ec2.DetachInternetGatewayAsync(new DetachInternetGatewayRequest
         {
@@ -454,14 +454,14 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
 
         var rtb = await _ec2.CreateRouteTableAsync(new CreateRouteTableRequest { VpcId = vpcId });
         var rtbId = rtb.RouteTable.RouteTableId;
-        Assert.StartsWith("rtb-", rtbId);
+        rtbId.ShouldStartWith("rtb-");
 
         var desc = await _ec2.DescribeRouteTablesAsync(new DescribeRouteTablesRequest
         {
             RouteTableIds = [rtbId],
         });
-        Assert.Single(desc.RouteTables);
-        Assert.Equal(rtbId, desc.RouteTables[0].RouteTableId);
+        desc.RouteTables.ShouldHaveSingleItem();
+        desc.RouteTables[0].RouteTableId.ShouldBe(rtbId);
 
         await _ec2.DeleteRouteTableAsync(new DeleteRouteTableRequest { RouteTableId = rtbId });
         await _ec2.DeleteVpcAsync(new DeleteVpcRequest { VpcId = vpcId });
@@ -487,13 +487,13 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             SubnetId = subnetId,
         });
         var assocId = assoc.AssociationId;
-        Assert.StartsWith("rtbassoc-", assocId);
+        assocId.ShouldStartWith("rtbassoc-");
 
         var desc = await _ec2.DescribeRouteTablesAsync(new DescribeRouteTablesRequest
         {
             RouteTableIds = [rtbId],
         });
-        Assert.Contains(desc.RouteTables[0].Associations, a => a.RouteTableAssociationId == assocId);
+        desc.RouteTables[0].Associations.ShouldContain(a => a.RouteTableAssociationId == assocId);
 
         await _ec2.DisassociateRouteTableAsync(new DisassociateRouteTableRequest
         {
@@ -504,8 +504,7 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             RouteTableIds = [rtbId],
         });
-        Assert.DoesNotContain(descAfter.RouteTables[0].Associations ?? [],
-            a => a.RouteTableAssociationId == assocId);
+        descAfter.RouteTables[0].Associations.ShouldNotContain(a => a.RouteTableAssociationId == assocId);
 
         await _ec2.DeleteRouteTableAsync(new DeleteRouteTableRequest { RouteTableId = rtbId });
         await _ec2.DeleteSubnetAsync(new DeleteSubnetRequest { SubnetId = subnetId });
@@ -533,7 +532,7 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             RouteTableIds = [rtbId],
         });
-        Assert.Contains(desc.RouteTables[0].Routes, r => r.DestinationCidrBlock == "0.0.0.0/0");
+        desc.RouteTables[0].Routes.ShouldContain(r => r.DestinationCidrBlock == "0.0.0.0/0");
 
         await _ec2.ReplaceRouteAsync(new ReplaceRouteRequest
         {
@@ -552,7 +551,7 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             RouteTableIds = [rtbId],
         });
-        Assert.DoesNotContain(descAfter.RouteTables[0].Routes, r => r.DestinationCidrBlock == "0.0.0.0/0");
+        descAfter.RouteTables[0].Routes.ShouldNotContain(r => r.DestinationCidrBlock == "0.0.0.0/0");
 
         await _ec2.DeleteInternetGatewayAsync(new DeleteInternetGatewayRequest { InternetGatewayId = igwId });
         await _ec2.DeleteRouteTableAsync(new DeleteRouteTableRequest { RouteTableId = rtbId });
@@ -563,7 +562,7 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
     public async Task DescribeRouteTablesDefault()
     {
         var desc = await _ec2.DescribeRouteTablesAsync(new DescribeRouteTablesRequest());
-        Assert.Contains(desc.RouteTables, rt => rt.VpcId == "vpc-00000001");
+        desc.RouteTables.ShouldContain(rt => rt.VpcId == "vpc-00000001");
     }
 
     [Fact]
@@ -597,15 +596,15 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
                     new Filter("association.route-table-association-id", [assocId]),
                 ],
             });
-            Assert.Single(result.RouteTables);
-            Assert.Equal(rtbId, result.RouteTables[0].RouteTableId);
+            result.RouteTables.ShouldHaveSingleItem();
+            result.RouteTables[0].RouteTableId.ShouldBe(rtbId);
 
             // Filter by subnet ID
             var result2 = await _ec2.DescribeRouteTablesAsync(new DescribeRouteTablesRequest
             {
                 Filters = [new Filter("association.subnet-id", [subnetId])],
             });
-            Assert.Single(result2.RouteTables);
+            result2.RouteTables.ShouldHaveSingleItem();
 
             await _ec2.DisassociateRouteTableAsync(new DisassociateRouteTableRequest { AssociationId = assocId });
             await _ec2.DeleteRouteTableAsync(new DeleteRouteTableRequest { RouteTableId = rtbId });
@@ -648,13 +647,13 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
                 AssociationId = oldAssocId,
                 RouteTableId = rtb2Id,
             });
-            Assert.NotEqual(oldAssocId, newResp.NewAssociationId);
+            newResp.NewAssociationId.ShouldNotBe(oldAssocId);
 
             var result = await _ec2.DescribeRouteTablesAsync(new DescribeRouteTablesRequest
             {
                 Filters = [new Filter("association.subnet-id", [subnetId])],
             });
-            Assert.Equal(rtb2Id, result.RouteTables[0].RouteTableId);
+            result.RouteTables[0].RouteTableId.ShouldBe(rtb2Id);
 
             await _ec2.DisassociateRouteTableAsync(new DisassociateRouteTableRequest
             {
@@ -682,24 +681,23 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             MaxCount = 1,
             InstanceType = InstanceType.T2Micro,
         });
-        Assert.Single(run.Reservation.Instances);
+        run.Reservation.Instances.ShouldHaveSingleItem();
         var instanceId = run.Reservation.Instances[0].InstanceId;
-        Assert.StartsWith("i-", instanceId);
-        Assert.Equal(InstanceStateName.Running, run.Reservation.Instances[0].State.Name);
+        instanceId.ShouldStartWith("i-");
+        run.Reservation.Instances[0].State.Name.ShouldBe(InstanceStateName.Running);
 
         var desc = await _ec2.DescribeInstancesAsync(new DescribeInstancesRequest
         {
             InstanceIds = [instanceId],
         });
-        Assert.Single(desc.Reservations);
-        Assert.Equal(instanceId, desc.Reservations[0].Instances[0].InstanceId);
+        desc.Reservations.ShouldHaveSingleItem();
+        desc.Reservations[0].Instances[0].InstanceId.ShouldBe(instanceId);
 
         var term = await _ec2.TerminateInstancesAsync(new TerminateInstancesRequest
         {
             InstanceIds = [instanceId],
         });
-        Assert.Equal(InstanceStateName.Terminated,
-            term.TerminatingInstances[0].CurrentState.Name);
+        term.TerminatingInstances[0].CurrentState.Name.ShouldBe(InstanceStateName.Terminated);
     }
 
     [Fact]
@@ -717,13 +715,13 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             InstanceIds = [iid],
         });
-        Assert.Equal(InstanceStateName.Stopped, stop.StoppingInstances[0].CurrentState.Name);
+        stop.StoppingInstances[0].CurrentState.Name.ShouldBe(InstanceStateName.Stopped);
 
         var start = await _ec2.StartInstancesAsync(new StartInstancesRequest
         {
             InstanceIds = [iid],
         });
-        Assert.Equal(InstanceStateName.Running, start.StartingInstances[0].CurrentState.Name);
+        start.StartingInstances[0].CurrentState.Name.ShouldBe(InstanceStateName.Running);
 
         await _ec2.TerminateInstancesAsync(new TerminateInstancesRequest { InstanceIds = [iid] });
     }
@@ -737,9 +735,9 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             MinCount = 3,
             MaxCount = 3,
         });
-        Assert.Equal(3, run.Reservation.Instances.Count);
+        run.Reservation.Instances.Count.ShouldBe(3);
         var ids = run.Reservation.Instances.Select(i => i.InstanceId).ToList();
-        Assert.Equal(3, ids.Distinct().Count());
+        ids.Distinct().Count().ShouldBe(3);
 
         await _ec2.TerminateInstancesAsync(new TerminateInstancesRequest { InstanceIds = ids });
     }
@@ -778,8 +776,8 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             InstanceId = iid,
             Attribute = InstanceAttributeName.InstanceType,
         });
-        Assert.Equal(iid, attr.InstanceAttribute.InstanceId);
-        Assert.Equal("t3.micro", attr.InstanceAttribute.InstanceType);
+        attr.InstanceAttribute.InstanceId.ShouldBe(iid);
+        attr.InstanceAttribute.InstanceType.ShouldBe("t3.micro");
 
         await _ec2.TerminateInstancesAsync(new TerminateInstancesRequest { InstanceIds = [iid] });
     }
@@ -800,8 +798,8 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             InstanceId = iid,
             Attribute = InstanceAttributeName.InstanceInitiatedShutdownBehavior,
         });
-        Assert.Equal(iid, attr.InstanceAttribute.InstanceId);
-        Assert.Equal("stop", attr.InstanceAttribute.InstanceInitiatedShutdownBehavior);
+        attr.InstanceAttribute.InstanceId.ShouldBe(iid);
+        attr.InstanceAttribute.InstanceInitiatedShutdownBehavior.ShouldBe("stop");
 
         await _ec2.TerminateInstancesAsync(new TerminateInstancesRequest { InstanceIds = [iid] });
     }
@@ -809,13 +807,13 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
     [Fact]
     public async Task DescribeInstanceAttributeNotFound()
     {
-        var ex = await Assert.ThrowsAsync<AmazonEC2Exception>(() =>
+        var ex = await Should.ThrowAsync<AmazonEC2Exception>(() =>
             _ec2.DescribeInstanceAttributeAsync(new DescribeInstanceAttributeRequest
             {
                 InstanceId = "i-000000000000nonex",
                 Attribute = InstanceAttributeName.InstanceType,
             }));
-        Assert.Equal("InvalidInstanceID.NotFound", ex.ErrorCode);
+        ex.ErrorCode.ShouldBe("InvalidInstanceID.NotFound");
     }
 
     // ── Images ──────────────────────────────────────────────────────────────────
@@ -827,8 +825,8 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             Owners = ["self"],
         });
-        Assert.True(resp.Images.Count >= 1);
-        Assert.All(resp.Images, img => Assert.NotEmpty(img.ImageId));
+        (resp.Images.Count >= 1).ShouldBe(true);
+        resp.Images.ShouldAllBe(img => !string.IsNullOrEmpty(img.ImageId));
     }
 
     // ── Availability Zones ──────────────────────────────────────────────────────
@@ -838,7 +836,7 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
     {
         var resp = await _ec2.DescribeAvailabilityZonesAsync(new DescribeAvailabilityZonesRequest());
         var azNames = resp.AvailabilityZones.Select(az => az.ZoneName).ToList();
-        Assert.Contains(azNames, az => az.Contains("us-east-1"));
+        azNames.ShouldContain(az => az.Contains("us-east-1"));
     }
 
     // ── Elastic IP Tests ────────────────────────────────────────────────────────
@@ -848,8 +846,8 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
     {
         var alloc = await _ec2.AllocateAddressAsync(new AllocateAddressRequest { Domain = DomainType.Vpc });
         var allocId = alloc.AllocationId;
-        Assert.StartsWith("eipalloc-", allocId);
-        Assert.NotEmpty(alloc.PublicIp);
+        allocId.ShouldStartWith("eipalloc-");
+        alloc.PublicIp.ShouldNotBeEmpty();
 
         var run = await _ec2.RunInstancesAsync(new RunInstancesRequest
         {
@@ -864,13 +862,13 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             AllocationId = allocId,
             InstanceId = iid,
         });
-        Assert.NotEmpty(assocResp.AssociationId);
+        assocResp.AssociationId.ShouldNotBeEmpty();
 
         var desc = await _ec2.DescribeAddressesAsync(new DescribeAddressesRequest
         {
             AllocationIds = [allocId],
         });
-        Assert.Equal(iid, desc.Addresses[0].InstanceId);
+        desc.Addresses[0].InstanceId.ShouldBe(iid);
 
         await _ec2.DisassociateAddressAsync(new DisassociateAddressRequest
         {
@@ -905,7 +903,7 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             InstanceIds = [iid],
         });
         var tags = desc.Reservations[0].Instances[0].Tags;
-        Assert.Contains(tags, t => t.Key == "Name" && t.Value == "qa-box");
+        tags.ShouldContain(t => t.Key == "Name" && t.Value == "qa-box");
 
         await _ec2.DeleteTagsAsync(new DeleteTagsRequest
         {
@@ -918,7 +916,7 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             InstanceIds = [iid],
         });
         var tags2 = desc2.Reservations[0].Instances[0].Tags;
-        Assert.DoesNotContain(tags2 ?? [], t => t.Key == "Name");
+        tags2.ShouldNotContain(t => t.Key == "Name");
 
         await _ec2.TerminateInstancesAsync(new TerminateInstancesRequest { InstanceIds = [iid] });
     }
@@ -959,16 +957,16 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             Filters = [new Filter("resource-id", [id1])],
         });
-        Assert.All(resp.Tags, t => Assert.Equal(id1, t.ResourceId));
-        Assert.Equal(2, resp.Tags.Count);
+        resp.Tags.ShouldAllBe(t => t.ResourceId == id1);
+        resp.Tags.Count.ShouldBe(2);
 
         // Filter by key
         var resp2 = await _ec2.DescribeTagsAsync(new DescribeTagsRequest
         {
             Filters = [new Filter("key", ["Env"])],
         });
-        Assert.All(resp2.Tags, t => Assert.Equal("Env", t.Key));
-        Assert.Contains(resp2.Tags, t => t.ResourceId == id1);
+        resp2.Tags.ShouldAllBe(t => t.Key == "Env");
+        resp2.Tags.ShouldContain(t => t.ResourceId == id1);
 
         // Filter by resource-id + key
         var resp3 = await _ec2.DescribeTagsAsync(new DescribeTagsRequest
@@ -979,24 +977,24 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
                 new Filter("key", ["Name"]),
             ],
         });
-        Assert.Single(resp3.Tags);
-        Assert.Equal(id1, resp3.Tags[0].ResourceId);
-        Assert.Equal("Name", resp3.Tags[0].Key);
-        Assert.Equal("first", resp3.Tags[0].Value);
+        resp3.Tags.ShouldHaveSingleItem();
+        resp3.Tags[0].ResourceId.ShouldBe(id1);
+        resp3.Tags[0].Key.ShouldBe("Name");
+        resp3.Tags[0].Value.ShouldBe("first");
 
         // Filter for nonexistent resource
         var resp4 = await _ec2.DescribeTagsAsync(new DescribeTagsRequest
         {
             Filters = [new Filter("resource-id", ["i-doesnotexist"])],
         });
-        Assert.Empty(resp4.Tags ?? []);
+        resp4.Tags.ShouldBeEmpty();
 
         // All tags have correct resource type
         var resp5 = await _ec2.DescribeTagsAsync(new DescribeTagsRequest
         {
             Filters = [new Filter("resource-id", [id1, id2])],
         });
-        Assert.All(resp5.Tags, t => Assert.Equal("instance", t.ResourceType));
+        resp5.Tags.ShouldAllBe(t => t.ResourceType == "instance");
     }
 
     // ── Network Interface Tests ─────────────────────────────────────────────────
@@ -1019,14 +1017,14 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             Description = "qa-eni",
         });
         var eniId = eni.NetworkInterface.NetworkInterfaceId;
-        Assert.StartsWith("eni-", eniId);
+        eniId.ShouldStartWith("eni-");
 
         var desc = await _ec2.DescribeNetworkInterfacesAsync(new DescribeNetworkInterfacesRequest
         {
             NetworkInterfaceIds = [eniId],
         });
-        Assert.Equal("qa-eni", desc.NetworkInterfaces[0].Description);
-        Assert.Equal(NetworkInterfaceStatus.Available, desc.NetworkInterfaces[0].Status);
+        desc.NetworkInterfaces[0].Description.ShouldBe("qa-eni");
+        desc.NetworkInterfaces[0].Status.ShouldBe(NetworkInterfaceStatus.Available);
 
         await _ec2.DeleteNetworkInterfaceAsync(new DeleteNetworkInterfaceRequest
         {
@@ -1034,7 +1032,7 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         });
 
         var descAfter = await _ec2.DescribeNetworkInterfacesAsync(new DescribeNetworkInterfacesRequest());
-        Assert.DoesNotContain(descAfter.NetworkInterfaces ?? [], e => e.NetworkInterfaceId == eniId);
+        descAfter.NetworkInterfaces.ShouldNotContain(e => e.NetworkInterfaceId == eniId);
 
         await _ec2.DeleteSubnetAsync(new DeleteSubnetRequest { SubnetId = subnetId });
         await _ec2.DeleteVpcAsync(new DeleteVpcRequest { VpcId = vpcId });
@@ -1071,13 +1069,13 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             InstanceId = iid,
             DeviceIndex = 1,
         });
-        Assert.StartsWith("eni-attach-", attach.AttachmentId);
+        attach.AttachmentId.ShouldStartWith("eni-attach-");
 
         var desc = await _ec2.DescribeNetworkInterfacesAsync(new DescribeNetworkInterfacesRequest
         {
             NetworkInterfaceIds = [eniId],
         });
-        Assert.Equal(NetworkInterfaceStatus.InUse, desc.NetworkInterfaces[0].Status);
+        desc.NetworkInterfaces[0].Status.ShouldBe(NetworkInterfaceStatus.InUse);
 
         await _ec2.DetachNetworkInterfaceAsync(new DetachNetworkInterfaceRequest
         {
@@ -1088,7 +1086,7 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             NetworkInterfaceIds = [eniId],
         });
-        Assert.Equal(NetworkInterfaceStatus.Available, descAfter.NetworkInterfaces[0].Status);
+        descAfter.NetworkInterfaces[0].Status.ShouldBe(NetworkInterfaceStatus.Available);
 
         await _ec2.TerminateInstancesAsync(new TerminateInstancesRequest { InstanceIds = [iid] });
         await _ec2.DeleteNetworkInterfaceAsync(new DeleteNetworkInterfaceRequest { NetworkInterfaceId = eniId });
@@ -1111,14 +1109,14 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             VpcEndpointType = VpcEndpointType.Gateway,
         });
         var vpceId = vpce.VpcEndpoint.VpcEndpointId;
-        Assert.StartsWith("vpce-", vpceId);
+        vpceId.ShouldStartWith("vpce-");
 
         var desc = await _ec2.DescribeVpcEndpointsAsync(new DescribeVpcEndpointsRequest
         {
             VpcEndpointIds = [vpceId],
         });
-        Assert.Equal("com.amazonaws.us-east-1.s3", desc.VpcEndpoints[0].ServiceName);
-        Assert.Equal("Available", desc.VpcEndpoints[0].State);
+        desc.VpcEndpoints[0].ServiceName.ShouldBe("com.amazonaws.us-east-1.s3");
+        desc.VpcEndpoints[0].State.Value.ShouldBe("Available");
 
         await _ec2.DeleteVpcEndpointsAsync(new DeleteVpcEndpointsRequest
         {
@@ -1126,7 +1124,7 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         });
 
         var descAfter = await _ec2.DescribeVpcEndpointsAsync(new DescribeVpcEndpointsRequest());
-        Assert.DoesNotContain(descAfter.VpcEndpoints ?? [], e => e.VpcEndpointId == vpceId);
+        descAfter.VpcEndpoints.ShouldNotContain(e => e.VpcEndpointId == vpceId);
 
         await _ec2.DeleteVpcAsync(new DeleteVpcRequest { VpcId = vpcId });
     }
@@ -1158,7 +1156,7 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             {
                 VpcEndpointIds = [vpceId],
             });
-            Assert.Contains(rtbId, desc.VpcEndpoints[0].RouteTableIds);
+            desc.VpcEndpoints[0].RouteTableIds.ShouldContain(rtbId);
 
             await _ec2.ModifyVpcEndpointAsync(new ModifyVpcEndpointRequest
             {
@@ -1169,7 +1167,7 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             {
                 VpcEndpointIds = [vpceId],
             });
-            Assert.DoesNotContain(rtbId, desc.VpcEndpoints[0].RouteTableIds ?? []);
+            desc.VpcEndpoints[0].RouteTableIds.ShouldNotContain(rtbId);
 
             await _ec2.DeleteVpcEndpointsAsync(new DeleteVpcEndpointsRequest { VpcEndpointIds = [vpceId] });
             await _ec2.DeleteRouteTableAsync(new DeleteRouteTableRequest { RouteTableId = rtbId });
@@ -1186,7 +1184,7 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
     public async Task DescribeAccountAttributes()
     {
         var resp = await _ec2.DescribeAccountAttributesAsync(new DescribeAccountAttributesRequest());
-        Assert.NotNull(resp);
+        resp.ShouldNotBeNull();
     }
 
     // ── EBS Volume Tests ────────────────────────────────────────────────────────
@@ -1201,17 +1199,17 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             VolumeType = VolumeType.Gp3,
         });
         var volId = vol.Volume.VolumeId;
-        Assert.StartsWith("vol-", volId);
-        Assert.Equal(VolumeState.Available, vol.Volume.State);
-        Assert.Equal(20, vol.Volume.Size);
-        Assert.Equal(VolumeType.Gp3, vol.Volume.VolumeType);
+        volId.ShouldStartWith("vol-");
+        vol.Volume.State.ShouldBe(VolumeState.Available);
+        vol.Volume.Size.ShouldBe(20);
+        vol.Volume.VolumeType.ShouldBe(VolumeType.Gp3);
 
         var desc = await _ec2.DescribeVolumesAsync(new DescribeVolumesRequest
         {
             VolumeIds = [volId],
         });
-        Assert.Single(desc.Volumes);
-        Assert.Equal(volId, desc.Volumes[0].VolumeId);
+        desc.Volumes.ShouldHaveSingleItem();
+        desc.Volumes[0].VolumeId.ShouldBe(volId);
     }
 
     [Fact]
@@ -1244,8 +1242,8 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             VolumeIds = [volId],
         });
-        Assert.Equal(VolumeState.InUse, desc.Volumes[0].State);
-        Assert.Equal(instanceId, desc.Volumes[0].Attachments[0].InstanceId);
+        desc.Volumes[0].State.ShouldBe(VolumeState.InUse);
+        desc.Volumes[0].Attachments[0].InstanceId.ShouldBe(instanceId);
 
         await _ec2.DetachVolumeAsync(new DetachVolumeRequest { VolumeId = volId });
 
@@ -1253,8 +1251,8 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             VolumeIds = [volId],
         });
-        Assert.Equal(VolumeState.Available, desc2.Volumes[0].State);
-        Assert.Empty(desc2.Volumes[0].Attachments ?? []);
+        desc2.Volumes[0].State.ShouldBe(VolumeState.Available);
+        desc2.Volumes[0].Attachments.ShouldBeEmpty();
     }
 
     [Fact]
@@ -1274,7 +1272,7 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             VolumeIds = [volId],
         });
-        Assert.Empty(desc.Volumes ?? []);
+        desc.Volumes.ShouldBeEmpty();
     }
 
     [Fact]
@@ -1294,8 +1292,8 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             Size = 50,
             VolumeType = VolumeType.Gp3,
         });
-        Assert.Equal(50, resp.VolumeModification.TargetSize);
-        Assert.Equal(VolumeType.Gp3, resp.VolumeModification.TargetVolumeType);
+        resp.VolumeModification.TargetSize.ShouldBe(50);
+        resp.VolumeModification.TargetVolumeType.ShouldBe(VolumeType.Gp3);
     }
 
     [Fact]
@@ -1313,8 +1311,8 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             VolumeIds = [volId],
         });
-        Assert.Single(resp.VolumeStatuses);
-        Assert.Equal("ok", resp.VolumeStatuses[0].VolumeStatus.Status);
+        resp.VolumeStatuses.ShouldHaveSingleItem();
+        resp.VolumeStatuses[0].VolumeStatus.Status.Value.ShouldBe("ok");
     }
 
     [Fact]
@@ -1333,8 +1331,8 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             VolumeId = volId,
             Attribute = VolumeAttributeName.AutoEnableIO,
         });
-        Assert.Equal(volId, resp.VolumeId);
-        Assert.NotNull(resp.AutoEnableIO);
+        resp.VolumeId.ShouldBe(volId);
+        resp.AutoEnableIO.ShouldNotBeNull();
     }
 
     [Fact]
@@ -1359,10 +1357,10 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             VolumeIds = [volId],
         });
-        Assert.True(resp.VolumesModifications.Count >= 1);
-        Assert.Equal(volId, resp.VolumesModifications[0].VolumeId);
-        Assert.Equal(50, resp.VolumesModifications[0].TargetSize);
-        Assert.Equal(VolumeType.Gp3, resp.VolumesModifications[0].TargetVolumeType);
+        (resp.VolumesModifications.Count >= 1).ShouldBe(true);
+        resp.VolumesModifications[0].VolumeId.ShouldBe(volId);
+        resp.VolumesModifications[0].TargetSize.ShouldBe(50);
+        resp.VolumesModifications[0].TargetVolumeType.ShouldBe(VolumeType.Gp3);
     }
 
     // ── EBS Snapshot Tests ──────────────────────────────────────────────────────
@@ -1383,16 +1381,16 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             VolumeId = volId,
             Description = "test snapshot",
         });
-        Assert.StartsWith("snap-", snap.Snapshot.SnapshotId);
-        Assert.Equal(SnapshotState.Completed, snap.Snapshot.State);
+        snap.Snapshot.SnapshotId.ShouldStartWith("snap-");
+        snap.Snapshot.State.ShouldBe(SnapshotState.Completed);
 
         var desc = await _ec2.DescribeSnapshotsAsync(new DescribeSnapshotsRequest
         {
             SnapshotIds = [snap.Snapshot.SnapshotId],
         });
-        Assert.Single(desc.Snapshots);
-        Assert.Equal(volId, desc.Snapshots[0].VolumeId);
-        Assert.Equal("test snapshot", desc.Snapshots[0].Description);
+        desc.Snapshots.ShouldHaveSingleItem();
+        desc.Snapshots[0].VolumeId.ShouldBe(volId);
+        desc.Snapshots[0].Description.ShouldBe("test snapshot");
     }
 
     [Fact]
@@ -1418,7 +1416,7 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             SnapshotIds = [snap.Snapshot.SnapshotId],
         });
-        Assert.Empty(desc.Snapshots ?? []);
+        desc.Snapshots.ShouldBeEmpty();
     }
 
     [Fact]
@@ -1442,8 +1440,8 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             SourceSnapshotId = snap.Snapshot.SnapshotId,
             Description = "copy",
         });
-        Assert.NotEqual(snap.Snapshot.SnapshotId, copy.SnapshotId);
-        Assert.StartsWith("snap-", copy.SnapshotId);
+        copy.SnapshotId.ShouldNotBe(snap.Snapshot.SnapshotId);
+        copy.SnapshotId.ShouldStartWith("snap-");
     }
 
     [Fact]
@@ -1474,8 +1472,8 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             SnapshotId = snap.Snapshot.SnapshotId,
             Attribute = SnapshotAttributeName.CreateVolumePermission,
         });
-        Assert.Equal(snap.Snapshot.SnapshotId, resp.SnapshotId);
-        Assert.Contains(resp.CreateVolumePermissions, p => p.UserId == "123456789012");
+        resp.SnapshotId.ShouldBe(snap.Snapshot.SnapshotId);
+        resp.CreateVolumePermissions.ShouldContain(p => p.UserId == "123456789012");
     }
 
     // ── Describe Instance Types ─────────────────────────────────────────────────
@@ -1485,15 +1483,15 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
     {
         var resp = await _ec2.DescribeInstanceTypesAsync(new DescribeInstanceTypesRequest());
         var types = resp.InstanceTypes.Select(t => t.InstanceType.Value).ToList();
-        Assert.Contains("t2.micro", types);
-        Assert.Contains("t3.micro", types);
-        Assert.True(resp.InstanceTypes.Count >= 4);
+        types.ShouldContain("t2.micro");
+        types.ShouldContain("t3.micro");
+        (resp.InstanceTypes.Count >= 4).ShouldBe(true);
 
         var sample = resp.InstanceTypes[0];
-        Assert.NotNull(sample.VCpuInfo);
-        Assert.NotNull(sample.MemoryInfo);
-        Assert.True(sample.VCpuInfo.DefaultVCpus >= 1);
-        Assert.True(sample.MemoryInfo.SizeInMiB >= 512);
+        sample.VCpuInfo.ShouldNotBeNull();
+        sample.MemoryInfo.ShouldNotBeNull();
+        (sample.VCpuInfo.DefaultVCpus >= 1).ShouldBe(true);
+        (sample.MemoryInfo.SizeInMiB >= 512).ShouldBe(true);
     }
 
     [Fact]
@@ -1504,9 +1502,9 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             InstanceTypes = [InstanceType.T2Micro, InstanceType.M5Large],
         });
         var types = resp.InstanceTypes.Select(t => t.InstanceType.Value).ToHashSet();
-        Assert.Contains("t2.micro", types);
-        Assert.Contains("m5.large", types);
-        Assert.Equal(2, types.Count);
+        types.ShouldContain("t2.micro");
+        types.ShouldContain("m5.large");
+        types.Count.ShouldBe(2);
     }
 
     // ── Describe Instance Credit Specifications ─────────────────────────────────
@@ -1527,9 +1525,9 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             {
                 InstanceIds = [iid],
             });
-        Assert.Single(resp.InstanceCreditSpecifications);
-        Assert.Equal(iid, resp.InstanceCreditSpecifications[0].InstanceId);
-        Assert.Equal("standard", resp.InstanceCreditSpecifications[0].CpuCredits);
+        resp.InstanceCreditSpecifications.ShouldHaveSingleItem();
+        resp.InstanceCreditSpecifications[0].InstanceId.ShouldBe(iid);
+        resp.InstanceCreditSpecifications[0].CpuCredits.ShouldBe("standard");
     }
 
     // ── Describe Spot Instance Requests / Capacity Reservations (stubs) ─────────
@@ -1538,14 +1536,14 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
     public async Task DescribeSpotInstanceRequests()
     {
         var resp = await _ec2.DescribeSpotInstanceRequestsAsync(new DescribeSpotInstanceRequestsRequest());
-        Assert.Empty(resp.SpotInstanceRequests ?? []);
+        resp.SpotInstanceRequests.ShouldBeEmpty();
     }
 
     [Fact]
     public async Task DescribeCapacityReservations()
     {
         var resp = await _ec2.DescribeCapacityReservationsAsync(new DescribeCapacityReservationsRequest());
-        Assert.Empty(resp.CapacityReservations ?? []);
+        resp.CapacityReservations.ShouldBeEmpty();
     }
 
     // ── Describe Prefix Lists ───────────────────────────────────────────────────
@@ -1555,8 +1553,8 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
     {
         var resp = await _ec2.DescribePrefixListsAsync(new DescribePrefixListsRequest());
         var names = resp.PrefixLists.Select(p => p.PrefixListName).ToList();
-        Assert.Contains(names, n => n.Contains("s3"));
-        Assert.Contains(names, n => n.Contains("dynamodb"));
+        names.ShouldContain(n => n.Contains("s3"));
+        names.ShouldContain(n => n.Contains("dynamodb"));
     }
 
     // ── Full Terraform VPC Flow ─────────────────────────────────────────────────
@@ -1579,7 +1577,7 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
                     new Filter("default", ["true"]),
                 ],
             });
-            Assert.Single(acls.NetworkAcls);
+            acls.NetworkAcls.ShouldHaveSingleItem();
 
             var sgs = await _ec2.DescribeSecurityGroupsAsync(new DescribeSecurityGroupsRequest
             {
@@ -1589,7 +1587,7 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
                     new Filter("group-name", ["default"]),
                 ],
             });
-            Assert.Single(sgs.SecurityGroups);
+            sgs.SecurityGroups.ShouldHaveSingleItem();
 
             var mainRtbs = await _ec2.DescribeRouteTablesAsync(new DescribeRouteTablesRequest
             {
@@ -1599,7 +1597,7 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
                     new Filter("association.main", ["true"]),
                 ],
             });
-            Assert.Single(mainRtbs.RouteTables);
+            mainRtbs.RouteTables.ShouldHaveSingleItem();
 
             // 3. Create 6 subnets
             var subnetCidrs = new[]
@@ -1683,7 +1681,7 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
                 RouteTableIds = [privRtb],
             });
             var natRoute = descPriv.RouteTables[0].Routes.First(r => r.DestinationCidrBlock == "0.0.0.0/0");
-            Assert.Equal(natId, natRoute.NatGatewayId);
+            natRoute.NatGatewayId.ShouldBe(natId);
 
             // 9. Cleanup
             await _ec2.DeleteRouteAsync(new DeleteRouteRequest { RouteTableId = pubRtb, DestinationCidrBlock = "0.0.0.0/0" });
@@ -1729,23 +1727,23 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             ConnectivityType = ConnectivityType.Private,
         });
         var natId = resp.NatGateway.NatGatewayId;
-        Assert.StartsWith("nat-", natId);
-        Assert.Equal(NatGatewayState.Available, resp.NatGateway.State);
+        natId.ShouldStartWith("nat-");
+        resp.NatGateway.State.ShouldBe(NatGatewayState.Available);
 
         var desc = await _ec2.DescribeNatGatewaysAsync(new DescribeNatGatewaysRequest
         {
             NatGatewayIds = [natId],
         });
-        Assert.Single(desc.NatGateways);
-        Assert.Equal(natId, desc.NatGateways[0].NatGatewayId);
-        Assert.Equal(subnetId, desc.NatGateways[0].SubnetId);
+        desc.NatGateways.ShouldHaveSingleItem();
+        desc.NatGateways[0].NatGatewayId.ShouldBe(natId);
+        desc.NatGateways[0].SubnetId.ShouldBe(subnetId);
 
         await _ec2.DeleteNatGatewayAsync(new DeleteNatGatewayRequest { NatGatewayId = natId });
         var desc2 = await _ec2.DescribeNatGatewaysAsync(new DescribeNatGatewaysRequest
         {
             NatGatewayIds = [natId],
         });
-        Assert.Equal(NatGatewayState.Deleted, desc2.NatGateways[0].State);
+        desc2.NatGateways[0].State.ShouldBe(NatGatewayState.Deleted);
     }
 
     [Fact]
@@ -1769,7 +1767,7 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             Filter = [new Filter("vpc-id", [vpcId])],
         });
-        Assert.All(desc.NatGateways, n => Assert.Equal(vpcId, n.VpcId));
+        desc.NatGateways.ShouldAllBe(n => n.VpcId == vpcId);
     }
 
     // ── Network ACL Tests ───────────────────────────────────────────────────────
@@ -1782,16 +1780,16 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
 
         var resp = await _ec2.CreateNetworkAclAsync(new CreateNetworkAclRequest { VpcId = vpcId });
         var aclId = resp.NetworkAcl.NetworkAclId;
-        Assert.StartsWith("acl-", aclId);
-        Assert.Equal(vpcId, resp.NetworkAcl.VpcId);
-        Assert.False(resp.NetworkAcl.IsDefault);
+        aclId.ShouldStartWith("acl-");
+        resp.NetworkAcl.VpcId.ShouldBe(vpcId);
+        resp.NetworkAcl.IsDefault.ShouldBe(false);
 
         var desc = await _ec2.DescribeNetworkAclsAsync(new DescribeNetworkAclsRequest
         {
             NetworkAclIds = [aclId],
         });
-        Assert.Single(desc.NetworkAcls);
-        Assert.Equal(aclId, desc.NetworkAcls[0].NetworkAclId);
+        desc.NetworkAcls.ShouldHaveSingleItem();
+        desc.NetworkAcls[0].NetworkAclId.ShouldBe(aclId);
 
         await _ec2.CreateNetworkAclEntryAsync(new CreateNetworkAclEntryRequest
         {
@@ -1807,7 +1805,7 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             NetworkAclIds = [aclId],
         });
-        Assert.Single(desc2.NetworkAcls[0].Entries);
+        desc2.NetworkAcls[0].Entries.ShouldHaveSingleItem();
 
         await _ec2.DeleteNetworkAclEntryAsync(new DeleteNetworkAclEntryRequest
         {
@@ -1820,14 +1818,14 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             NetworkAclIds = [aclId],
         });
-        Assert.Empty(desc3.NetworkAcls[0].Entries ?? []);
+        desc3.NetworkAcls[0].Entries.ShouldBeEmpty();
 
         await _ec2.DeleteNetworkAclAsync(new DeleteNetworkAclRequest { NetworkAclId = aclId });
         var desc4 = await _ec2.DescribeNetworkAclsAsync(new DescribeNetworkAclsRequest
         {
             NetworkAclIds = [aclId],
         });
-        Assert.Empty(desc4.NetworkAcls ?? []);
+        desc4.NetworkAcls.ShouldBeEmpty();
     }
 
     [Fact]
@@ -1863,8 +1861,8 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             NetworkAclIds = [aclId],
         });
         var entries = desc.NetworkAcls[0].Entries;
-        Assert.Single(entries);
-        Assert.Equal(RuleAction.Allow, entries[0].RuleAction);
+        entries.ShouldHaveSingleItem();
+        entries[0].RuleAction.ShouldBe(RuleAction.Allow);
     }
 
     // ── Flow Logs Tests ─────────────────────────────────────────────────────────
@@ -1883,25 +1881,25 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             LogDestinationType = LogDestinationType.CloudWatchLogs,
             LogGroupName = "/aws/vpc/flowlogs",
         });
-        Assert.Empty(resp.Unsuccessful ?? []);
+        resp.Unsuccessful.ShouldBeEmpty();
         var flIds = resp.FlowLogIds;
-        Assert.Single(flIds);
-        Assert.StartsWith("fl-", flIds[0]);
+        flIds.ShouldHaveSingleItem();
+        flIds[0].ShouldStartWith("fl-");
 
         var desc = await _ec2.DescribeFlowLogsAsync(new DescribeFlowLogsRequest
         {
             FlowLogIds = flIds,
         });
-        Assert.Single(desc.FlowLogs);
-        Assert.Equal(flIds[0], desc.FlowLogs[0].FlowLogId);
-        Assert.Equal("ACTIVE", desc.FlowLogs[0].FlowLogStatus);
+        desc.FlowLogs.ShouldHaveSingleItem();
+        desc.FlowLogs[0].FlowLogId.ShouldBe(flIds[0]);
+        desc.FlowLogs[0].FlowLogStatus.ShouldBe("ACTIVE");
 
         await _ec2.DeleteFlowLogsAsync(new DeleteFlowLogsRequest { FlowLogIds = flIds });
         var desc2 = await _ec2.DescribeFlowLogsAsync(new DescribeFlowLogsRequest
         {
             FlowLogIds = flIds,
         });
-        Assert.Empty(desc2.FlowLogs ?? []);
+        desc2.FlowLogs.ShouldBeEmpty();
     }
 
     // ── VPC Peering Tests ───────────────────────────────────────────────────────
@@ -1920,21 +1918,21 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             PeerVpcId = vpcId2,
         });
         var pcxId = resp.VpcPeeringConnection.VpcPeeringConnectionId;
-        Assert.StartsWith("pcx-", pcxId);
-        Assert.Equal("pending-acceptance", resp.VpcPeeringConnection.Status.Code);
+        pcxId.ShouldStartWith("pcx-");
+        resp.VpcPeeringConnection.Status.Code.Value.ShouldBe("pending-acceptance");
 
         var accepted = await _ec2.AcceptVpcPeeringConnectionAsync(new AcceptVpcPeeringConnectionRequest
         {
             VpcPeeringConnectionId = pcxId,
         });
-        Assert.Equal("active", accepted.VpcPeeringConnection.Status.Code);
+        accepted.VpcPeeringConnection.Status.Code.Value.ShouldBe("active");
 
         var desc = await _ec2.DescribeVpcPeeringConnectionsAsync(new DescribeVpcPeeringConnectionsRequest
         {
             VpcPeeringConnectionIds = [pcxId],
         });
-        Assert.Single(desc.VpcPeeringConnections);
-        Assert.Equal("active", desc.VpcPeeringConnections[0].Status.Code);
+        desc.VpcPeeringConnections.ShouldHaveSingleItem();
+        desc.VpcPeeringConnections[0].Status.Code.Value.ShouldBe("active");
 
         await _ec2.DeleteVpcPeeringConnectionAsync(new DeleteVpcPeeringConnectionRequest
         {
@@ -1944,18 +1942,18 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             VpcPeeringConnectionIds = [pcxId],
         });
-        Assert.Equal("deleted", desc2.VpcPeeringConnections[0].Status.Code);
+        desc2.VpcPeeringConnections[0].Status.Code.Value.ShouldBe("deleted");
     }
 
     [Fact]
     public async Task VpcPeeringNotFound()
     {
-        var ex = await Assert.ThrowsAsync<AmazonEC2Exception>(() =>
+        var ex = await Should.ThrowAsync<AmazonEC2Exception>(() =>
             _ec2.AcceptVpcPeeringConnectionAsync(new AcceptVpcPeeringConnectionRequest
             {
                 VpcPeeringConnectionId = "pcx-nonexistent",
             }));
-        Assert.Contains("NotFound", ex.ErrorCode);
+        ex.ErrorCode.ShouldContain("NotFound");
     }
 
     // ── DHCP Options Tests ──────────────────────────────────────────────────────
@@ -1980,18 +1978,18 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             ],
         });
         var doptId = resp.DhcpOptions.DhcpOptionsId;
-        Assert.StartsWith("dopt-", doptId);
+        doptId.ShouldStartWith("dopt-");
 
         var desc = await _ec2.DescribeDhcpOptionsAsync(new DescribeDhcpOptionsRequest
         {
             DhcpOptionsIds = [doptId],
         });
-        Assert.Single(desc.DhcpOptions);
+        desc.DhcpOptions.ShouldHaveSingleItem();
         var configs = desc.DhcpOptions[0].DhcpConfigurations.ToDictionary(
             c => c.Key,
             c => c.Values.ToList());
-        Assert.Equal(["example.internal"], configs["domain-name"]);
-        Assert.Contains("10.0.0.1", configs["domain-name-servers"]);
+        configs["domain-name"].ShouldBe(["example.internal"]);
+        configs["domain-name-servers"].ShouldContain("10.0.0.1");
 
         var vpc = await _ec2.CreateVpcAsync(new CreateVpcRequest { CidrBlock = "10.107.0.0/16" });
         await _ec2.AssociateDhcpOptionsAsync(new AssociateDhcpOptionsRequest
@@ -2005,18 +2003,18 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             DhcpOptionsIds = [doptId],
         });
-        Assert.Empty(desc2.DhcpOptions ?? []);
+        desc2.DhcpOptions.ShouldBeEmpty();
     }
 
     [Fact]
     public async Task DhcpOptionsNotFound()
     {
-        var ex = await Assert.ThrowsAsync<AmazonEC2Exception>(() =>
+        var ex = await Should.ThrowAsync<AmazonEC2Exception>(() =>
             _ec2.DeleteDhcpOptionsAsync(new DeleteDhcpOptionsRequest
             {
                 DhcpOptionsId = "dopt-nonexistent",
             }));
-        Assert.Contains("NotFound", ex.ErrorCode);
+        ex.ErrorCode.ShouldContain("NotFound");
     }
 
     // ── Egress-Only Internet Gateway Tests ──────────────────────────────────────
@@ -2032,17 +2030,17 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             VpcId = vpcId,
         });
         var eigwId = resp.EgressOnlyInternetGateway.EgressOnlyInternetGatewayId;
-        Assert.StartsWith("eigw-", eigwId);
-        Assert.Equal("attached", resp.EgressOnlyInternetGateway.Attachments[0].State);
-        Assert.Equal(vpcId, resp.EgressOnlyInternetGateway.Attachments[0].VpcId);
+        eigwId.ShouldStartWith("eigw-");
+        resp.EgressOnlyInternetGateway.Attachments[0].State.Value.ShouldBe("attached");
+        resp.EgressOnlyInternetGateway.Attachments[0].VpcId.ShouldBe(vpcId);
 
         var desc = await _ec2.DescribeEgressOnlyInternetGatewaysAsync(
             new DescribeEgressOnlyInternetGatewaysRequest
             {
                 EgressOnlyInternetGatewayIds = [eigwId],
             });
-        Assert.Single(desc.EgressOnlyInternetGateways);
-        Assert.Equal(eigwId, desc.EgressOnlyInternetGateways[0].EgressOnlyInternetGatewayId);
+        desc.EgressOnlyInternetGateways.ShouldHaveSingleItem();
+        desc.EgressOnlyInternetGateways[0].EgressOnlyInternetGatewayId.ShouldBe(eigwId);
 
         await _ec2.DeleteEgressOnlyInternetGatewayAsync(new DeleteEgressOnlyInternetGatewayRequest
         {
@@ -2053,18 +2051,18 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             {
                 EgressOnlyInternetGatewayIds = [eigwId],
             });
-        Assert.Empty(desc2.EgressOnlyInternetGateways ?? []);
+        desc2.EgressOnlyInternetGateways.ShouldBeEmpty();
     }
 
     [Fact]
     public async Task EgressOnlyIgwNotFound()
     {
-        var ex = await Assert.ThrowsAsync<AmazonEC2Exception>(() =>
+        var ex = await Should.ThrowAsync<AmazonEC2Exception>(() =>
             _ec2.DeleteEgressOnlyInternetGatewayAsync(new DeleteEgressOnlyInternetGatewayRequest
             {
                 EgressOnlyInternetGatewayId = "eigw-nonexistent",
             }));
-        Assert.Contains("NotFound", ex.ErrorCode);
+        ex.ErrorCode.ShouldContain("NotFound");
     }
 
     // ── VPN Gateway Tests ───────────────────────────────────────────────────────
@@ -2082,7 +2080,7 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
                 Type = GatewayType.Ipsec1,
             });
             var vgwId = vgw.VpnGateway.VpnGatewayId;
-            Assert.Equal("available", vgw.VpnGateway.State);
+            vgw.VpnGateway.State.Value.ShouldBe("available");
 
             await _ec2.AttachVpnGatewayAsync(new AttachVpnGatewayRequest
             {
@@ -2094,16 +2092,16 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             {
                 VpnGatewayIds = [vgwId],
             });
-            Assert.Single(desc.VpnGateways[0].VpcAttachments);
-            Assert.Equal(vpcId, desc.VpnGateways[0].VpcAttachments[0].VpcId);
-            Assert.Equal(AttachmentStatus.Attached, desc.VpnGateways[0].VpcAttachments[0].State);
+            desc.VpnGateways[0].VpcAttachments.ShouldHaveSingleItem();
+            desc.VpnGateways[0].VpcAttachments[0].VpcId.ShouldBe(vpcId);
+            desc.VpnGateways[0].VpcAttachments[0].State.ShouldBe(AttachmentStatus.Attached);
 
             // Filter by attachment.vpc-id
             var filtered = await _ec2.DescribeVpnGatewaysAsync(new DescribeVpnGatewaysRequest
             {
                 Filters = [new Filter("attachment.vpc-id", [vpcId])],
             });
-            Assert.Single(filtered.VpnGateways);
+            filtered.VpnGateways.ShouldHaveSingleItem();
 
             await _ec2.DetachVpnGatewayAsync(new DetachVpnGatewayRequest
             {
@@ -2115,14 +2113,14 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             {
                 VpnGatewayIds = [vgwId],
             });
-            Assert.Empty(desc2.VpnGateways[0].VpcAttachments ?? []);
+            desc2.VpnGateways[0].VpcAttachments.ShouldBeEmpty();
 
             await _ec2.DeleteVpnGatewayAsync(new DeleteVpnGatewayRequest { VpnGatewayId = vgwId });
             var desc3 = await _ec2.DescribeVpnGatewaysAsync(new DescribeVpnGatewaysRequest
             {
                 VpnGatewayIds = [vgwId],
             });
-            Assert.Empty(desc3.VpnGateways ?? []);
+            desc3.VpnGateways.ShouldBeEmpty();
         }
         finally
         {
@@ -2179,15 +2177,15 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             Type = GatewayType.Ipsec1,
         });
         var cgwId = cgw.CustomerGateway.CustomerGatewayId;
-        Assert.Equal("available", cgw.CustomerGateway.State);
-        Assert.Equal("203.0.113.1", cgw.CustomerGateway.IpAddress);
+        cgw.CustomerGateway.State.ShouldBe("available");
+        cgw.CustomerGateway.IpAddress.ShouldBe("203.0.113.1");
 
         var desc = await _ec2.DescribeCustomerGatewaysAsync(new DescribeCustomerGatewaysRequest
         {
             CustomerGatewayIds = [cgwId],
         });
-        Assert.Single(desc.CustomerGateways);
-        Assert.Equal("65000", desc.CustomerGateways[0].BgpAsn);
+        desc.CustomerGateways.ShouldHaveSingleItem();
+        desc.CustomerGateways[0].BgpAsn.ShouldBe("65000");
 
         await _ec2.DeleteCustomerGatewayAsync(new DeleteCustomerGatewayRequest
         {
@@ -2197,7 +2195,7 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             CustomerGatewayIds = [cgwId],
         });
-        Assert.Empty(desc2.CustomerGateways ?? []);
+        desc2.CustomerGateways.ShouldBeEmpty();
     }
 
     // ── Create Route with NAT Gateway ───────────────────────────────────────────
@@ -2238,8 +2236,8 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
                 RouteTableIds = [rtbId],
             });
             var natRoute = desc.RouteTables[0].Routes.First(r => r.DestinationCidrBlock == "0.0.0.0/0");
-            Assert.Equal(natId, natRoute.NatGatewayId);
-            Assert.True(string.IsNullOrEmpty(natRoute.GatewayId));
+            natRoute.NatGatewayId.ShouldBe(natId);
+            string.IsNullOrEmpty(natRoute.GatewayId).ShouldBe(true);
 
             await _ec2.DeleteRouteAsync(new DeleteRouteRequest
             {
@@ -2273,23 +2271,23 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             ],
         });
         var plId = pl.PrefixList.PrefixListId;
-        Assert.Equal("test-pl", pl.PrefixList.PrefixListName);
+        pl.PrefixList.PrefixListName.ShouldBe("test-pl");
 
         // Describe
         var desc = await _ec2.DescribeManagedPrefixListsAsync(new DescribeManagedPrefixListsRequest
         {
             PrefixListIds = [plId],
         });
-        Assert.Single(desc.PrefixLists);
-        Assert.Equal("test-pl", desc.PrefixLists[0].PrefixListName);
+        desc.PrefixLists.ShouldHaveSingleItem();
+        desc.PrefixLists[0].PrefixListName.ShouldBe("test-pl");
 
         // Get entries
         var entries = await _ec2.GetManagedPrefixListEntriesAsync(new GetManagedPrefixListEntriesRequest
         {
             PrefixListId = plId,
         });
-        Assert.Single(entries.Entries);
-        Assert.Equal("10.0.0.0/8", entries.Entries[0].Cidr);
+        entries.Entries.ShouldHaveSingleItem();
+        entries.Entries[0].Cidr.ShouldBe("10.0.0.0/8");
 
         // Modify — add entry
         await _ec2.ModifyManagedPrefixListAsync(new ModifyManagedPrefixListRequest
@@ -2306,8 +2304,8 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             PrefixListId = plId,
         });
         var cidrs = entries.Entries.Select(e => e.Cidr).ToList();
-        Assert.Contains("10.0.0.0/8", cidrs);
-        Assert.Contains("172.16.0.0/12", cidrs);
+        cidrs.ShouldContain("10.0.0.0/8");
+        cidrs.ShouldContain("172.16.0.0/12");
 
         // Modify — remove entry
         await _ec2.ModifyManagedPrefixListAsync(new ModifyManagedPrefixListRequest
@@ -2324,8 +2322,8 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             PrefixListId = plId,
         });
         cidrs = entries.Entries.Select(e => e.Cidr).ToList();
-        Assert.DoesNotContain("10.0.0.0/8", cidrs);
-        Assert.Contains("172.16.0.0/12", cidrs);
+        cidrs.ShouldNotContain("10.0.0.0/8");
+        cidrs.ShouldContain("172.16.0.0/12");
 
         // Delete
         await _ec2.DeleteManagedPrefixListAsync(new DeleteManagedPrefixListRequest
@@ -2336,7 +2334,7 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             PrefixListIds = [plId],
         });
-        Assert.Empty(desc.PrefixLists ?? []);
+        desc.PrefixLists.ShouldBeEmpty();
     }
 
     // ── Launch Template Tests ───────────────────────────────────────────────────
@@ -2356,25 +2354,25 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         });
         var lt = resp.LaunchTemplate;
         var ltId = lt.LaunchTemplateId;
-        Assert.StartsWith("lt-", ltId);
-        Assert.Equal("qa-lt-basic", lt.LaunchTemplateName);
-        Assert.Equal(1, lt.DefaultVersionNumber);
-        Assert.Equal(1, lt.LatestVersionNumber);
+        ltId.ShouldStartWith("lt-");
+        lt.LaunchTemplateName.ShouldBe("qa-lt-basic");
+        lt.DefaultVersionNumber.ShouldBe(1);
+        lt.LatestVersionNumber.ShouldBe(1);
 
         // Describe
         var desc = await _ec2.DescribeLaunchTemplatesAsync(new DescribeLaunchTemplatesRequest
         {
             LaunchTemplateIds = [ltId],
         });
-        Assert.Single(desc.LaunchTemplates);
-        Assert.Equal("qa-lt-basic", desc.LaunchTemplates[0].LaunchTemplateName);
+        desc.LaunchTemplates.ShouldHaveSingleItem();
+        desc.LaunchTemplates[0].LaunchTemplateName.ShouldBe("qa-lt-basic");
 
         // Describe by name
         var desc2 = await _ec2.DescribeLaunchTemplatesAsync(new DescribeLaunchTemplatesRequest
         {
             LaunchTemplateNames = ["qa-lt-basic"],
         });
-        Assert.Single(desc2.LaunchTemplates);
+        desc2.LaunchTemplates.ShouldHaveSingleItem();
 
         // Describe versions
         var versions = await _ec2.DescribeLaunchTemplateVersionsAsync(
@@ -2382,11 +2380,11 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             {
                 LaunchTemplateId = ltId,
             });
-        Assert.Single(versions.LaunchTemplateVersions);
+        versions.LaunchTemplateVersions.ShouldHaveSingleItem();
         var ver = versions.LaunchTemplateVersions[0];
-        Assert.Equal(1, ver.VersionNumber);
-        Assert.Equal("t3.micro", ver.LaunchTemplateData.InstanceType);
-        Assert.Equal("ami-12345678", ver.LaunchTemplateData.ImageId);
+        ver.VersionNumber.ShouldBe(1);
+        ver.LaunchTemplateData.InstanceType.Value.ShouldBe("t3.micro");
+        ver.LaunchTemplateData.ImageId.ShouldBe("ami-12345678");
 
         // Delete
         await _ec2.DeleteLaunchTemplateAsync(new DeleteLaunchTemplateRequest
@@ -2397,7 +2395,7 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             LaunchTemplateIds = [ltId],
         });
-        Assert.Empty(desc3.LaunchTemplates ?? []);
+        desc3.LaunchTemplates.ShouldBeEmpty();
     }
 
     [Fact]
@@ -2409,13 +2407,13 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             LaunchTemplateData = new RequestLaunchTemplateData { InstanceType = InstanceType.T3Micro },
         });
 
-        var ex = await Assert.ThrowsAsync<AmazonEC2Exception>(() =>
+        var ex = await Should.ThrowAsync<AmazonEC2Exception>(() =>
             _ec2.CreateLaunchTemplateAsync(new CreateLaunchTemplateRequest
             {
                 LaunchTemplateName = "qa-lt-dup",
                 LaunchTemplateData = new RequestLaunchTemplateData { InstanceType = InstanceType.T3Small },
             }));
-        Assert.Contains("AlreadyExists", ex.ErrorCode);
+        ex.ErrorCode.ShouldContain("AlreadyExists");
     }
 
     [Fact]
@@ -2462,9 +2460,9 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
                 LaunchTemplateId = ltId,
                 Versions = ["$Latest"],
             });
-        Assert.Single(latest.LaunchTemplateVersions);
-        Assert.Equal(3, latest.LaunchTemplateVersions[0].VersionNumber);
-        Assert.Equal("t3.large", latest.LaunchTemplateVersions[0].LaunchTemplateData.InstanceType);
+        latest.LaunchTemplateVersions.ShouldHaveSingleItem();
+        latest.LaunchTemplateVersions[0].VersionNumber.ShouldBe(3);
+        latest.LaunchTemplateVersions[0].LaunchTemplateData.InstanceType.Value.ShouldBe("t3.large");
 
         // Default should still be version 1
         var defaultVer = await _ec2.DescribeLaunchTemplateVersionsAsync(
@@ -2473,7 +2471,7 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
                 LaunchTemplateId = ltId,
                 Versions = ["$Default"],
             });
-        Assert.Equal(1, defaultVer.LaunchTemplateVersions[0].VersionNumber);
+        defaultVer.LaunchTemplateVersions[0].VersionNumber.ShouldBe(1);
 
         // All versions
         var allVer = await _ec2.DescribeLaunchTemplateVersionsAsync(
@@ -2481,7 +2479,7 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             {
                 LaunchTemplateId = ltId,
             });
-        Assert.Equal(3, allVer.LaunchTemplateVersions.Count);
+        allVer.LaunchTemplateVersions.Count.ShouldBe(3);
 
         // Modify default to version 2
         await _ec2.ModifyLaunchTemplateAsync(new ModifyLaunchTemplateRequest
@@ -2493,7 +2491,7 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             LaunchTemplateIds = [ltId],
         });
-        Assert.Equal(2, desc.LaunchTemplates[0].DefaultVersionNumber);
+        desc.LaunchTemplates[0].DefaultVersionNumber.ShouldBe(2);
 
         var default2 = await _ec2.DescribeLaunchTemplateVersionsAsync(
             new DescribeLaunchTemplateVersionsRequest
@@ -2501,7 +2499,7 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
                 LaunchTemplateId = ltId,
                 Versions = ["$Default"],
             });
-        Assert.Equal(2, default2.LaunchTemplateVersions[0].VersionNumber);
+        default2.LaunchTemplateVersions[0].VersionNumber.ShouldBe(2);
 
         await _ec2.DeleteLaunchTemplateAsync(new DeleteLaunchTemplateRequest
         {
@@ -2542,11 +2540,11 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
                 LaunchTemplateId = ltId,
             });
         var data = versions.LaunchTemplateVersions[0].LaunchTemplateData;
-        Assert.Single(data.BlockDeviceMappings);
+        data.BlockDeviceMappings.ShouldHaveSingleItem();
         var bdm = data.BlockDeviceMappings[0];
-        Assert.Equal("/dev/xvda", bdm.DeviceName);
-        Assert.Equal(50, bdm.Ebs.VolumeSize);
-        Assert.Equal(VolumeType.Gp3, bdm.Ebs.VolumeType);
+        bdm.DeviceName.ShouldBe("/dev/xvda");
+        bdm.Ebs.VolumeSize.ShouldBe(50);
+        bdm.Ebs.VolumeType.ShouldBe(VolumeType.Gp3);
 
         await _ec2.DeleteLaunchTemplateAsync(new DeleteLaunchTemplateRequest { LaunchTemplateId = ltId });
     }
@@ -2554,11 +2552,11 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
     [Fact]
     public async Task LaunchTemplateNotFound()
     {
-        var ex = await Assert.ThrowsAsync<AmazonEC2Exception>(() =>
+        var ex = await Should.ThrowAsync<AmazonEC2Exception>(() =>
             _ec2.DescribeLaunchTemplateVersionsAsync(new DescribeLaunchTemplateVersionsRequest
             {
                 LaunchTemplateId = "lt-nonexistent",
             }));
-        Assert.Contains("NotFound", ex.ErrorCode);
+        ex.ErrorCode.ShouldContain("NotFound");
     }
 }

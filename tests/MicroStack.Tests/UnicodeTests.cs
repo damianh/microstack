@@ -190,7 +190,7 @@ public sealed class UnicodeTests : IClassFixture<MicroStackFixture>, IAsyncLifet
         var resp = await _s3.GetObjectAsync("unicode-keys", key);
         using var reader = new StreamReader(resp.ResponseStream);
         var content = await reader.ReadToEndAsync();
-        Assert.Equal(bodyText, content);
+        content.ShouldBe(bodyText);
     }
 
     [Fact]
@@ -210,8 +210,8 @@ public sealed class UnicodeTests : IClassFixture<MicroStackFixture>, IAsyncLifet
         await _s3.PutObjectAsync(putReq);
 
         var head = await _s3.GetObjectMetadataAsync("unicode-meta", "file.bin");
-        Assert.Equal("résumé.pdf", Uri.UnescapeDataString(head.Metadata["filename"]));
-        Assert.Equal("Ñoño", Uri.UnescapeDataString(head.Metadata["author"]));
+        Uri.UnescapeDataString(head.Metadata["filename"]).ShouldBe("résumé.pdf");
+        Uri.UnescapeDataString(head.Metadata["author"]).ShouldBe("Ñoño");
     }
 
     // ── DynamoDB Unicode test ────────────────────────────────────────────────
@@ -247,7 +247,7 @@ public sealed class UnicodeTests : IClassFixture<MicroStackFixture>, IAsyncLifet
             },
         });
 
-        Assert.Equal("значение 日本語 مرحبا", resp.Item["value"].S);
+        resp.Item["value"].S.ShouldBe("значение 日本語 مرحبا");
     }
 
     // ── SQS Unicode test ─────────────────────────────────────────────────────
@@ -270,8 +270,8 @@ public sealed class UnicodeTests : IClassFixture<MicroStackFixture>, IAsyncLifet
             MaxNumberOfMessages = 1,
         });
 
-        Assert.Single(recv.Messages);
-        Assert.Equal(msg, recv.Messages[0].Body);
+        recv.Messages.ShouldHaveSingleItem();
+        recv.Messages[0].Body.ShouldBe(msg);
     }
 
     // ── SecretsManager Unicode test ──────────────────────────────────────────
@@ -290,7 +290,7 @@ public sealed class UnicodeTests : IClassFixture<MicroStackFixture>, IAsyncLifet
             SecretId = "unicode-secret",
         });
 
-        Assert.Equal("пароль: 密码", resp.SecretString);
+        resp.SecretString.ShouldBe("пароль: 密码");
     }
 
     // ── SSM Unicode test ─────────────────────────────────────────────────────
@@ -310,7 +310,7 @@ public sealed class UnicodeTests : IClassFixture<MicroStackFixture>, IAsyncLifet
             Name = "/unicode/param",
         });
 
-        Assert.Equal("값: τιμή", resp.Parameter.Value);
+        resp.Parameter.Value.ShouldBe("값: τιμή");
     }
 
     // ── Route53 Unicode test ─────────────────────────────────────────────────
@@ -335,6 +335,6 @@ public sealed class UnicodeTests : IClassFixture<MicroStackFixture>, IAsyncLifet
             Id = zoneId,
         });
 
-        Assert.Equal("zona en español — Ünïcödé", get.HostedZone.Config.Comment);
+        get.HostedZone.Config.Comment.ShouldBe("zona en español — Ünïcödé");
     }
 }

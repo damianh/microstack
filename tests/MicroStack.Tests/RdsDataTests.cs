@@ -59,37 +59,37 @@ public sealed class RdsDataTests : IClassFixture<MicroStackFixture>, IAsyncLifet
     public async Task ExecuteRouteExists()
     {
         var (status, body) = await RawPost("/Execute", new { });
-        Assert.Equal(HttpStatusCode.BadRequest, status);
+        status.ShouldBe(HttpStatusCode.BadRequest);
         var message = GetMessage(body);
-        Assert.Contains("resourceArn", message);
+        message.ShouldContain("resourceArn");
     }
 
     [Fact]
     public async Task BeginTransactionRouteExists()
     {
         var (status, _) = await RawPost("/BeginTransaction", new { });
-        Assert.Equal(HttpStatusCode.BadRequest, status);
+        status.ShouldBe(HttpStatusCode.BadRequest);
     }
 
     [Fact]
     public async Task CommitTransactionRouteExists()
     {
         var (status, _) = await RawPost("/CommitTransaction", new { });
-        Assert.Equal(HttpStatusCode.BadRequest, status);
+        status.ShouldBe(HttpStatusCode.BadRequest);
     }
 
     [Fact]
     public async Task RollbackTransactionRouteExists()
     {
         var (status, _) = await RawPost("/RollbackTransaction", new { });
-        Assert.Equal(HttpStatusCode.BadRequest, status);
+        status.ShouldBe(HttpStatusCode.BadRequest);
     }
 
     [Fact]
     public async Task BatchExecuteRouteExists()
     {
         var (status, _) = await RawPost("/BatchExecute", new { });
-        Assert.Equal(HttpStatusCode.BadRequest, status);
+        status.ShouldBe(HttpStatusCode.BadRequest);
     }
 
     // ── Parameter validation ──────────────────────────────────────────────────
@@ -102,8 +102,8 @@ public sealed class RdsDataTests : IClassFixture<MicroStackFixture>, IAsyncLifet
             secretArn = FakeSecretArn,
             sql = "SELECT 1",
         });
-        Assert.Equal(HttpStatusCode.BadRequest, status);
-        Assert.Contains("resourceArn", GetMessage(body));
+        status.ShouldBe(HttpStatusCode.BadRequest);
+        GetMessage(body).ShouldContain("resourceArn");
     }
 
     [Fact]
@@ -114,8 +114,8 @@ public sealed class RdsDataTests : IClassFixture<MicroStackFixture>, IAsyncLifet
             resourceArn = FakeClusterArn,
             sql = "SELECT 1",
         });
-        Assert.Equal(HttpStatusCode.BadRequest, status);
-        Assert.Contains("secretArn", GetMessage(body));
+        status.ShouldBe(HttpStatusCode.BadRequest);
+        GetMessage(body).ShouldContain("secretArn");
     }
 
     [Fact]
@@ -126,8 +126,8 @@ public sealed class RdsDataTests : IClassFixture<MicroStackFixture>, IAsyncLifet
             resourceArn = FakeClusterArn,
             secretArn = FakeSecretArn,
         });
-        Assert.Equal(HttpStatusCode.BadRequest, status);
-        Assert.Contains("sql", GetMessage(body));
+        status.ShouldBe(HttpStatusCode.BadRequest);
+        GetMessage(body).ShouldContain("sql");
     }
 
     [Fact]
@@ -138,8 +138,8 @@ public sealed class RdsDataTests : IClassFixture<MicroStackFixture>, IAsyncLifet
             resourceArn = FakeClusterArn,
             secretArn = FakeSecretArn,
         });
-        Assert.Equal(HttpStatusCode.BadRequest, status);
-        Assert.Contains("sql", GetMessage(body));
+        status.ShouldBe(HttpStatusCode.BadRequest);
+        GetMessage(body).ShouldContain("sql");
     }
 
     // ── Invalid ARN ───────────────────────────────────────────────────────────
@@ -153,8 +153,8 @@ public sealed class RdsDataTests : IClassFixture<MicroStackFixture>, IAsyncLifet
             secretArn = FakeSecretArn,
             sql = "SELECT 1",
         });
-        Assert.Equal(HttpStatusCode.BadRequest, status);
-        Assert.Contains("not found", GetMessage(body), StringComparison.OrdinalIgnoreCase);
+        status.ShouldBe(HttpStatusCode.BadRequest);
+        GetMessage(body).ShouldContain("not found", Case.Insensitive);
     }
 
     [Fact]
@@ -165,8 +165,8 @@ public sealed class RdsDataTests : IClassFixture<MicroStackFixture>, IAsyncLifet
             resourceArn = FakeClusterArn,
             secretArn = FakeSecretArn,
         });
-        Assert.Equal(HttpStatusCode.BadRequest, status);
-        Assert.Contains("not found", GetMessage(body), StringComparison.OrdinalIgnoreCase);
+        status.ShouldBe(HttpStatusCode.BadRequest);
+        GetMessage(body).ShouldContain("not found", Case.Insensitive);
     }
 
     [Fact]
@@ -178,8 +178,8 @@ public sealed class RdsDataTests : IClassFixture<MicroStackFixture>, IAsyncLifet
             secretArn = FakeSecretArn,
             sql = "INSERT INTO t VALUES (1)",
         });
-        Assert.Equal(HttpStatusCode.BadRequest, status);
-        Assert.Contains("not found", GetMessage(body), StringComparison.OrdinalIgnoreCase);
+        status.ShouldBe(HttpStatusCode.BadRequest);
+        GetMessage(body).ShouldContain("not found", Case.Insensitive);
     }
 
     // ── Transaction lifecycle (error paths) ───────────────────────────────────
@@ -188,16 +188,16 @@ public sealed class RdsDataTests : IClassFixture<MicroStackFixture>, IAsyncLifet
     public async Task CommitMissingTransactionId()
     {
         var (status, body) = await RawPost("/CommitTransaction", new { });
-        Assert.Equal(HttpStatusCode.BadRequest, status);
-        Assert.Contains("transactionId", GetMessage(body));
+        status.ShouldBe(HttpStatusCode.BadRequest);
+        GetMessage(body).ShouldContain("transactionId");
     }
 
     [Fact]
     public async Task RollbackMissingTransactionId()
     {
         var (status, body) = await RawPost("/RollbackTransaction", new { });
-        Assert.Equal(HttpStatusCode.BadRequest, status);
-        Assert.Contains("transactionId", GetMessage(body));
+        status.ShouldBe(HttpStatusCode.BadRequest);
+        GetMessage(body).ShouldContain("transactionId");
     }
 
     [Fact]
@@ -207,8 +207,8 @@ public sealed class RdsDataTests : IClassFixture<MicroStackFixture>, IAsyncLifet
         {
             transactionId = "nonexistent-txn-id",
         });
-        Assert.Equal(HttpStatusCode.NotFound, status);
-        Assert.Contains("not found", GetMessage(body), StringComparison.OrdinalIgnoreCase);
+        status.ShouldBe(HttpStatusCode.NotFound);
+        GetMessage(body).ShouldContain("not found", Case.Insensitive);
     }
 
     [Fact]
@@ -218,8 +218,8 @@ public sealed class RdsDataTests : IClassFixture<MicroStackFixture>, IAsyncLifet
         {
             transactionId = "nonexistent-txn-id",
         });
-        Assert.Equal(HttpStatusCode.NotFound, status);
-        Assert.Contains("not found", GetMessage(body), StringComparison.OrdinalIgnoreCase);
+        status.ShouldBe(HttpStatusCode.NotFound);
+        GetMessage(body).ShouldContain("not found", Case.Insensitive);
     }
 
     // ── Invalid JSON ──────────────────────────────────────────────────────────
@@ -228,8 +228,8 @@ public sealed class RdsDataTests : IClassFixture<MicroStackFixture>, IAsyncLifet
     public async Task ExecuteInvalidJson()
     {
         var (status, body) = await RawPostRaw("/Execute", "not-json{{{");
-        Assert.Equal(HttpStatusCode.BadRequest, status);
-        Assert.Contains("Invalid JSON", GetMessage(body));
+        status.ShouldBe(HttpStatusCode.BadRequest);
+        GetMessage(body).ShouldContain("Invalid JSON");
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

@@ -71,7 +71,7 @@ public sealed class S3Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         await _s3.PutBucketAsync("create-bucket-test");
 
         var list = await _s3.ListBucketsAsync();
-        Assert.Contains(list.Buckets, b => b.BucketName == "create-bucket-test");
+        list.Buckets.ShouldContain(b => b.BucketName == "create-bucket-test");
     }
 
     [Fact]
@@ -81,7 +81,7 @@ public sealed class S3Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         await _s3.PutBucketAsync("idempotent-bucket");
 
         var list = await _s3.ListBucketsAsync();
-        Assert.Single(list.Buckets, b => b.BucketName == "idempotent-bucket");
+        list.Buckets.Where(b => b.BucketName == "idempotent-bucket").ShouldHaveSingleItem();
     }
 
     [Fact]
@@ -91,7 +91,7 @@ public sealed class S3Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         await _s3.DeleteBucketAsync("del-bucket-test");
 
         var list = await _s3.ListBucketsAsync();
-        Assert.DoesNotContain(list.Buckets ?? [], b => b.BucketName == "del-bucket-test");
+        list.Buckets.ShouldNotContain(b => b.BucketName == "del-bucket-test");
     }
 
     [Fact]
@@ -105,17 +105,17 @@ public sealed class S3Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             InputStream = ToStream("data"),
         });
 
-        var ex = await Assert.ThrowsAsync<AmazonS3Exception>(
+        var ex = await Should.ThrowAsync<AmazonS3Exception>(
             () => _s3.DeleteBucketAsync("notempty-bucket"));
-        Assert.Equal("BucketNotEmpty", ex.ErrorCode);
+        ex.ErrorCode.ShouldBe("BucketNotEmpty");
     }
 
     [Fact]
     public async Task DeleteBucketNotFound()
     {
-        var ex = await Assert.ThrowsAsync<AmazonS3Exception>(
+        var ex = await Should.ThrowAsync<AmazonS3Exception>(
             () => _s3.DeleteBucketAsync("nonexistent-bucket-xyz"));
-        Assert.Equal("NoSuchBucket", ex.ErrorCode);
+        ex.ErrorCode.ShouldBe("NoSuchBucket");
     }
 
     [Fact]
@@ -127,9 +127,9 @@ public sealed class S3Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         await _s3.GetBucketLocationAsync("head-bucket-test");
 
         // Missing bucket
-        var ex = await Assert.ThrowsAsync<AmazonS3Exception>(
+        var ex = await Should.ThrowAsync<AmazonS3Exception>(
             () => _s3.GetBucketLocationAsync("no-such-head-bucket"));
-        Assert.Equal(HttpStatusCode.NotFound, ex.StatusCode);
+        ex.StatusCode.ShouldBe(HttpStatusCode.NotFound);
     }
 
     // ── Object operations ────────────────────────────────────────────────────────
@@ -148,20 +148,20 @@ public sealed class S3Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
 
         var resp = await _s3.GetObjectAsync("putget-bucket", "hello.txt");
         var body = await ReadStreamAsync(resp.ResponseStream);
-        Assert.Equal("hello world", body);
+        body.ShouldBe("hello world");
     }
 
     [Fact]
     public async Task PutObjectNoBucket()
     {
-        var ex = await Assert.ThrowsAsync<AmazonS3Exception>(
+        var ex = await Should.ThrowAsync<AmazonS3Exception>(
             () => _s3.PutObjectAsync(new PutObjectRequest
             {
                 BucketName = "no-such-bucket-xyz",
                 Key = "file.txt",
                 InputStream = ToStream("data"),
             }));
-        Assert.Equal("NoSuchBucket", ex.ErrorCode);
+        ex.ErrorCode.ShouldBe("NoSuchBucket");
     }
 
     [Fact]
@@ -177,9 +177,9 @@ public sealed class S3Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         });
 
         var meta = await _s3.GetObjectMetadataAsync("head-obj-bucket", "meta.txt");
-        Assert.Equal(5, meta.ContentLength);
-        Assert.Equal("text/plain", meta.Headers.ContentType);
-        Assert.NotEmpty(meta.ETag);
+        meta.ContentLength.ShouldBe(5);
+        meta.Headers.ContentType.ShouldBe("text/plain");
+        meta.ETag.ShouldNotBeEmpty();
     }
 
     [Fact]
@@ -187,9 +187,9 @@ public sealed class S3Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
     {
         await _s3.PutBucketAsync("head-obj-404-bucket");
 
-        var ex = await Assert.ThrowsAsync<AmazonS3Exception>(
+        var ex = await Should.ThrowAsync<AmazonS3Exception>(
             () => _s3.GetObjectMetadataAsync("head-obj-404-bucket", "nope.txt"));
-        Assert.Equal(HttpStatusCode.NotFound, ex.StatusCode);
+        ex.StatusCode.ShouldBe(HttpStatusCode.NotFound);
     }
 
     [Fact]
@@ -206,7 +206,7 @@ public sealed class S3Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         await _s3.DeleteObjectAsync("del-obj-bucket", "gone.txt");
 
         // SDK v4 throws NoSuchKeyException (a subclass of AmazonS3Exception) for missing keys
-        var ex = await Assert.ThrowsAsync<Amazon.S3.Model.NoSuchKeyException>(
+        var ex = await Should.ThrowAsync<Amazon.S3.Model.NoSuchKeyException>(
             () => _s3.GetObjectAsync("del-obj-bucket", "gone.txt"));
     }
 
@@ -235,7 +235,7 @@ public sealed class S3Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
 
         var resp = await _s3.GetObjectAsync("copy-dst-bucket", "copied.txt");
         var body = await ReadStreamAsync(resp.ResponseStream);
-        Assert.Equal("copy me", body);
+        body.ShouldBe("copy me");
     }
 
     [Fact]
@@ -261,7 +261,7 @@ public sealed class S3Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         });
 
         var meta = await _s3.GetObjectMetadataAsync("copy-replace-bucket", "dst.txt");
-        Assert.Equal("application/octet-stream", meta.Headers.ContentType);
+        meta.Headers.ContentType.ShouldBe("application/octet-stream");
     }
 
     // ── List objects ─────────────────────────────────────────────────────────────
@@ -282,10 +282,10 @@ public sealed class S3Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             Delimiter = "/",
         });
 
-        Assert.Equal(2, (resp.CommonPrefixes ?? []).Count);
-        Assert.Contains("photos/2024/", resp.CommonPrefixes!);
-        Assert.Contains("photos/2025/", resp.CommonPrefixes!);
-        Assert.Empty(resp.S3Objects ?? []);
+        ((resp.CommonPrefixes ?? []).Count).ShouldBe(2);
+        resp.CommonPrefixes!.ShouldContain("photos/2024/");
+        resp.CommonPrefixes!.ShouldContain("photos/2025/");
+        resp.S3Objects.ShouldBeEmpty();
     }
 
     [Fact]
@@ -302,8 +302,8 @@ public sealed class S3Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             Prefix = "",
         });
 
-        Assert.Equal(3, resp.KeyCount);
-        Assert.Equal(3, resp.S3Objects.Count);
+        resp.KeyCount.ShouldBe(3);
+        resp.S3Objects.Count.ShouldBe(3);
     }
 
     [Fact]
@@ -326,9 +326,9 @@ public sealed class S3Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             MaxKeys = 2,
         });
 
-        Assert.Equal(2, resp1.S3Objects.Count);
-        Assert.True(resp1.IsTruncated);
-        Assert.NotEmpty(resp1.NextContinuationToken);
+        resp1.S3Objects.Count.ShouldBe(2);
+        resp1.IsTruncated.ShouldBe(true);
+        resp1.NextContinuationToken.ShouldNotBeEmpty();
 
         var resp2 = await _s3.ListObjectsV2Async(new ListObjectsV2Request
         {
@@ -337,8 +337,8 @@ public sealed class S3Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             ContinuationToken = resp1.NextContinuationToken,
         });
 
-        Assert.Equal(2, resp2.S3Objects.Count);
-        Assert.True(resp2.IsTruncated);
+        resp2.S3Objects.Count.ShouldBe(2);
+        resp2.IsTruncated.ShouldBe(true);
 
         var resp3 = await _s3.ListObjectsV2Async(new ListObjectsV2Request
         {
@@ -347,12 +347,12 @@ public sealed class S3Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             ContinuationToken = resp2.NextContinuationToken,
         });
 
-        Assert.Single(resp3.S3Objects);
-        Assert.False(resp3.IsTruncated);
+        resp3.S3Objects.ShouldHaveSingleItem();
+        resp3.IsTruncated.ShouldBe(false);
 
         var allKeys = resp1.S3Objects.Concat(resp2.S3Objects).Concat(resp3.S3Objects)
             .Select(o => o.Key).ToHashSet();
-        Assert.Equal(5, allKeys.Count);
+        allKeys.Count.ShouldBe(5);
     }
 
     [Fact]
@@ -378,8 +378,8 @@ public sealed class S3Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         });
 
         // All items share the prefix "dir/" with no further delimiter, so they are Contents
-        Assert.Equal(3, resp1.S3Objects.Count);
-        Assert.True(resp1.IsTruncated);
+        resp1.S3Objects.Count.ShouldBe(3);
+        resp1.IsTruncated.ShouldBe(true);
 
         var resp2 = await _s3.ListObjectsAsync(new ListObjectsRequest
         {
@@ -390,11 +390,11 @@ public sealed class S3Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             Marker = resp1.S3Objects[^1].Key,
         });
 
-        Assert.Equal(3, resp2.S3Objects.Count);
-        Assert.False(resp2.IsTruncated);
+        resp2.S3Objects.Count.ShouldBe(3);
+        resp2.IsTruncated.ShouldBe(false);
 
         var allKeys = resp1.S3Objects.Concat(resp2.S3Objects).Select(o => o.Key).ToHashSet();
-        Assert.Equal(6, allKeys.Count);
+        allKeys.Count.ShouldBe(6);
     }
 
     // ── Batch operations ─────────────────────────────────────────────────────────
@@ -420,13 +420,13 @@ public sealed class S3Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
                 new KeyVersion { Key = $"obj-{i}.txt" }).ToList(),
         });
 
-        Assert.Equal(5, resp.DeletedObjects.Count);
+        resp.DeletedObjects.Count.ShouldBe(5);
 
         var list = await _s3.ListObjectsV2Async(new ListObjectsV2Request
         {
             BucketName = "batch-del-bucket",
         });
-        Assert.Equal(0, list.KeyCount);
+        list.KeyCount.ShouldBe(0);
     }
 
     // ── Multipart upload ─────────────────────────────────────────────────────────
@@ -442,7 +442,7 @@ public sealed class S3Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             Key = "big.bin",
         });
         var uploadId = initResp.UploadId;
-        Assert.NotEmpty(uploadId);
+        uploadId.ShouldNotBeEmpty();
 
         var part1 = await _s3.UploadPartAsync(new UploadPartRequest
         {
@@ -475,7 +475,7 @@ public sealed class S3Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
 
         var obj = await _s3.GetObjectAsync("multipart-bucket", "big.bin");
         var body = await ReadStreamAsync(obj.ResponseStream);
-        Assert.Equal("part1-part2", body);
+        body.ShouldBe("part1-part2");
     }
 
     [Fact]
@@ -506,7 +506,7 @@ public sealed class S3Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         });
 
         // Key should not exist — SDK v4 throws NoSuchKeyException
-        var ex = await Assert.ThrowsAsync<Amazon.S3.Model.NoSuchKeyException>(
+        var ex = await Should.ThrowAsync<Amazon.S3.Model.NoSuchKeyException>(
             () => _s3.GetObjectAsync("abort-mp-bucket", "aborted.bin"));
     }
 
@@ -541,8 +541,8 @@ public sealed class S3Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             UploadId = uploadId,
         });
 
-        Assert.Equal(3, listResp.Parts.Count);
-        Assert.All(listResp.Parts, p => Assert.NotEmpty(p.ETag));
+        listResp.Parts.Count.ShouldBe(3);
+        listResp.Parts.ShouldAllBe(p => !string.IsNullOrEmpty(p.ETag));
     }
 
     [Fact]
@@ -567,9 +567,9 @@ public sealed class S3Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             BucketName = "list-mp-bucket",
         });
 
-        Assert.True(resp.MultipartUploads.Count >= 2);
-        Assert.Contains(resp.MultipartUploads, u => u.Key == "file1.bin");
-        Assert.Contains(resp.MultipartUploads, u => u.Key == "file2.bin");
+        (resp.MultipartUploads.Count >= 2).ShouldBe(true);
+        resp.MultipartUploads.ShouldContain(u => u.Key == "file1.bin");
+        resp.MultipartUploads.ShouldContain(u => u.Key == "file2.bin");
 
         // cleanup
         await _s3.AbortMultipartUploadAsync(new AbortMultipartUploadRequest
@@ -607,8 +607,8 @@ public sealed class S3Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         });
 
         var body = await ReadStreamAsync(resp.ResponseStream);
-        Assert.Equal("cdef", body);
-        Assert.Equal(HttpStatusCode.PartialContent, resp.HttpStatusCode);
+        body.ShouldBe("cdef");
+        resp.HttpStatusCode.ShouldBe(HttpStatusCode.PartialContent);
     }
 
     [Fact]
@@ -630,7 +630,7 @@ public sealed class S3Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         });
 
         var body = await ReadStreamAsync(resp.ResponseStream);
-        Assert.Equal("fgh", body);
+        body.ShouldBe("fgh");
     }
 
     [Fact]
@@ -644,14 +644,14 @@ public sealed class S3Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             InputStream = ToStream("abc"),
         });
 
-        var ex = await Assert.ThrowsAsync<AmazonS3Exception>(
+        var ex = await Should.ThrowAsync<AmazonS3Exception>(
             () => _s3.GetObjectAsync(new GetObjectRequest
             {
                 BucketName = "range-beyond-bucket",
                 Key = "small.txt",
                 ByteRange = new ByteRange("bytes=100-200"),
             }));
-        Assert.Equal(HttpStatusCode.RequestedRangeNotSatisfiable, ex.StatusCode);
+        ex.StatusCode.ShouldBe(HttpStatusCode.RequestedRangeNotSatisfiable);
     }
 
     // ── Metadata ─────────────────────────────────────────────────────────────────
@@ -670,7 +670,7 @@ public sealed class S3Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         await _s3.PutObjectAsync(putReq);
 
         var head = await _s3.GetObjectMetadataAsync("metadata-bucket", "meta.txt");
-        Assert.Equal("custom-value", head.Metadata["custom-key"]);
+        head.Metadata["custom-key"].ShouldBe("custom-value");
     }
 
     [Fact]
@@ -686,7 +686,7 @@ public sealed class S3Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         });
 
         var head = await _s3.GetObjectMetadataAsync("ctype-bucket", "typed.json");
-        Assert.Equal("application/json", head.Headers.ContentType);
+        head.Headers.ContentType.ShouldBe("application/json");
     }
 
     [Fact]
@@ -701,7 +701,7 @@ public sealed class S3Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         });
 
         var head = await _s3.GetObjectMetadataAsync("clen-bucket", "sized.txt");
-        Assert.Equal(8, head.ContentLength);
+        head.ContentLength.ShouldBe(8);
     }
 
     // ── Tags ─────────────────────────────────────────────────────────────────────
@@ -721,15 +721,15 @@ public sealed class S3Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         });
 
         var getResp = await _s3.GetBucketTaggingAsync(new GetBucketTaggingRequest { BucketName = "btag-bucket" });
-        Assert.Equal(2, getResp.TagSet.Count);
-        Assert.Contains(getResp.TagSet, t => t.Key == "env" && t.Value == "test");
-        Assert.Contains(getResp.TagSet, t => t.Key == "project" && t.Value == "microstack");
+        getResp.TagSet.Count.ShouldBe(2);
+        getResp.TagSet.ShouldContain(t => t.Key == "env" && t.Value == "test");
+        getResp.TagSet.ShouldContain(t => t.Key == "project" && t.Value == "microstack");
 
         await _s3.DeleteBucketTaggingAsync(new DeleteBucketTaggingRequest { BucketName = "btag-bucket" });
 
-        var ex = await Assert.ThrowsAsync<AmazonS3Exception>(
+        var ex = await Should.ThrowAsync<AmazonS3Exception>(
             () => _s3.GetBucketTaggingAsync(new GetBucketTaggingRequest { BucketName = "btag-bucket" }));
-        Assert.Equal("NoSuchTagSet", ex.ErrorCode);
+        ex.ErrorCode.ShouldBe("NoSuchTagSet");
     }
 
     [Fact]
@@ -762,8 +762,8 @@ public sealed class S3Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             BucketName = "otag-bucket",
             Key = "tagged.txt",
         });
-        Assert.Equal(2, getResp.Tagging.Count);
-        Assert.Contains(getResp.Tagging, t => t.Key == "color" && t.Value == "blue");
+        getResp.Tagging.Count.ShouldBe(2);
+        getResp.Tagging.ShouldContain(t => t.Key == "color" && t.Value == "blue");
     }
 
     [Fact]
@@ -786,9 +786,9 @@ public sealed class S3Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             BucketName = "taghdr-bucket",
             Key = "header-tagged.txt",
         });
-        Assert.Single(getResp.Tagging);
-        Assert.Equal("env", getResp.Tagging[0].Key);
-        Assert.Equal("prod", getResp.Tagging[0].Value);
+        getResp.Tagging.ShouldHaveSingleItem();
+        getResp.Tagging[0].Key.ShouldBe("env");
+        getResp.Tagging[0].Value.ShouldBe("prod");
     }
 
     [Fact]
@@ -802,7 +802,7 @@ public sealed class S3Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             InputStream = ToStream("data"),
         });
 
-        var ex = await Assert.ThrowsAsync<AmazonS3Exception>(
+        var ex = await Should.ThrowAsync<AmazonS3Exception>(
             () => _s3.PutObjectTaggingAsync(new PutObjectTaggingRequest
             {
                 BucketName = "taglimit-bucket",
@@ -814,7 +814,7 @@ public sealed class S3Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
                         .ToList(),
                 },
             }));
-        Assert.Equal("BadRequest", ex.ErrorCode);
+        ex.ErrorCode.ShouldBe("BadRequest");
     }
 
     [Fact]
@@ -844,9 +844,9 @@ public sealed class S3Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             BucketName = "copytag-bucket",
             Key = "dst.txt",
         });
-        Assert.Single(tags.Tagging);
-        Assert.Equal("team", tags.Tagging[0].Key);
-        Assert.Equal("alpha", tags.Tagging[0].Value);
+        tags.Tagging.ShouldHaveSingleItem();
+        tags.Tagging[0].Key.ShouldBe("team");
+        tags.Tagging[0].Value.ShouldBe("alpha");
     }
 
     [Fact]
@@ -887,9 +887,9 @@ public sealed class S3Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             BucketName = "copytag-replace-bucket",
             Key = "replaced.txt",
         });
-        Assert.NotNull(tags.Tagging);
-        Assert.Single(tags.Tagging);
-        Assert.Equal("new", tags.Tagging[0].Key);
+        tags.Tagging.ShouldNotBeNull();
+        tags.Tagging.ShouldHaveSingleItem();
+        tags.Tagging[0].Key.ShouldBe("new");
     }
 
     // ── Bucket sub-resources ─────────────────────────────────────────────────────
@@ -903,7 +903,7 @@ public sealed class S3Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         await _s3.PutBucketPolicyAsync("policy-bucket", policyJson);
 
         var resp = await _s3.GetBucketPolicyAsync("policy-bucket");
-        Assert.Contains("2012-10-17", resp.Policy);
+        resp.Policy.ShouldContain("2012-10-17");
     }
 
     [Fact]
@@ -918,7 +918,7 @@ public sealed class S3Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         });
 
         var resp = await _s3.GetBucketVersioningAsync("versioning-bucket");
-        Assert.Equal(VersionStatus.Enabled, resp.VersioningConfig.Status);
+        resp.VersioningConfig.Status.ShouldBe(VersionStatus.Enabled);
     }
 
     [Fact]
@@ -937,7 +937,7 @@ public sealed class S3Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             Key = "versioned.txt",
             InputStream = ToStream("v1"),
         });
-        Assert.NotEmpty(resp.VersionId);
+        resp.VersionId.ShouldNotBeEmpty();
     }
 
     [Fact]
@@ -951,7 +951,7 @@ public sealed class S3Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             Key = "plain.txt",
             InputStream = ToStream("data"),
         });
-        Assert.Null(resp.VersionId);
+        resp.VersionId.ShouldBeNull();
     }
 
     [Fact]
@@ -978,7 +978,7 @@ public sealed class S3Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         });
 
         var resp = await _s3.GetBucketEncryptionAsync(new GetBucketEncryptionRequest { BucketName = "enc-bucket" });
-        Assert.NotEmpty(resp.ServerSideEncryptionConfiguration.ServerSideEncryptionRules);
+        resp.ServerSideEncryptionConfiguration.ServerSideEncryptionRules.ShouldNotBeEmpty();
 
         await _s3.DeleteBucketEncryptionAsync(new DeleteBucketEncryptionRequest { BucketName = "enc-bucket" });
 
@@ -987,14 +987,13 @@ public sealed class S3Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             var afterDelete = await _s3.GetBucketEncryptionAsync(new GetBucketEncryptionRequest { BucketName = "enc-bucket" });
             // If no exception, the configuration should be null or empty
-            Assert.True(
-                afterDelete.ServerSideEncryptionConfiguration is null
+            (afterDelete.ServerSideEncryptionConfiguration is null
                 || afterDelete.ServerSideEncryptionConfiguration.ServerSideEncryptionRules is null
-                || afterDelete.ServerSideEncryptionConfiguration.ServerSideEncryptionRules.Count == 0);
+                || afterDelete.ServerSideEncryptionConfiguration.ServerSideEncryptionRules.Count == 0).ShouldBe(true);
         }
         catch (AmazonS3Exception ex)
         {
-            Assert.Equal("ServerSideEncryptionConfigurationNotFoundError", ex.ErrorCode);
+            ex.ErrorCode.ShouldBe("ServerSideEncryptionConfigurationNotFoundError");
         }
     }
 
@@ -1022,7 +1021,7 @@ public sealed class S3Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         });
 
         var resp = await _s3.GetLifecycleConfigurationAsync("lifecycle-bucket");
-        Assert.NotEmpty(resp.Configuration.Rules);
+        resp.Configuration.Rules.ShouldNotBeEmpty();
 
         await _s3.DeleteLifecycleConfigurationAsync("lifecycle-bucket");
 
@@ -1030,14 +1029,13 @@ public sealed class S3Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         try
         {
             var afterDelete = await _s3.GetLifecycleConfigurationAsync("lifecycle-bucket");
-            Assert.True(
-                afterDelete.Configuration is null
+            (afterDelete.Configuration is null
                 || afterDelete.Configuration.Rules is null
-                || afterDelete.Configuration.Rules.Count == 0);
+                || afterDelete.Configuration.Rules.Count == 0).ShouldBe(true);
         }
         catch (AmazonS3Exception ex)
         {
-            Assert.Equal("NoSuchLifecycleConfiguration", ex.ErrorCode);
+            ex.ErrorCode.ShouldBe("NoSuchLifecycleConfiguration");
         }
     }
 
@@ -1063,13 +1061,13 @@ public sealed class S3Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         });
 
         var resp = await _s3.GetCORSConfigurationAsync("cors-bucket");
-        Assert.NotEmpty(resp.Configuration.Rules);
+        resp.Configuration.Rules.ShouldNotBeEmpty();
 
         await _s3.DeleteCORSConfigurationAsync("cors-bucket");
 
-        var ex = await Assert.ThrowsAsync<AmazonS3Exception>(
+        var ex = await Should.ThrowAsync<AmazonS3Exception>(
             () => _s3.GetCORSConfigurationAsync("cors-bucket"));
-        Assert.Equal("NoSuchCORSConfiguration", ex.ErrorCode);
+        ex.ErrorCode.ShouldBe("NoSuchCORSConfiguration");
     }
 
     [Fact]
@@ -1078,8 +1076,8 @@ public sealed class S3Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         await _s3.PutBucketAsync("acl-bucket");
 
         var resp = await _s3.GetBucketAclAsync(new GetBucketAclRequest { BucketName = "acl-bucket" });
-        Assert.NotNull(resp.Grants);
-        Assert.NotEmpty(resp.Grants);
+        resp.Grants.ShouldNotBeNull();
+        resp.Grants.ShouldNotBeEmpty();
     }
 
     [Fact]
@@ -1097,7 +1095,7 @@ public sealed class S3Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         });
 
         var resp = await _s3.GetBucketWebsiteAsync("website-bucket");
-        Assert.NotNull(resp.WebsiteConfiguration.IndexDocumentSuffix);
+        resp.WebsiteConfiguration.IndexDocumentSuffix.ShouldNotBeNull();
 
         await _s3.DeleteBucketWebsiteAsync("website-bucket");
 
@@ -1105,11 +1103,11 @@ public sealed class S3Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         try
         {
             var afterDelete = await _s3.GetBucketWebsiteAsync("website-bucket");
-            Assert.Null(afterDelete.WebsiteConfiguration.IndexDocumentSuffix);
+            afterDelete.WebsiteConfiguration.IndexDocumentSuffix.ShouldBeNull();
         }
         catch (AmazonS3Exception ex)
         {
-            Assert.Equal("NoSuchWebsiteConfiguration", ex.ErrorCode);
+            ex.ErrorCode.ShouldBe("NoSuchWebsiteConfiguration");
         }
     }
 
@@ -1125,7 +1123,7 @@ public sealed class S3Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         });
 
         var resp = await _s3.GetBucketLoggingAsync("logging-bucket");
-        Assert.NotNull(resp);
+        resp.ShouldNotBeNull();
     }
 
     [Fact]
@@ -1149,7 +1147,7 @@ public sealed class S3Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             BucketName = "pab-bucket",
         });
-        Assert.True(resp.PublicAccessBlockConfiguration.BlockPublicAcls);
+        resp.PublicAccessBlockConfiguration.BlockPublicAcls.ShouldBe(true);
 
         await _s3.DeletePublicAccessBlockAsync(new DeletePublicAccessBlockRequest
         {
@@ -1161,7 +1159,7 @@ public sealed class S3Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             BucketName = "pab-bucket",
         });
-        Assert.NotNull(resp2.PublicAccessBlockConfiguration);
+        resp2.PublicAccessBlockConfiguration.ShouldNotBeNull();
     }
 
     [Fact]
@@ -1185,7 +1183,7 @@ public sealed class S3Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             BucketName = "owner-ctrl-bucket",
         });
-        Assert.NotEmpty(resp.OwnershipControls.Rules);
+        resp.OwnershipControls.Rules.ShouldNotBeEmpty();
 
         await _s3.DeleteBucketOwnershipControlsAsync(new DeleteBucketOwnershipControlsRequest
         {
@@ -1197,7 +1195,7 @@ public sealed class S3Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             BucketName = "owner-ctrl-bucket",
         });
-        Assert.NotNull(resp2.OwnershipControls);
+        resp2.OwnershipControls.ShouldNotBeNull();
     }
 
     // ── Object Lock ──────────────────────────────────────────────────────────────
@@ -1215,7 +1213,7 @@ public sealed class S3Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             BucketName = "lock-cfg-bucket",
         });
-        Assert.Equal(ObjectLockEnabled.Enabled, getCfg.ObjectLockConfiguration.ObjectLockEnabled);
+        getCfg.ObjectLockConfiguration.ObjectLockEnabled.ShouldBe(ObjectLockEnabled.Enabled);
 
         await _s3.PutObjectLockConfigurationAsync(new PutObjectLockConfigurationRequest
         {
@@ -1238,8 +1236,8 @@ public sealed class S3Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             BucketName = "lock-cfg-bucket",
         });
-        Assert.NotNull(getCfg2.ObjectLockConfiguration.Rule);
-        Assert.Equal(1, getCfg2.ObjectLockConfiguration.Rule.DefaultRetention.Days);
+        getCfg2.ObjectLockConfiguration.Rule.ShouldNotBeNull();
+        getCfg2.ObjectLockConfiguration.Rule.DefaultRetention.Days.ShouldBe(1);
     }
 
     [Fact]
@@ -1247,7 +1245,7 @@ public sealed class S3Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
     {
         await _s3.PutBucketAsync("lock-nover-bucket");
 
-        var ex = await Assert.ThrowsAsync<AmazonS3Exception>(
+        var ex = await Should.ThrowAsync<AmazonS3Exception>(
             () => _s3.PutObjectLockConfigurationAsync(new PutObjectLockConfigurationRequest
             {
                 BucketName = "lock-nover-bucket",
@@ -1264,7 +1262,7 @@ public sealed class S3Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
                     },
                 },
             }));
-        Assert.Equal("InvalidBucketState", ex.ErrorCode);
+        ex.ErrorCode.ShouldBe("InvalidBucketState");
     }
 
     [Fact]
@@ -1299,8 +1297,8 @@ public sealed class S3Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             BucketName = "retention-bucket",
             Key = "locked.txt",
         });
-        Assert.Equal(ObjectLockRetentionMode.Governance, resp.Retention.Mode);
-        Assert.True(resp.Retention.RetainUntilDate > DateTime.UtcNow);
+        resp.Retention.Mode.ShouldBe(ObjectLockRetentionMode.Governance);
+        (resp.Retention.RetainUntilDate > DateTime.UtcNow).ShouldBe(true);
     }
 
     [Fact]
@@ -1330,7 +1328,7 @@ public sealed class S3Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             BucketName = "legalhold-bucket",
             Key = "held.txt",
         });
-        Assert.Equal(ObjectLockLegalHoldStatus.On, resp.LegalHold.Status);
+        resp.LegalHold.Status.ShouldBe(ObjectLockLegalHoldStatus.On);
 
         // Toggle off
         await _s3.PutObjectLegalHoldAsync(new PutObjectLegalHoldRequest
@@ -1345,7 +1343,7 @@ public sealed class S3Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             BucketName = "legalhold-bucket",
             Key = "held.txt",
         });
-        Assert.Equal(ObjectLockLegalHoldStatus.Off, resp2.LegalHold.Status);
+        resp2.LegalHold.Status.ShouldBe(ObjectLockLegalHoldStatus.Off);
     }
 
     [Fact]
@@ -1371,9 +1369,9 @@ public sealed class S3Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             LegalHold = new ObjectLockLegalHold { Status = ObjectLockLegalHoldStatus.On },
         });
 
-        var ex = await Assert.ThrowsAsync<AmazonS3Exception>(
+        var ex = await Should.ThrowAsync<AmazonS3Exception>(
             () => _s3.DeleteObjectAsync("lockdel-bucket", "protected.txt"));
-        Assert.Equal("AccessDenied", ex.ErrorCode);
+        ex.ErrorCode.ShouldBe("AccessDenied");
 
         // Remove legal hold and set governance retention
         await _s3.PutObjectLegalHoldAsync(new PutObjectLegalHoldRequest
@@ -1395,9 +1393,9 @@ public sealed class S3Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         });
 
         // Governance retention also prevents delete
-        var ex2 = await Assert.ThrowsAsync<AmazonS3Exception>(
+        var ex2 = await Should.ThrowAsync<AmazonS3Exception>(
             () => _s3.DeleteObjectAsync("lockdel-bucket", "protected.txt"));
-        Assert.Equal("AccessDenied", ex2.ErrorCode);
+        ex2.ErrorCode.ShouldBe("AccessDenied");
     }
 
     [Fact]
@@ -1425,14 +1423,14 @@ public sealed class S3Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             BucketName = "lockheader-bucket",
             Key = "lockobj.txt",
         });
-        Assert.Equal(ObjectLockRetentionMode.Governance, retention.Retention.Mode);
+        retention.Retention.Mode.ShouldBe(ObjectLockRetentionMode.Governance);
 
         var legalHold = await _s3.GetObjectLegalHoldAsync(new GetObjectLegalHoldRequest
         {
             BucketName = "lockheader-bucket",
             Key = "lockobj.txt",
         });
-        Assert.Equal(ObjectLockLegalHoldStatus.On, legalHold.LegalHold.Status);
+        legalHold.LegalHold.Status.ShouldBe(ObjectLockLegalHoldStatus.On);
     }
 
     [Fact]
@@ -1473,8 +1471,8 @@ public sealed class S3Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             BucketName = "defret-bucket",
             Key = "auto-locked.txt",
         });
-        Assert.Equal(ObjectLockRetentionMode.Governance, retention.Retention.Mode);
-        Assert.True(retention.Retention.RetainUntilDate > DateTime.UtcNow);
+        retention.Retention.Mode.ShouldBe(ObjectLockRetentionMode.Governance);
+        (retention.Retention.RetainUntilDate > DateTime.UtcNow).ShouldBe(true);
     }
 
     [Fact]
@@ -1496,9 +1494,9 @@ public sealed class S3Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         });
 
         var head = await _s3.GetObjectMetadataAsync("lockhead-bucket", "lockhead.txt");
-        Assert.Equal(ObjectLockMode.Governance, head.ObjectLockMode);
-        Assert.Equal(ObjectLockLegalHoldStatus.On, head.ObjectLockLegalHoldStatus);
-        Assert.True(head.ObjectLockRetainUntilDate > DateTime.UtcNow);
+        head.ObjectLockMode.ShouldBe(ObjectLockMode.Governance);
+        head.ObjectLockLegalHoldStatus.ShouldBe(ObjectLockLegalHoldStatus.On);
+        (head.ObjectLockRetainUntilDate > DateTime.UtcNow).ShouldBe(true);
     }
 
     [Fact]
@@ -1530,7 +1528,7 @@ public sealed class S3Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         });
 
         // SDK v4 throws DeleteObjectsException when there are errors in the batch
-        var ex = await Assert.ThrowsAsync<DeleteObjectsException>(
+        var ex = await Should.ThrowAsync<DeleteObjectsException>(
             () => _s3.DeleteObjectsAsync(new DeleteObjectsRequest
             {
                 BucketName = "batchlock-bucket",
@@ -1541,10 +1539,10 @@ public sealed class S3Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
                 ],
             }));
 
-        Assert.Single(ex.Response.DeletedObjects);
-        Assert.Equal("unlocked.txt", ex.Response.DeletedObjects[0].Key);
-        Assert.Single(ex.Response.DeleteErrors);
-        Assert.Equal("locked.txt", ex.Response.DeleteErrors[0].Key);
+        ex.Response.DeletedObjects.ShouldHaveSingleItem();
+        ex.Response.DeletedObjects[0].Key.ShouldBe("unlocked.txt");
+        ex.Response.DeleteErrors.ShouldHaveSingleItem();
+        ex.Response.DeleteErrors[0].Key.ShouldBe("locked.txt");
     }
 
     // ── Replication ──────────────────────────────────────────────────────────────
@@ -1590,7 +1588,7 @@ public sealed class S3Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         });
 
         var resp = await _s3.GetBucketReplicationAsync(new GetBucketReplicationRequest { BucketName = "repl-src-bucket" });
-        Assert.NotEmpty(resp.Configuration.Rules);
+        resp.Configuration.Rules.ShouldNotBeEmpty();
 
         await _s3.DeleteBucketReplicationAsync(new DeleteBucketReplicationRequest
         {
@@ -1601,14 +1599,13 @@ public sealed class S3Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         try
         {
             var afterDelete = await _s3.GetBucketReplicationAsync(new GetBucketReplicationRequest { BucketName = "repl-src-bucket" });
-            Assert.True(
-                afterDelete.Configuration is null
+            (afterDelete.Configuration is null
                 || afterDelete.Configuration.Rules is null
-                || afterDelete.Configuration.Rules.Count == 0);
+                || afterDelete.Configuration.Rules.Count == 0).ShouldBe(true);
         }
         catch (AmazonS3Exception ex)
         {
-            Assert.Equal("ReplicationConfigurationNotFoundError", ex.ErrorCode);
+            ex.ErrorCode.ShouldBe("ReplicationConfigurationNotFoundError");
         }
     }
 
@@ -1617,7 +1614,7 @@ public sealed class S3Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
     {
         await _s3.PutBucketAsync("repl-nover-bucket");
 
-        var ex = await Assert.ThrowsAsync<AmazonS3Exception>(
+        var ex = await Should.ThrowAsync<AmazonS3Exception>(
             () => _s3.PutBucketReplicationAsync(new PutBucketReplicationRequest
             {
                 BucketName = "repl-nover-bucket",
@@ -1641,7 +1638,7 @@ public sealed class S3Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
                     ],
                 },
             }));
-        Assert.Equal("InvalidRequest", ex.ErrorCode);
+        ex.ErrorCode.ShouldBe("InvalidRequest");
     }
 
     // ── Other ────────────────────────────────────────────────────────────────────
@@ -1670,8 +1667,8 @@ public sealed class S3Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         });
 
         var head = await _s3.GetObjectMetadataAsync("copymeta-bucket", "dst.txt");
-        Assert.Equal("tester", head.Metadata["author"]);
-        Assert.Equal("text/plain", head.Headers.ContentType);
+        head.Metadata["author"].ShouldBe("tester");
+        head.Headers.ContentType.ShouldBe("text/plain");
     }
 
     [Fact]
@@ -1695,7 +1692,7 @@ public sealed class S3Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
                 new KeyVersion { Key = $"f{i}.txt" }).ToList(),
         });
 
-        Assert.Equal(3, resp.DeletedObjects.Count);
+        resp.DeletedObjects.Count.ShouldBe(3);
     }
 
     [Fact]
@@ -1723,8 +1720,8 @@ public sealed class S3Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
 
         var resp = await _s3.ListVersionsAsync("versions-bucket");
         // At least one version for the key (our implementation overwrites, but versions endpoint returns at least one)
-        Assert.True(resp.Versions.Count >= 1);
-        Assert.Contains(resp.Versions, v => v.Key == "ver.txt");
+        (resp.Versions.Count >= 1).ShouldBe(true);
+        resp.Versions.ShouldContain(v => v.Key == "ver.txt");
     }
 
     [Fact]
@@ -1750,9 +1747,9 @@ public sealed class S3Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             InputStream = ToStream("v2"),
         });
 
-        Assert.NotEmpty(put1.VersionId);
-        Assert.NotEmpty(put2.VersionId);
-        Assert.NotEqual(put1.VersionId, put2.VersionId);
+        put1.VersionId.ShouldNotBeEmpty();
+        put2.VersionId.ShouldNotBeEmpty();
+        put2.VersionId.ShouldNotBe(put1.VersionId);
     }
 
     [Fact]
@@ -1781,7 +1778,7 @@ public sealed class S3Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             UploadId = initResp.UploadId,
             PartNumber = 1,
         });
-        Assert.NotEmpty(copyPartResp.ETag);
+        copyPartResp.ETag.ShouldNotBeEmpty();
 
         await _s3.CompleteMultipartUploadAsync(new CompleteMultipartUploadRequest
         {
@@ -1793,6 +1790,6 @@ public sealed class S3Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
 
         var obj = await _s3.GetObjectAsync("partcopy-bucket", "dest.txt");
         var body = await ReadStreamAsync(obj.ResponseStream);
-        Assert.Equal("AABBCCDD", body);
+        body.ShouldBe("AABBCCDD");
     }
 }

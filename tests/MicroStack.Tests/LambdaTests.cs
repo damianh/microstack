@@ -105,14 +105,14 @@ public sealed class LambdaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
             Code = new FunctionCode { ZipFile = zip },
         });
 
-        Assert.Equal("test-func", result.FunctionName);
-        Assert.Contains("test-func", result.FunctionArn);
-        Assert.Equal("python3.9", result.Runtime?.Value);
-        Assert.Equal("index.handler", result.Handler);
-        Assert.True(result.CodeSize > 0);
-        Assert.NotEmpty(result.CodeSha256);
-        Assert.Equal("$LATEST", result.Version);
-        Assert.Equal(State.Active, result.State);
+        result.FunctionName.ShouldBe("test-func");
+        result.FunctionArn.ShouldContain("test-func");
+        result.Runtime?.Value.ShouldBe("python3.9");
+        result.Handler.ShouldBe("index.handler");
+        (result.CodeSize > 0).ShouldBe(true);
+        result.CodeSha256.ShouldNotBeEmpty();
+        result.Version.ShouldBe("$LATEST");
+        result.State.ShouldBe(State.Active);
     }
 
     [Fact]
@@ -120,10 +120,10 @@ public sealed class LambdaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
     {
         await CreateTestFunction("dup-func");
 
-        var ex = await Assert.ThrowsAsync<ResourceConflictException>(() =>
+        var ex = await Should.ThrowAsync<ResourceConflictException>(() =>
             CreateTestFunction("dup-func"));
 
-        Assert.Contains("already exist", ex.Message);
+        ex.Message.ShouldContain("already exist");
     }
 
     // -- GetFunction -----------------------------------------------------------
@@ -138,15 +138,15 @@ public sealed class LambdaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
             FunctionName = "get-func",
         });
 
-        Assert.Equal("get-func", result.Configuration.FunctionName);
-        Assert.NotNull(result.Code);
-        Assert.NotNull(result.Tags);
+        result.Configuration.FunctionName.ShouldBe("get-func");
+        result.Code.ShouldNotBeNull();
+        result.Tags.ShouldNotBeNull();
     }
 
     [Fact]
     public async Task GetFunctionNotFound()
     {
-        await Assert.ThrowsAsync<ResourceNotFoundException>(() =>
+        await Should.ThrowAsync<ResourceNotFoundException>(() =>
             _lambda.GetFunctionAsync(new GetFunctionRequest
             {
                 FunctionName = "nonexistent-func",
@@ -163,9 +163,9 @@ public sealed class LambdaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
 
         var result = await _lambda.ListFunctionsAsync(new ListFunctionsRequest());
 
-        Assert.True(result.Functions.Count >= 2);
-        Assert.Contains(result.Functions, f => f.FunctionName == "list-func-a");
-        Assert.Contains(result.Functions, f => f.FunctionName == "list-func-b");
+        (result.Functions.Count >= 2).ShouldBe(true);
+        result.Functions.ShouldContain(f => f.FunctionName == "list-func-a");
+        result.Functions.ShouldContain(f => f.FunctionName == "list-func-b");
     }
 
     // -- DeleteFunction --------------------------------------------------------
@@ -180,7 +180,7 @@ public sealed class LambdaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
             FunctionName = "del-func",
         });
 
-        await Assert.ThrowsAsync<ResourceNotFoundException>(() =>
+        await Should.ThrowAsync<ResourceNotFoundException>(() =>
             _lambda.GetFunctionAsync(new GetFunctionRequest
             {
                 FunctionName = "del-func",
@@ -203,9 +203,9 @@ public sealed class LambdaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
             ZipFile = newZip,
         });
 
-        Assert.NotEqual(originalCodeSize, result.CodeSize);
-        Assert.NotEqual(originalSha, result.CodeSha256);
-        Assert.Equal("update-code-func", result.FunctionName);
+        result.CodeSize.ShouldNotBe(originalCodeSize);
+        result.CodeSha256.ShouldNotBe(originalSha);
+        result.FunctionName.ShouldBe("update-code-func");
     }
 
     // -- UpdateFunctionConfiguration -------------------------------------------
@@ -228,10 +228,10 @@ public sealed class LambdaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
             },
         });
 
-        Assert.Equal("new_handler.handler", result.Handler);
-        Assert.Equal("Updated description", result.Description);
-        Assert.Equal(30, result.Timeout);
-        Assert.Equal(256, result.MemorySize);
+        result.Handler.ShouldBe("new_handler.handler");
+        result.Description.ShouldBe("Updated description");
+        result.Timeout.ShouldBe(30);
+        result.MemorySize.ShouldBe(256);
     }
 
     // -- Tags ------------------------------------------------------------------
@@ -256,9 +256,9 @@ public sealed class LambdaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
             Resource = create.FunctionArn,
         });
 
-        Assert.True(tags.Tags.Count >= 2);
-        Assert.Equal("prod", tags.Tags["env"]);
-        Assert.Equal("platform", tags.Tags["team"]);
+        (tags.Tags.Count >= 2).ShouldBe(true);
+        tags.Tags["env"].ShouldBe("prod");
+        tags.Tags["team"].ShouldBe("platform");
 
         await _lambda.UntagResourceAsync(new UntagResourceRequest
         {
@@ -271,8 +271,8 @@ public sealed class LambdaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
             Resource = create.FunctionArn,
         });
 
-        Assert.DoesNotContain("team", tags2.Tags.Keys);
-        Assert.Equal("prod", tags2.Tags["env"]);
+        tags2.Tags.Keys.ShouldNotContain("team");
+        tags2.Tags["env"].ShouldBe("prod");
     }
 
     // -- AddPermission / GetPolicy / RemovePermission --------------------------
@@ -290,8 +290,8 @@ public sealed class LambdaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
             Principal = "s3.amazonaws.com",
         });
 
-        Assert.NotNull(result.Statement);
-        Assert.Contains("stmt1", result.Statement);
+        result.Statement.ShouldNotBeNull();
+        result.Statement.ShouldContain("stmt1");
     }
 
     [Fact]
@@ -312,8 +312,8 @@ public sealed class LambdaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
             FunctionName = "perm-crud-func",
         });
 
-        Assert.NotNull(policy.Policy);
-        Assert.Contains("stmt-crud", policy.Policy);
+        policy.Policy.ShouldNotBeNull();
+        policy.Policy.ShouldContain("stmt-crud");
 
         await _lambda.RemovePermissionAsync(new RemovePermissionRequest
         {
@@ -322,7 +322,7 @@ public sealed class LambdaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
         });
 
         // After removal, there should be no statements → ResourceNotFound
-        await Assert.ThrowsAsync<ResourceNotFoundException>(() =>
+        await Should.ThrowAsync<ResourceNotFoundException>(() =>
             _lambda.GetPolicyAsync(new GetPolicyRequest
             {
                 FunctionName = "perm-crud-func",
@@ -341,8 +341,8 @@ public sealed class LambdaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
             FunctionName = "versions-func",
         });
 
-        Assert.Single(result.Versions); // Only $LATEST
-        Assert.Equal("$LATEST", result.Versions[0].Version);
+        result.Versions.ShouldHaveSingleItem(); // Only $LATEST
+        result.Versions[0].Version.ShouldBe("$LATEST");
     }
 
     // -- PublishVersion --------------------------------------------------------
@@ -357,15 +357,15 @@ public sealed class LambdaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
             FunctionName = "publish-func",
         });
 
-        Assert.Equal("1", published.Version);
-        Assert.Contains("publish-func", published.FunctionArn);
+        published.Version.ShouldBe("1");
+        published.FunctionArn.ShouldContain("publish-func");
 
         var versions = await _lambda.ListVersionsByFunctionAsync(new ListVersionsByFunctionRequest
         {
             FunctionName = "publish-func",
         });
 
-        Assert.Equal(2, versions.Versions.Count); // $LATEST + version 1
+        versions.Versions.Count.ShouldBe(2); // $LATEST + version 1
     }
 
     [Fact]
@@ -382,7 +382,7 @@ public sealed class LambdaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
             Publish = true,
         });
 
-        Assert.Equal("1", result.Version);
+        result.Version.ShouldBe("1");
     }
 
     // -- Invoke stubs ----------------------------------------------------------
@@ -398,7 +398,7 @@ public sealed class LambdaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
             InvocationType = InvocationType.Event,
         });
 
-        Assert.Equal(202, result.StatusCode);
+        result.StatusCode.ShouldBe(202);
     }
 
     [Fact]
@@ -412,7 +412,7 @@ public sealed class LambdaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
             InvocationType = InvocationType.DryRun,
         });
 
-        Assert.Equal(204, result.StatusCode);
+        result.StatusCode.ShouldBe(204);
     }
 
     // -- Alias CRUD ------------------------------------------------------------
@@ -437,8 +437,8 @@ public sealed class LambdaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
             Description = "Production alias",
         });
 
-        Assert.Equal("prod", created.Name);
-        Assert.Equal(published.Version, created.FunctionVersion);
+        created.Name.ShouldBe("prod");
+        created.FunctionVersion.ShouldBe(published.Version);
 
         // Get alias
         var alias = await _lambda.GetAliasAsync(new GetAliasRequest
@@ -447,8 +447,8 @@ public sealed class LambdaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
             Name = "prod",
         });
 
-        Assert.Equal("prod", alias.Name);
-        Assert.Equal(published.Version, alias.FunctionVersion);
+        alias.Name.ShouldBe("prod");
+        alias.FunctionVersion.ShouldBe(published.Version);
 
         // Update alias
         var updated = await _lambda.UpdateAliasAsync(new UpdateAliasRequest
@@ -458,7 +458,7 @@ public sealed class LambdaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
             Description = "Updated prod alias",
         });
 
-        Assert.Equal("Updated prod alias", updated.Description);
+        updated.Description.ShouldBe("Updated prod alias");
 
         // List aliases
         var list = await _lambda.ListAliasesAsync(new ListAliasesRequest
@@ -466,8 +466,8 @@ public sealed class LambdaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
             FunctionName = "alias-func",
         });
 
-        Assert.Single(list.Aliases);
-        Assert.Equal("prod", list.Aliases[0].Name);
+        list.Aliases.ShouldHaveSingleItem();
+        list.Aliases[0].Name.ShouldBe("prod");
 
         // Delete alias
         await _lambda.DeleteAliasAsync(new DeleteAliasRequest
@@ -481,7 +481,7 @@ public sealed class LambdaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
             FunctionName = "alias-func",
         });
 
-        Assert.Empty(listAfter.Aliases);
+        listAfter.Aliases.ShouldBeEmpty();
     }
 
     // -- Function Concurrency --------------------------------------------------
@@ -498,7 +498,7 @@ public sealed class LambdaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
             ReservedConcurrentExecutions = 10,
         });
 
-        Assert.Equal(10, put.ReservedConcurrentExecutions);
+        put.ReservedConcurrentExecutions.ShouldBe(10);
 
         // Get concurrency
         var get = await _lambda.GetFunctionConcurrencyAsync(new GetFunctionConcurrencyRequest
@@ -506,7 +506,7 @@ public sealed class LambdaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
             FunctionName = "concurrency-func",
         });
 
-        Assert.Equal(10, get.ReservedConcurrentExecutions);
+        get.ReservedConcurrentExecutions.ShouldBe(10);
 
         // Delete concurrency
         await _lambda.DeleteFunctionConcurrencyAsync(new DeleteFunctionConcurrencyRequest
@@ -519,7 +519,7 @@ public sealed class LambdaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
             FunctionName = "concurrency-func",
         });
 
-        Assert.Equal(0, getAfter.ReservedConcurrentExecutions);
+        getAfter.ReservedConcurrentExecutions.ShouldBe(0);
     }
 
     // -- ListFunctions Pagination ----------------------------------------------
@@ -537,8 +537,8 @@ public sealed class LambdaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
             MaxItems = 2,
         });
 
-        Assert.Equal(2, page1.Functions.Count);
-        Assert.NotNull(page1.NextMarker);
+        page1.Functions.Count.ShouldBe(2);
+        page1.NextMarker.ShouldNotBeNull();
 
         var page2 = await _lambda.ListFunctionsAsync(new ListFunctionsRequest
         {
@@ -546,10 +546,10 @@ public sealed class LambdaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
             Marker = page1.NextMarker,
         });
 
-        Assert.Equal(2, page2.Functions.Count);
+        page2.Functions.Count.ShouldBe(2);
 
         // Pages should have different functions
-        Assert.DoesNotContain(page1.Functions[0].FunctionName, page2.Functions.ConvertAll(f => f.FunctionName));
+        page2.Functions.ConvertAll(f => f.FunctionName).ShouldNotContain(page1.Functions[0].FunctionName);
     }
 
     // -- Layer tests -----------------------------------------------------------
@@ -566,10 +566,10 @@ public sealed class LambdaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
             CompatibleRuntimes = [Runtime.Python39],
         });
 
-        Assert.Equal(1, result.Version);
-        Assert.Contains("test-layer", result.LayerArn);
-        Assert.Contains("test-layer", result.LayerVersionArn);
-        Assert.Equal("A test layer", result.Description);
+        result.Version.ShouldBe(1);
+        result.LayerArn.ShouldContain("test-layer");
+        result.LayerVersionArn.ShouldContain("test-layer");
+        result.Description.ShouldBe("A test layer");
     }
 
     [Fact]
@@ -588,9 +588,9 @@ public sealed class LambdaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
             VersionNumber = publish.Version,
         });
 
-        Assert.Equal(publish.Version, result.Version);
-        Assert.NotNull(result.Content);
-        Assert.True(result.Content.CodeSize > 0);
+        result.Version.ShouldBe(publish.Version);
+        result.Content.ShouldNotBeNull();
+        (result.Content.CodeSize > 0).ShouldBe(true);
     }
 
     [Fact]
@@ -615,7 +615,7 @@ public sealed class LambdaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
             LayerName = "list-ver-layer",
         });
 
-        Assert.Equal(2, result.LayerVersions.Count);
+        result.LayerVersions.Count.ShouldBe(2);
     }
 
     [Fact]
@@ -630,8 +630,8 @@ public sealed class LambdaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
 
         var result = await _lambda.ListLayersAsync(new ListLayersRequest());
 
-        Assert.True(result.Layers.Count >= 1);
-        Assert.Contains(result.Layers, l => l.LayerName == "listed-layer");
+        (result.Layers.Count >= 1).ShouldBe(true);
+        result.Layers.ShouldContain(l => l.LayerName == "listed-layer");
     }
 
     [Fact]
@@ -655,7 +655,7 @@ public sealed class LambdaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
             LayerName = "del-layer",
         });
 
-        Assert.Empty(versions.LayerVersions);
+        versions.LayerVersions.ShouldBeEmpty();
     }
 
     // -- Function URL Config ---------------------------------------------------
@@ -672,9 +672,9 @@ public sealed class LambdaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
             AuthType = FunctionUrlAuthType.NONE,
         });
 
-        Assert.NotEmpty(created.FunctionUrl);
-        Assert.Equal(FunctionUrlAuthType.NONE, created.AuthType);
-        Assert.Contains("url-func", created.FunctionArn);
+        created.FunctionUrl.ShouldNotBeEmpty();
+        created.AuthType.ShouldBe(FunctionUrlAuthType.NONE);
+        created.FunctionArn.ShouldContain("url-func");
 
         // Get
         var got = await _lambda.GetFunctionUrlConfigAsync(new GetFunctionUrlConfigRequest
@@ -682,7 +682,7 @@ public sealed class LambdaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
             FunctionName = "url-func",
         });
 
-        Assert.Equal(created.FunctionUrl, got.FunctionUrl);
+        got.FunctionUrl.ShouldBe(created.FunctionUrl);
 
         // Update
         var updated = await _lambda.UpdateFunctionUrlConfigAsync(new UpdateFunctionUrlConfigRequest
@@ -691,7 +691,7 @@ public sealed class LambdaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
             AuthType = FunctionUrlAuthType.AWS_IAM,
         });
 
-        Assert.Equal(FunctionUrlAuthType.AWS_IAM, updated.AuthType);
+        updated.AuthType.ShouldBe(FunctionUrlAuthType.AWS_IAM);
 
         // Delete
         await _lambda.DeleteFunctionUrlConfigAsync(new DeleteFunctionUrlConfigRequest
@@ -699,7 +699,7 @@ public sealed class LambdaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
             FunctionName = "url-func",
         });
 
-        await Assert.ThrowsAsync<ResourceNotFoundException>(() =>
+        await Should.ThrowAsync<ResourceNotFoundException>(() =>
             _lambda.GetFunctionUrlConfigAsync(new GetFunctionUrlConfigRequest
             {
                 FunctionName = "url-func",
@@ -721,8 +721,8 @@ public sealed class LambdaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
             BatchSize = 5,
         });
 
-        Assert.NotEmpty(created.UUID);
-        Assert.Equal(5, created.BatchSize);
+        created.UUID.ShouldNotBeEmpty();
+        created.BatchSize.ShouldBe(5);
 
         // Get
         var got = await _lambda.GetEventSourceMappingAsync(new GetEventSourceMappingRequest
@@ -730,7 +730,7 @@ public sealed class LambdaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
             UUID = created.UUID,
         });
 
-        Assert.Equal(created.UUID, got.UUID);
+        got.UUID.ShouldBe(created.UUID);
 
         // List
         var list = await _lambda.ListEventSourceMappingsAsync(new ListEventSourceMappingsRequest
@@ -738,7 +738,7 @@ public sealed class LambdaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
             FunctionName = "esm-func",
         });
 
-        Assert.True(list.EventSourceMappings.Count >= 1);
+        (list.EventSourceMappings.Count >= 1).ShouldBe(true);
 
         // Update
         var updated = await _lambda.UpdateEventSourceMappingAsync(new UpdateEventSourceMappingRequest
@@ -747,7 +747,7 @@ public sealed class LambdaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
             BatchSize = 20,
         });
 
-        Assert.Equal(20, updated.BatchSize);
+        updated.BatchSize.ShouldBe(20);
 
         // Delete
         var deleted = await _lambda.DeleteEventSourceMappingAsync(new DeleteEventSourceMappingRequest
@@ -755,7 +755,7 @@ public sealed class LambdaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
             UUID = created.UUID,
         });
 
-        Assert.NotNull(deleted.UUID);
+        deleted.UUID.ShouldNotBeNull();
     }
 
     // -- Unknown Path ----------------------------------------------------------
@@ -766,7 +766,7 @@ public sealed class LambdaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
         // Send a request to an unknown Lambda path that goes through the Lambda handler
         var response = await _fixture.HttpClient.GetAsync("/2015-03-31/functions/nonexistent-func-12345");
 
-        Assert.Equal(System.Net.HttpStatusCode.NotFound, response.StatusCode);
+        response.StatusCode.ShouldBe(System.Net.HttpStatusCode.NotFound);
     }
 
     // -- Event Invoke Config ---------------------------------------------------
@@ -784,8 +784,8 @@ public sealed class LambdaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
             MaximumEventAgeInSeconds = 3600,
         });
 
-        Assert.Equal(1, put.MaximumRetryAttempts);
-        Assert.Equal(3600, put.MaximumEventAgeInSeconds);
+        put.MaximumRetryAttempts.ShouldBe(1);
+        put.MaximumEventAgeInSeconds.ShouldBe(3600);
 
         // Get
         var get = await _lambda.GetFunctionEventInvokeConfigAsync(new GetFunctionEventInvokeConfigRequest
@@ -793,8 +793,8 @@ public sealed class LambdaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
             FunctionName = "eic-func",
         });
 
-        Assert.Equal(1, get.MaximumRetryAttempts);
-        Assert.Equal(3600, get.MaximumEventAgeInSeconds);
+        get.MaximumRetryAttempts.ShouldBe(1);
+        get.MaximumEventAgeInSeconds.ShouldBe(3600);
 
         // Delete
         await _lambda.DeleteFunctionEventInvokeConfigAsync(new DeleteFunctionEventInvokeConfigRequest
@@ -803,7 +803,7 @@ public sealed class LambdaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
         });
 
         // After delete, get should throw
-        await Assert.ThrowsAsync<Amazon.Lambda.Model.ResourceNotFoundException>(() =>
+        await Should.ThrowAsync<Amazon.Lambda.Model.ResourceNotFoundException>(() =>
             _lambda.GetFunctionEventInvokeConfigAsync(new GetFunctionEventInvokeConfigRequest
             {
                 FunctionName = "eic-func",
@@ -831,7 +831,7 @@ public sealed class LambdaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
             ProvisionedConcurrentExecutions = 5,
         });
 
-        Assert.Equal(5, put.RequestedProvisionedConcurrentExecutions);
+        put.RequestedProvisionedConcurrentExecutions.ShouldBe(5);
 
         // Get
         var get = await _lambda.GetProvisionedConcurrencyConfigAsync(new GetProvisionedConcurrencyConfigRequest
@@ -840,8 +840,8 @@ public sealed class LambdaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
             Qualifier = published.Version,
         });
 
-        Assert.Equal(5, get.RequestedProvisionedConcurrentExecutions);
-        Assert.Equal("READY", get.Status?.Value);
+        get.RequestedProvisionedConcurrentExecutions.ShouldBe(5);
+        get.Status?.Value.ShouldBe("READY");
 
         // Delete
         await _lambda.DeleteProvisionedConcurrencyConfigAsync(new DeleteProvisionedConcurrencyConfigRequest
@@ -851,7 +851,7 @@ public sealed class LambdaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
         });
 
         // After delete, get should throw
-        await Assert.ThrowsAsync<Amazon.Lambda.Model.ProvisionedConcurrencyConfigNotFoundException>(() =>
+        await Should.ThrowAsync<Amazon.Lambda.Model.ProvisionedConcurrencyConfigNotFoundException>(() =>
             _lambda.GetProvisionedConcurrencyConfigAsync(new GetProvisionedConcurrencyConfigRequest
             {
                 FunctionName = "pc-func",
@@ -882,9 +882,9 @@ public sealed class LambdaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
             Layers = [layerPublish.LayerVersionArn],
         });
 
-        Assert.Equal("func-with-layer", result.FunctionName);
-        Assert.NotNull(result.Layers);
-        Assert.Single(result.Layers);
+        result.FunctionName.ShouldBe("func-with-layer");
+        result.Layers.ShouldNotBeNull();
+        result.Layers.ShouldHaveSingleItem();
     }
 
     // -- PublishVersion Snapshot -----------------------------------------------
@@ -913,7 +913,7 @@ public sealed class LambdaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
             Qualifier = published.Version,
         });
 
-        Assert.NotEqual("changed-after-publish", versionConfig.Description);
+        versionConfig.Description.ShouldNotBe("changed-after-publish");
     }
 
     // -- Worker Pool Invocation Tests ------------------------------------------
@@ -1024,13 +1024,13 @@ public sealed class LambdaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
             Payload = """{"name": "Lambda"}""",
         });
 
-        Assert.Equal(200, result.StatusCode);
-        Assert.Null(result.FunctionError);
+        result.StatusCode.ShouldBe(200);
+        result.FunctionError.ShouldBeNull();
 
         var payload = Encoding.UTF8.GetString(result.Payload.ToArray());
         using var doc = JsonDocument.Parse(payload);
-        Assert.Equal(200, doc.RootElement.GetProperty("statusCode").GetInt32());
-        Assert.Equal("hello Lambda", doc.RootElement.GetProperty("body").GetString());
+        doc.RootElement.GetProperty("statusCode").GetInt32().ShouldBe(200);
+        doc.RootElement.GetProperty("body").GetString().ShouldBe("hello Lambda");
     }
 
     [Fact]
@@ -1055,13 +1055,13 @@ public sealed class LambdaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
             Payload = """{"items": [1, 2, 3, 4, 5]}""",
         });
 
-        Assert.Equal(200, result.StatusCode);
-        Assert.Null(result.FunctionError);
+        result.StatusCode.ShouldBe(200);
+        result.FunctionError.ShouldBeNull();
 
         var payload = Encoding.UTF8.GetString(result.Payload.ToArray());
         using var doc = JsonDocument.Parse(payload);
-        Assert.Equal(5, doc.RootElement.GetProperty("count").GetInt32());
-        Assert.Equal(15, doc.RootElement.GetProperty("sum").GetInt32());
+        doc.RootElement.GetProperty("count").GetInt32().ShouldBe(5);
+        doc.RootElement.GetProperty("sum").GetInt32().ShouldBe(15);
     }
 
     [Fact]
@@ -1092,13 +1092,13 @@ public sealed class LambdaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
             Payload = "{}",
         });
 
-        Assert.Equal(200, result.StatusCode);
-        Assert.Null(result.FunctionError);
+        result.StatusCode.ShouldBe(200);
+        result.FunctionError.ShouldBeNull();
 
         var payload = Encoding.UTF8.GetString(result.Payload.ToArray());
         using var doc = JsonDocument.Parse(payload);
-        Assert.Equal("hello-env", doc.RootElement.GetProperty("myvar").GetString());
-        Assert.Equal("us-west-2", doc.RootElement.GetProperty("region").GetString());
+        doc.RootElement.GetProperty("myvar").GetString().ShouldBe("hello-env");
+        doc.RootElement.GetProperty("region").GetString().ShouldBe("us-west-2");
     }
 
     [Fact]
@@ -1125,7 +1125,7 @@ public sealed class LambdaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
             Payload = "{}",
         });
 
-        Assert.Equal(200, result1.StatusCode);
+        result1.StatusCode.ShouldBe(200);
         var payload1 = Encoding.UTF8.GetString(result1.Payload.ToArray());
         using var doc1 = JsonDocument.Parse(payload1);
         var bootTime1 = doc1.RootElement.GetProperty("boot").GetDouble();
@@ -1137,13 +1137,13 @@ public sealed class LambdaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
             Payload = "{}",
         });
 
-        Assert.Equal(200, result2.StatusCode);
+        result2.StatusCode.ShouldBe(200);
         var payload2 = Encoding.UTF8.GetString(result2.Payload.ToArray());
         using var doc2 = JsonDocument.Parse(payload2);
         var bootTime2 = doc2.RootElement.GetProperty("boot").GetDouble();
 
         // Boot time should be the same (module loaded once, process reused)
-        Assert.Equal(bootTime1, bootTime2);
+        bootTime2.ShouldBe(bootTime1);
     }
 
     [Fact]
@@ -1168,16 +1168,16 @@ public sealed class LambdaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
             Payload = """{"name": "Node"}""",
         });
 
-        Assert.Equal(200, result.StatusCode);
-        Assert.Null(result.FunctionError);
+        result.StatusCode.ShouldBe(200);
+        result.FunctionError.ShouldBeNull();
 
         var payload = Encoding.UTF8.GetString(result.Payload.ToArray());
         using var doc = JsonDocument.Parse(payload);
-        Assert.Equal(200, doc.RootElement.GetProperty("statusCode").GetInt32());
+        doc.RootElement.GetProperty("statusCode").GetInt32().ShouldBe(200);
 
         var bodyStr = doc.RootElement.GetProperty("body").GetString()!;
         using var bodyDoc = JsonDocument.Parse(bodyStr);
-        Assert.Equal("Node", bodyDoc.RootElement.GetProperty("hello").GetString());
+        bodyDoc.RootElement.GetProperty("hello").GetString().ShouldBe("Node");
     }
 
     [Fact]
@@ -1201,12 +1201,12 @@ public sealed class LambdaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
             Payload = "{}",
         });
 
-        Assert.Equal(200, result.StatusCode);
-        Assert.Equal("Unhandled", result.FunctionError);
+        result.StatusCode.ShouldBe(200);
+        result.FunctionError.ShouldBe("Unhandled");
 
         var payload = Encoding.UTF8.GetString(result.Payload.ToArray());
         using var doc = JsonDocument.Parse(payload);
-        Assert.Contains("something went wrong", doc.RootElement.GetProperty("errorMessage").GetString());
+        doc.RootElement.GetProperty("errorMessage").GetString()!.ShouldContain("something went wrong");
     }
 
     [Fact]
@@ -1231,10 +1231,10 @@ public sealed class LambdaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
             Payload = "{}",
         });
 
-        Assert.Equal(200, result1.StatusCode);
+        result1.StatusCode.ShouldBe(200);
         var payload1 = Encoding.UTF8.GetString(result1.Payload.ToArray());
         using var doc1 = JsonDocument.Parse(payload1);
-        Assert.Equal(1, doc1.RootElement.GetProperty("version").GetInt32());
+        doc1.RootElement.GetProperty("version").GetInt32().ShouldBe(1);
 
         // Update the code
         const string codeV2 = """
@@ -1255,10 +1255,10 @@ public sealed class LambdaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
             Payload = "{}",
         });
 
-        Assert.Equal(200, result2.StatusCode);
+        result2.StatusCode.ShouldBe(200);
         var payload2 = Encoding.UTF8.GetString(result2.Payload.ToArray());
         using var doc2 = JsonDocument.Parse(payload2);
-        Assert.Equal(2, doc2.RootElement.GetProperty("version").GetInt32());
+        doc2.RootElement.GetProperty("version").GetInt32().ShouldBe(2);
     }
 
     [Fact]
@@ -1282,7 +1282,7 @@ public sealed class LambdaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
             InvocationType = InvocationType.Event,
         });
 
-        Assert.Equal(202, result.StatusCode);
+        result.StatusCode.ShouldBe(202);
     }
 
     [Fact]
@@ -1309,7 +1309,7 @@ public sealed class LambdaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
             Payload = "{}",
         });
 
-        Assert.Equal(200, result1.StatusCode);
+        result1.StatusCode.ShouldBe(200);
         var payload1 = Encoding.UTF8.GetString(result1.Payload.ToArray());
         using var doc1 = JsonDocument.Parse(payload1);
         var bootTime1 = doc1.RootElement.GetProperty("boot").GetDouble();
@@ -1330,13 +1330,13 @@ public sealed class LambdaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
             Payload = "{}",
         });
 
-        Assert.Equal(200, result2.StatusCode);
+        result2.StatusCode.ShouldBe(200);
         var payload2 = Encoding.UTF8.GetString(result2.Payload.ToArray());
         using var doc2 = JsonDocument.Parse(payload2);
         var bootTime2 = doc2.RootElement.GetProperty("boot").GetDouble();
 
         // Boot time should be different (new worker process)
-        Assert.NotEqual(bootTime1, bootTime2);
+        bootTime2.ShouldNotBe(bootTime1);
     }
 
     [Fact]
@@ -1364,14 +1364,14 @@ public sealed class LambdaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
             Payload = "{}",
         });
 
-        Assert.Equal(200, result.StatusCode);
-        Assert.Null(result.FunctionError);
+        result.StatusCode.ShouldBe(200);
+        result.FunctionError.ShouldBeNull();
 
         var payload = Encoding.UTF8.GetString(result.Payload.ToArray());
         using var doc = JsonDocument.Parse(payload);
-        Assert.Equal("invoke-py-context", doc.RootElement.GetProperty("function_name").GetString());
-        Assert.Equal(128, doc.RootElement.GetProperty("memory_limit").GetInt32());
-        Assert.True(doc.RootElement.GetProperty("has_request_id").GetBoolean());
+        doc.RootElement.GetProperty("function_name").GetString().ShouldBe("invoke-py-context");
+        doc.RootElement.GetProperty("memory_limit").GetInt32().ShouldBe(128);
+        doc.RootElement.GetProperty("has_request_id").GetBoolean().ShouldBe(true);
     }
 
     [Fact]
@@ -1396,13 +1396,13 @@ public sealed class LambdaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
             Payload = """{"name": "CB"}""",
         });
 
-        Assert.Equal(200, result.StatusCode);
-        Assert.Null(result.FunctionError);
+        result.StatusCode.ShouldBe(200);
+        result.FunctionError.ShouldBeNull();
 
         var payload = Encoding.UTF8.GetString(result.Payload.ToArray());
         using var doc = JsonDocument.Parse(payload);
-        Assert.Equal(200, doc.RootElement.GetProperty("statusCode").GetInt32());
-        Assert.Equal("callback-CB", doc.RootElement.GetProperty("body").GetString());
+        doc.RootElement.GetProperty("statusCode").GetInt32().ShouldBe(200);
+        doc.RootElement.GetProperty("body").GetString().ShouldBe("callback-CB");
     }
 
     // -- ESM Poller Integration Tests ------------------------------------------
@@ -1488,7 +1488,7 @@ public sealed class LambdaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
             }
         }
 
-        Assert.True(consumed, "Message should have been consumed by Lambda ESM");
+        consumed.ShouldBe(true, "Message should have been consumed by Lambda ESM");
     }
 
     [Fact]
@@ -1529,9 +1529,9 @@ public sealed class LambdaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
             Enabled = true,
         });
 
-        Assert.NotNull(created.UUID);
-        Assert.Equal("Enabled", created.State);
-        Assert.Equal(5, created.BatchSize);
+        created.UUID.ShouldNotBeNull();
+        created.State.ShouldBe("Enabled");
+        created.BatchSize.ShouldBe(5);
 
         // Get ESM
         var fetched = await _lambda.GetEventSourceMappingAsync(new GetEventSourceMappingRequest
@@ -1539,7 +1539,7 @@ public sealed class LambdaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
             UUID = created.UUID,
         });
 
-        Assert.Equal(created.UUID, fetched.UUID);
+        fetched.UUID.ShouldBe(created.UUID);
 
         // Update ESM (disable it)
         var updated = await _lambda.UpdateEventSourceMappingAsync(new UpdateEventSourceMappingRequest
@@ -1548,7 +1548,7 @@ public sealed class LambdaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
             Enabled = false,
         });
 
-        Assert.Equal("Disabled", updated.State);
+        updated.State.ShouldBe("Disabled");
 
         // List ESMs
         var listed = await _lambda.ListEventSourceMappingsAsync(new ListEventSourceMappingsRequest
@@ -1556,7 +1556,7 @@ public sealed class LambdaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
             FunctionName = "esm-crud-func",
         });
 
-        Assert.Single(listed.EventSourceMappings);
+        listed.EventSourceMappings.ShouldHaveSingleItem();
 
         // Delete ESM
         var deleted = await _lambda.DeleteEventSourceMappingAsync(new DeleteEventSourceMappingRequest
@@ -1564,7 +1564,7 @@ public sealed class LambdaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
             UUID = created.UUID,
         });
 
-        Assert.NotNull(deleted.UUID);
+        deleted.UUID.ShouldNotBeNull();
 
         // Verify deletion
         var listedAfterDelete = await _lambda.ListEventSourceMappingsAsync(new ListEventSourceMappingsRequest
@@ -1572,7 +1572,7 @@ public sealed class LambdaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
             FunctionName = "esm-crud-func",
         });
 
-        Assert.Empty(listedAfterDelete.EventSourceMappings);
+        listedAfterDelete.EventSourceMappings.ShouldBeEmpty();
     }
 
     [Fact]
@@ -1641,6 +1641,6 @@ public sealed class LambdaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
             }
         }
 
-        Assert.True(consumed, "All messages should have been consumed by Lambda ESM");
+        consumed.ShouldBe(true, "All messages should have been consumed by Lambda ESM");
     }
 }

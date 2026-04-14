@@ -62,8 +62,8 @@ public sealed class GlueTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         });
 
         var resp = await _glue.GetDatabaseAsync(new GetDatabaseRequest { Name = "test_db" });
-        Assert.Equal("test_db", resp.Database.Name);
-        Assert.Equal("Test database", resp.Database.Description);
+        resp.Database.Name.ShouldBe("test_db");
+        resp.Database.Description.ShouldBe("Test database");
     }
 
     [Fact]
@@ -74,13 +74,13 @@ public sealed class GlueTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             DatabaseInput = new DatabaseInput { Name = "dup_db" },
         });
 
-        var ex = await Assert.ThrowsAsync<AlreadyExistsException>(() =>
+        var ex = await Should.ThrowAsync<AlreadyExistsException>(() =>
             _glue.CreateDatabaseAsync(new CreateDatabaseRequest
             {
                 DatabaseInput = new DatabaseInput { Name = "dup_db" },
             }));
 
-        Assert.Contains("already exists", ex.Message);
+        ex.Message.ShouldContain("already exists");
     }
 
     [Fact]
@@ -98,7 +98,7 @@ public sealed class GlueTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         });
 
         var resp = await _glue.GetDatabaseAsync(new GetDatabaseRequest { Name = "upd_db" });
-        Assert.Equal("updated", resp.Database.Description);
+        resp.Database.Description.ShouldBe("updated");
     }
 
     [Fact]
@@ -111,10 +111,10 @@ public sealed class GlueTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
 
         await _glue.DeleteDatabaseAsync(new DeleteDatabaseRequest { Name = "del_db" });
 
-        var ex = await Assert.ThrowsAsync<EntityNotFoundException>(() =>
+        var ex = await Should.ThrowAsync<EntityNotFoundException>(() =>
             _glue.GetDatabaseAsync(new GetDatabaseRequest { Name = "del_db" }));
 
-        Assert.Contains("not found", ex.Message);
+        ex.Message.ShouldContain("not found");
     }
 
     [Fact]
@@ -131,9 +131,9 @@ public sealed class GlueTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         });
 
         var resp = await _glue.GetDatabasesAsync(new GetDatabasesRequest());
-        Assert.True(resp.DatabaseList.Count >= 2);
-        Assert.Contains(resp.DatabaseList, d => d.Name == "list_db_a");
-        Assert.Contains(resp.DatabaseList, d => d.Name == "list_db_b");
+        (resp.DatabaseList.Count >= 2).ShouldBe(true);
+        resp.DatabaseList.ShouldContain(d => d.Name == "list_db_a");
+        resp.DatabaseList.ShouldContain(d => d.Name == "list_db_b");
     }
 
     // -- Table CRUD ------------------------------------------------------------
@@ -165,8 +165,8 @@ public sealed class GlueTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         });
 
         var resp = await _glue.GetTableAsync(new GetTableRequest { DatabaseName = "tbl_db", Name = "tbl_v2" });
-        Assert.Equal("tbl_v2", resp.Table.Name);
-        Assert.Equal(2, resp.Table.StorageDescriptor.Columns.Count);
+        resp.Table.Name.ShouldBe("tbl_v2");
+        resp.Table.StorageDescriptor.Columns.Count.ShouldBe(2);
     }
 
     [Fact]
@@ -201,7 +201,7 @@ public sealed class GlueTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         });
 
         var resp = await _glue.GetTableAsync(new GetTableRequest { DatabaseName = "upd_tbl_db", Name = "upd_tbl" });
-        Assert.Equal("updated table", resp.Table.Description);
+        resp.Table.Description.ShouldBe("updated table");
     }
 
     [Fact]
@@ -231,7 +231,7 @@ public sealed class GlueTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
 
         await _glue.DeleteTableAsync(new DeleteTableRequest { DatabaseName = "del_tbl_db", Name = "del_tbl" });
 
-        await Assert.ThrowsAsync<EntityNotFoundException>(() =>
+        await Should.ThrowAsync<EntityNotFoundException>(() =>
             _glue.GetTableAsync(new GetTableRequest { DatabaseName = "del_tbl_db", Name = "del_tbl" }));
     }
 
@@ -265,8 +265,8 @@ public sealed class GlueTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
 
         var resp = await _glue.GetTablesAsync(new GetTablesRequest { DatabaseName = "gt_db" });
         var names = resp.TableList.Select(t => t.Name).ToList();
-        Assert.Contains("lt_a", names);
-        Assert.Contains("lt_b", names);
+        names.ShouldContain("lt_a");
+        names.ShouldContain("lt_b");
     }
 
     // -- Partition CRUD --------------------------------------------------------
@@ -308,7 +308,7 @@ public sealed class GlueTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             PartitionValues = ["2024-01-01"],
         });
 
-        Assert.Equal(["2024-01-01"], resp.Partition.Values);
+        resp.Partition.Values.ShouldBe(["2024-01-01"]);
     }
 
     [Fact]
@@ -353,7 +353,7 @@ public sealed class GlueTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         });
 
         var resp = await _glue.GetPartitionsAsync(new GetPartitionsRequest { DatabaseName = "gp_db", TableName = "gp_tbl" });
-        Assert.Equal(2, resp.Partitions.Count);
+        resp.Partitions.Count.ShouldBe(2);
     }
 
     [Fact]
@@ -394,7 +394,7 @@ public sealed class GlueTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         });
 
         var parts = await _glue.GetPartitionsAsync(new GetPartitionsRequest { DatabaseName = "dp_db", TableName = "dp_tbl" });
-        Assert.Empty(parts.Partitions);
+        parts.Partitions.ShouldBeEmpty();
     }
 
     [Fact]
@@ -429,7 +429,7 @@ public sealed class GlueTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             PartitionInput = partInput,
         });
 
-        await Assert.ThrowsAsync<AlreadyExistsException>(() =>
+        await Should.ThrowAsync<AlreadyExistsException>(() =>
             _glue.CreatePartitionAsync(new CreatePartitionRequest
             {
                 DatabaseName = "dup_part_db",
@@ -476,10 +476,10 @@ public sealed class GlueTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             ],
         });
 
-        Assert.Empty(resp.Errors);
+        resp.Errors.ShouldBeEmpty();
 
         var parts = await _glue.GetPartitionsAsync(new GetPartitionsRequest { DatabaseName = "bcp_db", TableName = "bcp_tbl" });
-        Assert.Equal(2, parts.Partitions.Count);
+        parts.Partitions.Count.ShouldBe(2);
     }
 
     // -- Crawler CRUD ----------------------------------------------------------
@@ -496,8 +496,8 @@ public sealed class GlueTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         });
 
         var resp = await _glue.GetCrawlerAsync(new GetCrawlerRequest { Name = "test-crawler" });
-        Assert.Equal("test-crawler", resp.Crawler.Name);
-        Assert.Equal(CrawlerState.READY, resp.Crawler.State);
+        resp.Crawler.Name.ShouldBe("test-crawler");
+        resp.Crawler.State.ShouldBe(CrawlerState.READY);
     }
 
     [Fact]
@@ -513,7 +513,7 @@ public sealed class GlueTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         await _glue.StartCrawlerAsync(new StartCrawlerRequest { Name = "start-crawler" });
 
         var resp = await _glue.GetCrawlerAsync(new GetCrawlerRequest { Name = "start-crawler" });
-        Assert.Equal(CrawlerState.RUNNING, resp.Crawler.State);
+        resp.Crawler.State.ShouldBe(CrawlerState.RUNNING);
     }
 
     [Fact]
@@ -530,7 +530,7 @@ public sealed class GlueTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         await _glue.StopCrawlerAsync(new StopCrawlerRequest { Name = "stop-crawler" });
 
         var resp = await _glue.GetCrawlerAsync(new GetCrawlerRequest { Name = "stop-crawler" });
-        Assert.Equal(CrawlerState.READY, resp.Crawler.State);
+        resp.Crawler.State.ShouldBe(CrawlerState.READY);
     }
 
     [Fact]
@@ -545,7 +545,7 @@ public sealed class GlueTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
 
         await _glue.DeleteCrawlerAsync(new DeleteCrawlerRequest { Name = "del-crawler" });
 
-        await Assert.ThrowsAsync<EntityNotFoundException>(() =>
+        await Should.ThrowAsync<EntityNotFoundException>(() =>
             _glue.GetCrawlerAsync(new GetCrawlerRequest { Name = "del-crawler" }));
     }
 
@@ -564,8 +564,8 @@ public sealed class GlueTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             CrawlerNameList = ["metrics-crawler"],
         });
 
-        Assert.Single(resp.CrawlerMetricsList);
-        Assert.Equal("metrics-crawler", resp.CrawlerMetricsList[0].CrawlerName);
+        resp.CrawlerMetricsList.ShouldHaveSingleItem();
+        resp.CrawlerMetricsList[0].CrawlerName.ShouldBe("metrics-crawler");
     }
 
     [Fact]
@@ -587,8 +587,8 @@ public sealed class GlueTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         });
 
         var resp = await _glue.GetCrawlerAsync(new GetCrawlerRequest { Name = "upd-crawler" });
-        Assert.Equal("role-new", resp.Crawler.Role);
-        Assert.Equal("new", resp.Crawler.Description);
+        resp.Crawler.Role.ShouldBe("role-new");
+        resp.Crawler.Description.ShouldBe("new");
     }
 
     // -- Job CRUD --------------------------------------------------------------
@@ -605,7 +605,7 @@ public sealed class GlueTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         });
 
         var resp = await _glue.GetJobAsync(new GetJobRequest { JobName = "test-job" });
-        Assert.Equal("test-job", resp.Job.Name);
+        resp.Job.Name.ShouldBe("test-job");
     }
 
     [Fact]
@@ -619,11 +619,11 @@ public sealed class GlueTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         });
 
         var runResp = await _glue.StartJobRunAsync(new StartJobRunRequest { JobName = "run-job" });
-        Assert.NotEmpty(runResp.JobRunId);
+        runResp.JobRunId.ShouldNotBeEmpty();
 
         var run = await _glue.GetJobRunAsync(new GetJobRunRequest { JobName = "run-job", RunId = runResp.JobRunId });
-        Assert.Equal(runResp.JobRunId, run.JobRun.Id);
-        Assert.Equal("run-job", run.JobRun.JobName);
+        run.JobRun.Id.ShouldBe(runResp.JobRunId);
+        run.JobRun.JobName.ShouldBe("run-job");
     }
 
     [Fact]
@@ -638,7 +638,7 @@ public sealed class GlueTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
 
         await _glue.StartJobRunAsync(new StartJobRunRequest { JobName = "runs-job" });
         var resp = await _glue.GetJobRunsAsync(new GetJobRunsRequest { JobName = "runs-job" });
-        Assert.Single(resp.JobRuns);
+        resp.JobRuns.ShouldHaveSingleItem();
     }
 
     [Fact]
@@ -653,7 +653,7 @@ public sealed class GlueTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
 
         await _glue.DeleteJobAsync(new DeleteJobRequest { JobName = "del-job" });
 
-        await Assert.ThrowsAsync<EntityNotFoundException>(() =>
+        await Should.ThrowAsync<EntityNotFoundException>(() =>
             _glue.GetJobAsync(new GetJobRequest { JobName = "del-job" }));
     }
 
@@ -675,8 +675,8 @@ public sealed class GlueTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         });
 
         var resp = await _glue.GetJobAsync(new GetJobRequest { JobName = "upd-job" });
-        Assert.Equal("new", resp.Job.Description);
-        Assert.Equal("new-role", resp.Job.Role);
+        resp.Job.Description.ShouldBe("new");
+        resp.Job.Role.ShouldBe("new-role");
     }
 
     // -- Tags ------------------------------------------------------------------
@@ -692,8 +692,8 @@ public sealed class GlueTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         });
 
         var resp = await _glue.GetTagsAsync(new GetTagsRequest { ResourceArn = arn });
-        Assert.Equal("test", resp.Tags["env"]);
-        Assert.Equal("data", resp.Tags["team"]);
+        resp.Tags["env"].ShouldBe("test");
+        resp.Tags["team"].ShouldBe("data");
 
         await _glue.UntagResourceAsync(new UntagResourceRequest
         {
@@ -702,8 +702,8 @@ public sealed class GlueTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         });
 
         var resp2 = await _glue.GetTagsAsync(new GetTagsRequest { ResourceArn = arn });
-        Assert.Equal("test", resp2.Tags["env"]);
-        Assert.False(resp2.Tags.ContainsKey("team"));
+        resp2.Tags["env"].ShouldBe("test");
+        resp2.Tags.ContainsKey("team").ShouldBe(false);
     }
 
     // -- Registry CRUD ---------------------------------------------------------
@@ -717,15 +717,15 @@ public sealed class GlueTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             Description = "Test registry",
         });
 
-        Assert.Equal("test-registry", resp.RegistryName);
-        Assert.Contains("test-registry", resp.RegistryArn);
+        resp.RegistryName.ShouldBe("test-registry");
+        resp.RegistryArn.ShouldContain("test-registry");
 
         var get = await _glue.GetRegistryAsync(new GetRegistryRequest
         {
             RegistryId = new RegistryId { RegistryName = "test-registry" },
         });
 
-        Assert.Equal("test-registry", get.RegistryName);
+        get.RegistryName.ShouldBe("test-registry");
     }
 
     [Fact]
@@ -735,7 +735,7 @@ public sealed class GlueTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         await _glue.CreateRegistryAsync(new CreateRegistryRequest { RegistryName = "lr-reg-b" });
 
         var resp = await _glue.ListRegistriesAsync(new ListRegistriesRequest());
-        Assert.True(resp.Registries.Count >= 2);
+        (resp.Registries.Count >= 2).ShouldBe(true);
     }
 
     [Fact]
@@ -747,7 +747,7 @@ public sealed class GlueTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             RegistryId = new RegistryId { RegistryName = "del-registry" },
         });
 
-        await Assert.ThrowsAsync<EntityNotFoundException>(() =>
+        await Should.ThrowAsync<EntityNotFoundException>(() =>
             _glue.GetRegistryAsync(new GetRegistryRequest
             {
                 RegistryId = new RegistryId { RegistryName = "del-registry" },
@@ -769,14 +769,14 @@ public sealed class GlueTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             SchemaDefinition = "{\"type\":\"record\",\"name\":\"test\",\"fields\":[]}",
         });
 
-        Assert.Equal("test-schema", resp.SchemaName);
+        resp.SchemaName.ShouldBe("test-schema");
 
         var get = await _glue.GetSchemaAsync(new GetSchemaRequest
         {
             SchemaId = new SchemaId { RegistryName = "schema-reg", SchemaName = "test-schema" },
         });
 
-        Assert.Equal("test-schema", get.SchemaName);
+        get.SchemaName.ShouldBe("test-schema");
     }
 
     [Fact]
@@ -797,15 +797,15 @@ public sealed class GlueTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             SchemaDefinition = "{\"version\":2}",
         });
 
-        Assert.NotEmpty(resp.SchemaVersionId);
-        Assert.Equal(2, resp.VersionNumber);
+        resp.SchemaVersionId.ShouldNotBeEmpty();
+        resp.VersionNumber.ShouldBe(2);
 
         var versions = await _glue.ListSchemaVersionsAsync(new ListSchemaVersionsRequest
         {
             SchemaId = new SchemaId { RegistryName = "ver-reg", SchemaName = "ver-schema" },
         });
 
-        Assert.Equal(2, versions.Schemas.Count);
+        versions.Schemas.Count.ShouldBe(2);
     }
 
     [Fact]
@@ -825,7 +825,7 @@ public sealed class GlueTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             SchemaId = new SchemaId { RegistryName = "del-schema-reg", SchemaName = "del-schema" },
         });
 
-        await Assert.ThrowsAsync<EntityNotFoundException>(() =>
+        await Should.ThrowAsync<EntityNotFoundException>(() =>
             _glue.GetSchemaAsync(new GetSchemaRequest
             {
                 SchemaId = new SchemaId { RegistryName = "del-schema-reg", SchemaName = "del-schema" },
@@ -852,7 +852,7 @@ public sealed class GlueTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         });
 
         var resp = await _glue.GetCrawlersAsync(new GetCrawlersRequest());
-        Assert.True(resp.Crawlers.Count >= 2);
+        (resp.Crawlers.Count >= 2).ShouldBe(true);
     }
 
     // -- GetJobs (list all) ----------------------------------------------------
@@ -875,7 +875,7 @@ public sealed class GlueTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         });
 
         var resp = await _glue.GetJobsAsync(new GetJobsRequest());
-        Assert.True(resp.Jobs.Count >= 2);
+        (resp.Jobs.Count >= 2).ShouldBe(true);
     }
 
     // -- BatchStopJobRun -------------------------------------------------------
@@ -896,6 +896,6 @@ public sealed class GlueTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             JobRunIds = ["nonexistent-run-id"],
         });
 
-        Assert.Single(resp.Errors);
+        resp.Errors.ShouldHaveSingleItem();
     }
 }

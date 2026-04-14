@@ -169,9 +169,9 @@ public sealed class StepFunctionsTests : IClassFixture<MicroStackFixture>, IAsyn
             RoleArn = "arn:aws:iam::000000000000:role/R",
         });
 
-        Assert.NotEmpty(resp.StateMachineArn);
-        Assert.Contains("sfn-create-test", resp.StateMachineArn);
-        Assert.True(resp.CreationDate > DateTime.MinValue);
+        resp.StateMachineArn.ShouldNotBeEmpty();
+        resp.StateMachineArn.ShouldContain("sfn-create-test");
+        (resp.CreationDate > DateTime.MinValue).ShouldBe(true);
     }
 
     [Fact]
@@ -193,8 +193,8 @@ public sealed class StepFunctionsTests : IClassFixture<MicroStackFixture>, IAsyn
 
         var list = await _sfn.ListStateMachinesAsync(new ListStateMachinesRequest());
         var names = list.StateMachines.Select(m => m.Name).ToList();
-        Assert.Contains("sfn-ls-a", names);
-        Assert.Contains("sfn-ls-b", names);
+        names.ShouldContain("sfn-ls-a");
+        names.ShouldContain("sfn-ls-b");
     }
 
     [Fact]
@@ -213,10 +213,10 @@ public sealed class StepFunctionsTests : IClassFixture<MicroStackFixture>, IAsyn
             StateMachineArn = create.StateMachineArn,
         });
 
-        Assert.Equal("sfn-desc-test", desc.Name);
-        Assert.Equal("ACTIVE", desc.Status.Value);
-        Assert.Equal(definition, desc.Definition);
-        Assert.Equal("arn:aws:iam::000000000000:role/R", desc.RoleArn);
+        desc.Name.ShouldBe("sfn-desc-test");
+        desc.Status.Value.ShouldBe("ACTIVE");
+        desc.Definition.ShouldBe(definition);
+        desc.RoleArn.ShouldBe("arn:aws:iam::000000000000:role/R");
     }
 
     [Fact]
@@ -236,13 +236,13 @@ public sealed class StepFunctionsTests : IClassFixture<MicroStackFixture>, IAsyn
             StateMachineArn = create.StateMachineArn,
             Definition = v2,
         });
-        Assert.True(updated.UpdateDate > DateTime.MinValue);
+        (updated.UpdateDate > DateTime.MinValue).ShouldBe(true);
 
         var desc = await _sfn.DescribeStateMachineAsync(new DescribeStateMachineRequest
         {
             StateMachineArn = create.StateMachineArn,
         });
-        Assert.Equal(v2, desc.Definition);
+        desc.Definition.ShouldBe(v2);
     }
 
     [Fact]
@@ -261,12 +261,12 @@ public sealed class StepFunctionsTests : IClassFixture<MicroStackFixture>, IAsyn
             StateMachineArn = create.StateMachineArn,
         });
 
-        var ex = await Assert.ThrowsAsync<StateMachineDoesNotExistException>(() =>
+        var ex = await Should.ThrowAsync<StateMachineDoesNotExistException>(() =>
             _sfn.DescribeStateMachineAsync(new DescribeStateMachineRequest
             {
                 StateMachineArn = create.StateMachineArn,
             }));
-        Assert.NotNull(ex);
+        ex.ShouldNotBeNull();
     }
 
     [Fact]
@@ -280,7 +280,7 @@ public sealed class StepFunctionsTests : IClassFixture<MicroStackFixture>, IAsyn
             RoleArn = "arn:aws:iam::000000000000:role/R",
         });
 
-        await Assert.ThrowsAsync<StateMachineAlreadyExistsException>(() =>
+        await Should.ThrowAsync<StateMachineAlreadyExistsException>(() =>
             _sfn.CreateStateMachineAsync(new CreateStateMachineRequest
             {
                 Name = "sfn-dup-test",
@@ -292,7 +292,7 @@ public sealed class StepFunctionsTests : IClassFixture<MicroStackFixture>, IAsyn
     [Fact]
     public async Task DescribeNonExistentFails()
     {
-        await Assert.ThrowsAsync<StateMachineDoesNotExistException>(() =>
+        await Should.ThrowAsync<StateMachineDoesNotExistException>(() =>
             _sfn.DescribeStateMachineAsync(new DescribeStateMachineRequest
             {
                 StateMachineArn = "arn:aws:states:us-east-1:000000000000:stateMachine:nonexistent-99",
@@ -317,18 +317,18 @@ public sealed class StepFunctionsTests : IClassFixture<MicroStackFixture>, IAsyn
             StateMachineArn = sm.StateMachineArn,
             Input = "{}",
         });
-        Assert.True(start.StartDate > DateTime.MinValue);
+        (start.StartDate > DateTime.MinValue).ShouldBe(true);
 
         var desc = await WaitForExecution(start.ExecutionArn);
-        Assert.Equal(ExecutionStatus.SUCCEEDED, desc.Status);
+        desc.Status.ShouldBe(ExecutionStatus.SUCCEEDED);
         var output = JsonSerializer.Deserialize<JsonElement>(desc.Output);
-        Assert.Equal("done", output.GetProperty("msg").GetString());
+        output.GetProperty("msg").GetString().ShouldBe("done");
     }
 
     [Fact]
     public async Task StartExecutionNotFoundFails()
     {
-        await Assert.ThrowsAsync<StateMachineDoesNotExistException>(() =>
+        await Should.ThrowAsync<StateMachineDoesNotExistException>(() =>
             _sfn.StartExecutionAsync(new StartExecutionRequest
             {
                 StateMachineArn = "arn:aws:states:us-east-1:000000000000:stateMachine:nonexistent-99",
@@ -353,10 +353,10 @@ public sealed class StepFunctionsTests : IClassFixture<MicroStackFixture>, IAsyn
         });
 
         var desc = await WaitForExecution(exec.ExecutionArn);
-        Assert.Equal(ExecutionStatus.SUCCEEDED, desc.Status);
+        desc.Status.ShouldBe(ExecutionStatus.SUCCEEDED);
         var output = JsonSerializer.Deserialize<JsonElement>(desc.Output);
-        Assert.True(output.GetProperty("injected").GetBoolean());
-        Assert.Equal(42, output.GetProperty("count").GetInt32());
+        output.GetProperty("injected").GetBoolean().ShouldBe(true);
+        output.GetProperty("count").GetInt32().ShouldBe(42);
     }
 
     [Fact]
@@ -377,7 +377,7 @@ public sealed class StepFunctionsTests : IClassFixture<MicroStackFixture>, IAsyn
         });
 
         var desc = await WaitForExecution(exec.ExecutionArn);
-        Assert.Equal(ExecutionStatus.FAILED, desc.Status);
+        desc.Status.ShouldBe(ExecutionStatus.FAILED);
     }
 
     [Fact]
@@ -398,7 +398,7 @@ public sealed class StepFunctionsTests : IClassFixture<MicroStackFixture>, IAsyn
         });
 
         var desc = await WaitForExecution(exec.ExecutionArn);
-        Assert.Equal(ExecutionStatus.SUCCEEDED, desc.Status);
+        desc.Status.ShouldBe(ExecutionStatus.SUCCEEDED);
     }
 
     [Fact]
@@ -424,13 +424,13 @@ public sealed class StepFunctionsTests : IClassFixture<MicroStackFixture>, IAsyn
             Error = "UserAbort",
             Cause = "test stop",
         });
-        Assert.True(stopped.StopDate > DateTime.MinValue);
+        (stopped.StopDate > DateTime.MinValue).ShouldBe(true);
 
         var desc = await _sfn.DescribeExecutionAsync(new DescribeExecutionRequest
         {
             ExecutionArn = exec.ExecutionArn,
         });
-        Assert.Equal(ExecutionStatus.ABORTED, desc.Status);
+        desc.Status.ShouldBe(ExecutionStatus.ABORTED);
     }
 
     // ── Choice State ──────────────────────────────────────────────────────────
@@ -470,9 +470,9 @@ public sealed class StepFunctionsTests : IClassFixture<MicroStackFixture>, IAsyn
             Input = """{"x":1}""",
         });
         var d1 = await WaitForExecution(e1.ExecutionArn);
-        Assert.Equal(ExecutionStatus.SUCCEEDED, d1.Status);
+        d1.Status.ShouldBe(ExecutionStatus.SUCCEEDED);
         var o1 = JsonSerializer.Deserialize<JsonElement>(d1.Output);
-        Assert.Equal("one", o1.GetProperty("branch").GetString());
+        o1.GetProperty("branch").GetString().ShouldBe("one");
 
         // x == 5 → Many
         var e2 = await _sfn.StartExecutionAsync(new StartExecutionRequest
@@ -481,9 +481,9 @@ public sealed class StepFunctionsTests : IClassFixture<MicroStackFixture>, IAsyn
             Input = """{"x":5}""",
         });
         var d2 = await WaitForExecution(e2.ExecutionArn);
-        Assert.Equal(ExecutionStatus.SUCCEEDED, d2.Status);
+        d2.Status.ShouldBe(ExecutionStatus.SUCCEEDED);
         var o2 = JsonSerializer.Deserialize<JsonElement>(d2.Output);
-        Assert.Equal("many", o2.GetProperty("branch").GetString());
+        o2.GetProperty("branch").GetString().ShouldBe("many");
 
         // x == 0 → Zero (default)
         var e3 = await _sfn.StartExecutionAsync(new StartExecutionRequest
@@ -492,9 +492,9 @@ public sealed class StepFunctionsTests : IClassFixture<MicroStackFixture>, IAsyn
             Input = """{"x":0}""",
         });
         var d3 = await WaitForExecution(e3.ExecutionArn);
-        Assert.Equal(ExecutionStatus.SUCCEEDED, d3.Status);
+        d3.Status.ShouldBe(ExecutionStatus.SUCCEEDED);
         var o3 = JsonSerializer.Deserialize<JsonElement>(d3.Output);
-        Assert.Equal("zero", o3.GetProperty("branch").GetString());
+        o3.GetProperty("branch").GetString().ShouldBe("zero");
     }
 
     [Fact]
@@ -529,9 +529,9 @@ public sealed class StepFunctionsTests : IClassFixture<MicroStackFixture>, IAsyn
             Input = """{"value":15}""",
         });
         var d1 = await WaitForExecution(e1.ExecutionArn);
-        Assert.Equal(ExecutionStatus.SUCCEEDED, d1.Status);
+        d1.Status.ShouldBe(ExecutionStatus.SUCCEEDED);
         var o1 = JsonSerializer.Deserialize<JsonElement>(d1.Output);
-        Assert.Equal("high", o1.GetProperty("result").GetString());
+        o1.GetProperty("result").GetString().ShouldBe("high");
 
         var e2 = await _sfn.StartExecutionAsync(new StartExecutionRequest
         {
@@ -539,9 +539,9 @@ public sealed class StepFunctionsTests : IClassFixture<MicroStackFixture>, IAsyn
             Input = """{"value":5}""",
         });
         var d2 = await WaitForExecution(e2.ExecutionArn);
-        Assert.Equal(ExecutionStatus.SUCCEEDED, d2.Status);
+        d2.Status.ShouldBe(ExecutionStatus.SUCCEEDED);
         var o2 = JsonSerializer.Deserialize<JsonElement>(d2.Output);
-        Assert.Equal("low", o2.GetProperty("result").GetString());
+        o2.GetProperty("result").GetString().ShouldBe("low");
     }
 
     // ── Execution History ─────────────────────────────────────────────────────
@@ -577,9 +577,9 @@ public sealed class StepFunctionsTests : IClassFixture<MicroStackFixture>, IAsyn
         });
 
         var types = history.Events.Select(e => e.Type.Value).ToList();
-        Assert.Contains("ExecutionStarted", types);
-        Assert.Contains("ExecutionSucceeded", types);
-        Assert.Contains(types, t => t.Contains("Pass"));
+        types.ShouldContain("ExecutionStarted");
+        types.ShouldContain("ExecutionSucceeded");
+        types.ShouldContain(t => t.Contains("Pass"));
     }
 
     // ── List Executions ───────────────────────────────────────────────────────
@@ -606,8 +606,8 @@ public sealed class StepFunctionsTests : IClassFixture<MicroStackFixture>, IAsyn
             StateMachineArn = sm.StateMachineArn,
             StatusFilter = ExecutionStatus.SUCCEEDED,
         });
-        Assert.All(succeeded.Executions, e => Assert.Equal(ExecutionStatus.SUCCEEDED, e.Status));
-        Assert.NotEmpty(succeeded.Executions);
+        succeeded.Executions.ShouldAllBe(e => e.Status == ExecutionStatus.SUCCEEDED);
+        succeeded.Executions.ShouldNotBeEmpty();
     }
 
     // ── Describe State Machine For Execution ──────────────────────────────────
@@ -633,8 +633,8 @@ public sealed class StepFunctionsTests : IClassFixture<MicroStackFixture>, IAsyn
             {
                 ExecutionArn = exec.ExecutionArn,
             });
-        Assert.Equal(sm.StateMachineArn, resp.StateMachineArn);
-        Assert.NotEmpty(resp.Definition);
+        resp.StateMachineArn.ShouldBe(sm.StateMachineArn);
+        resp.Definition.ShouldNotBeEmpty();
     }
 
     // ── Tags ──────────────────────────────────────────────────────────────────
@@ -658,7 +658,7 @@ public sealed class StepFunctionsTests : IClassFixture<MicroStackFixture>, IAsyn
         {
             ResourceArn = sm.StateMachineArn,
         })).Tags;
-        Assert.Contains(tags, t => t.Key == "init" && t.Value == "yes");
+        tags.ShouldContain(t => t.Key == "init" && t.Value == "yes");
 
         await _sfn.TagResourceAsync(new SfnTagResourceRequest
         {
@@ -670,7 +670,7 @@ public sealed class StepFunctionsTests : IClassFixture<MicroStackFixture>, IAsyn
         {
             ResourceArn = sm.StateMachineArn,
         })).Tags;
-        Assert.Contains(tags2, t => t.Key == "env");
+        tags2.ShouldContain(t => t.Key == "env");
 
         await _sfn.UntagResourceAsync(new SfnUntagResourceRequest
         {
@@ -682,8 +682,8 @@ public sealed class StepFunctionsTests : IClassFixture<MicroStackFixture>, IAsyn
         {
             ResourceArn = sm.StateMachineArn,
         })).Tags;
-        Assert.DoesNotContain(tags3, t => t.Key == "init");
-        Assert.Contains(tags3, t => t.Key == "env");
+        tags3.ShouldNotContain(t => t.Key == "init");
+        tags3.ShouldContain(t => t.Key == "env");
     }
 
     // ── Sync Execution ────────────────────────────────────────────────────────
@@ -704,10 +704,10 @@ public sealed class StepFunctionsTests : IClassFixture<MicroStackFixture>, IAsyn
             StateMachineArn = sm.StateMachineArn,
             Input = """{"test":true}""",
         });
-        Assert.Equal(SyncExecutionStatus.SUCCEEDED, resp.Status);
-        Assert.NotEmpty(resp.Output);
+        resp.Status.ShouldBe(SyncExecutionStatus.SUCCEEDED);
+        resp.Output.ShouldNotBeEmpty();
         var output = JsonSerializer.Deserialize<JsonElement>(resp.Output);
-        Assert.Equal("done", output.GetProperty("msg").GetString());
+        output.GetProperty("msg").GetString().ShouldBe("done");
     }
 
     // ── Intrinsic Functions ───────────────────────────────────────────────────
@@ -741,10 +741,10 @@ public sealed class StepFunctionsTests : IClassFixture<MicroStackFixture>, IAsyn
             StateMachineArn = sm.StateMachineArn,
             Input = JsonSerializer.Serialize(new { raw = """{"a":1,"b":2}""" }),
         });
-        Assert.Equal(SyncExecutionStatus.SUCCEEDED, resp.Status);
+        resp.Status.ShouldBe(SyncExecutionStatus.SUCCEEDED);
         var output = JsonSerializer.Deserialize<JsonElement>(resp.Output);
-        Assert.Equal(1, output.GetProperty("parsed").GetProperty("a").GetInt32());
-        Assert.Equal(2, output.GetProperty("parsed").GetProperty("b").GetInt32());
+        output.GetProperty("parsed").GetProperty("a").GetInt32().ShouldBe(1);
+        output.GetProperty("parsed").GetProperty("b").GetInt32().ShouldBe(2);
     }
 
     [Fact]
@@ -776,12 +776,12 @@ public sealed class StepFunctionsTests : IClassFixture<MicroStackFixture>, IAsyn
             StateMachineArn = sm.StateMachineArn,
             Input = JsonSerializer.Serialize(new { obj = new { a = 1, b = new[] { 2, 3 } } }),
         });
-        Assert.Equal(SyncExecutionStatus.SUCCEEDED, resp.Status);
+        resp.Status.ShouldBe(SyncExecutionStatus.SUCCEEDED);
         var output = JsonSerializer.Deserialize<JsonElement>(resp.Output);
         var serialized = output.GetProperty("serialized").GetString()!;
         // Should be valid compact JSON
         var parsed = JsonSerializer.Deserialize<JsonElement>(serialized);
-        Assert.Equal(1, parsed.GetProperty("a").GetInt32());
+        parsed.GetProperty("a").GetInt32().ShouldBe(1);
     }
 
     [Fact]
@@ -813,12 +813,12 @@ public sealed class StepFunctionsTests : IClassFixture<MicroStackFixture>, IAsyn
             StateMachineArn = sm.StateMachineArn,
             Input = JsonSerializer.Serialize(new { obj1 = new { a = 1, c = 3 }, obj2 = new { b = 2, c = 99 } }),
         });
-        Assert.Equal(SyncExecutionStatus.SUCCEEDED, resp.Status);
+        resp.Status.ShouldBe(SyncExecutionStatus.SUCCEEDED);
         var output = JsonSerializer.Deserialize<JsonElement>(resp.Output);
         var merged = output.GetProperty("merged");
-        Assert.Equal(1, merged.GetProperty("a").GetInt32());
-        Assert.Equal(2, merged.GetProperty("b").GetInt32());
-        Assert.Equal(99, merged.GetProperty("c").GetInt32());
+        merged.GetProperty("a").GetInt32().ShouldBe(1);
+        merged.GetProperty("b").GetInt32().ShouldBe(2);
+        merged.GetProperty("c").GetInt32().ShouldBe(99);
     }
 
     [Fact]
@@ -850,9 +850,9 @@ public sealed class StepFunctionsTests : IClassFixture<MicroStackFixture>, IAsyn
             StateMachineArn = sm.StateMachineArn,
             Input = JsonSerializer.Serialize(new { name = "Jay", city = "SF" }),
         });
-        Assert.Equal(SyncExecutionStatus.SUCCEEDED, resp.Status);
+        resp.Status.ShouldBe(SyncExecutionStatus.SUCCEEDED);
         var output = JsonSerializer.Deserialize<JsonElement>(resp.Output);
-        Assert.Equal("Hello Jay from SF", output.GetProperty("greeting").GetString());
+        output.GetProperty("greeting").GetString().ShouldBe("Hello Jay from SF");
     }
 
     // ── Service Integrations ──────────────────────────────────────────────────
@@ -896,9 +896,9 @@ public sealed class StepFunctionsTests : IClassFixture<MicroStackFixture>, IAsyn
         });
 
         var desc = await WaitForExecution(exec.ExecutionArn);
-        Assert.Equal(ExecutionStatus.SUCCEEDED, desc.Status);
+        desc.Status.ShouldBe(ExecutionStatus.SUCCEEDED);
         var output = JsonSerializer.Deserialize<JsonElement>(desc.Output);
-        Assert.True(output.TryGetProperty("MessageId", out _));
+        output.TryGetProperty("MessageId", out _).ShouldBe(true);
 
         // Verify message landed in queue
         var msgs = await _sqs.ReceiveMessageAsync(new Amazon.SQS.Model.ReceiveMessageRequest
@@ -906,8 +906,8 @@ public sealed class StepFunctionsTests : IClassFixture<MicroStackFixture>, IAsyn
             QueueUrl = queueUrl,
             MaxNumberOfMessages = 1,
         });
-        Assert.Single(msgs.Messages);
-        Assert.Equal("hello from sfn", msgs.Messages[0].Body);
+        msgs.Messages.ShouldHaveSingleItem();
+        msgs.Messages[0].Body.ShouldBe("hello from sfn");
     }
 
     [Fact(Skip = "SNS uses query/XML protocol; SFN dispatch sends JSON body which SNS handler doesn't parse")]
@@ -948,9 +948,9 @@ public sealed class StepFunctionsTests : IClassFixture<MicroStackFixture>, IAsyn
         });
 
         var desc = await WaitForExecution(exec.ExecutionArn);
-        Assert.Equal(ExecutionStatus.SUCCEEDED, desc.Status);
+        desc.Status.ShouldBe(ExecutionStatus.SUCCEEDED);
         var output = JsonSerializer.Deserialize<JsonElement>(desc.Output);
-        Assert.True(output.TryGetProperty("MessageId", out _));
+        output.TryGetProperty("MessageId", out _).ShouldBe(true);
     }
 
     [Fact]
@@ -1009,11 +1009,11 @@ public sealed class StepFunctionsTests : IClassFixture<MicroStackFixture>, IAsyn
         });
 
         var desc = await WaitForExecution(exec.ExecutionArn);
-        Assert.Equal(ExecutionStatus.SUCCEEDED, desc.Status);
+        desc.Status.ShouldBe(ExecutionStatus.SUCCEEDED);
         var output = JsonSerializer.Deserialize<JsonElement>(desc.Output);
         var item = output.GetProperty("getResult").GetProperty("Item");
-        Assert.Equal("item-1", item.GetProperty("pk").GetProperty("S").GetString());
-        Assert.Equal("test-value", item.GetProperty("data").GetProperty("S").GetString());
+        item.GetProperty("pk").GetProperty("S").GetString().ShouldBe("item-1");
+        item.GetProperty("data").GetProperty("S").GetString().ShouldBe("test-value");
     }
 
     [Fact]
@@ -1062,14 +1062,14 @@ public sealed class StepFunctionsTests : IClassFixture<MicroStackFixture>, IAsyn
         });
 
         var desc = await WaitForExecution(exec.ExecutionArn);
-        Assert.Equal(ExecutionStatus.SUCCEEDED, desc.Status);
+        desc.Status.ShouldBe(ExecutionStatus.SUCCEEDED);
         var output = JsonSerializer.Deserialize<JsonElement>(desc.Output);
         // The Fallback state result "caught" is placed directly at $.recovered
         var recovered = output.GetProperty("recovered");
-        Assert.Equal("caught", recovered.GetString());
-        Assert.True(output.TryGetProperty("error", out var errorObj));
+        recovered.GetString().ShouldBe("caught");
+        output.TryGetProperty("error", out var errorObj).ShouldBe(true);
         // Error object should exist and contain error information
-        Assert.NotEqual(JsonValueKind.Null, errorObj.ValueKind);
+        errorObj.ValueKind.ShouldNotBe(JsonValueKind.Null);
     }
 
     // ── Multi-Service Pipeline ────────────────────────────────────────────────
@@ -1140,12 +1140,12 @@ public sealed class StepFunctionsTests : IClassFixture<MicroStackFixture>, IAsyn
         });
 
         var desc = await WaitForExecution(exec.ExecutionArn);
-        Assert.Equal(ExecutionStatus.SUCCEEDED, desc.Status);
+        desc.Status.ShouldBe(ExecutionStatus.SUCCEEDED);
 
         // Verify DynamoDB
         var item = await _ddb.GetItemAsync(tableName,
             new Dictionary<string, AttributeValue> { ["pk"] = new() { S = "order-42" } });
-        Assert.Equal("enriched", item.Item["status"].S);
+        item.Item["status"].S.ShouldBe("enriched");
 
         // Verify SQS
         var msgs = await _sqs.ReceiveMessageAsync(new Amazon.SQS.Model.ReceiveMessageRequest
@@ -1153,8 +1153,8 @@ public sealed class StepFunctionsTests : IClassFixture<MicroStackFixture>, IAsyn
             QueueUrl = queueUrl,
             MaxNumberOfMessages = 1,
         });
-        Assert.Single(msgs.Messages);
-        Assert.Equal("order-42", msgs.Messages[0].Body);
+        msgs.Messages.ShouldHaveSingleItem();
+        msgs.Messages[0].Body.ShouldBe("order-42");
     }
 
     // ── aws-sdk Integration ───────────────────────────────────────────────────
@@ -1204,10 +1204,10 @@ public sealed class StepFunctionsTests : IClassFixture<MicroStackFixture>, IAsyn
             Input = "{}",
         });
 
-        Assert.Equal(SyncExecutionStatus.SUCCEEDED, resp.Status);
+        resp.Status.ShouldBe(SyncExecutionStatus.SUCCEEDED);
         var output = JsonSerializer.Deserialize<JsonElement>(resp.Output);
-        Assert.Equal(secretName, output.GetProperty("createResult").GetProperty("Name").GetString());
-        Assert.Equal(secretName, output.GetProperty("describeResult").GetProperty("Name").GetString());
+        output.GetProperty("createResult").GetProperty("Name").GetString().ShouldBe(secretName);
+        output.GetProperty("describeResult").GetProperty("Name").GetString().ShouldBe(secretName);
     }
 
     [Fact]
@@ -1269,11 +1269,11 @@ public sealed class StepFunctionsTests : IClassFixture<MicroStackFixture>, IAsyn
             Input = "{}",
         });
 
-        Assert.Equal(SyncExecutionStatus.SUCCEEDED, resp.Status);
+        resp.Status.ShouldBe(SyncExecutionStatus.SUCCEEDED);
         var output = JsonSerializer.Deserialize<JsonElement>(resp.Output);
         var item = output.GetProperty("getResult").GetProperty("Item");
-        Assert.Equal("key1", item.GetProperty("pk").GetProperty("S").GetString());
-        Assert.Equal("hello", item.GetProperty("data").GetProperty("S").GetString());
+        item.GetProperty("pk").GetProperty("S").GetString().ShouldBe("key1");
+        item.GetProperty("data").GetProperty("S").GetString().ShouldBe("hello");
     }
 
     [Fact]
@@ -1306,7 +1306,7 @@ public sealed class StepFunctionsTests : IClassFixture<MicroStackFixture>, IAsyn
             Input = "{}",
         });
 
-        Assert.Equal(SyncExecutionStatus.FAILED, resp.Status);
+        resp.Status.ShouldBe(SyncExecutionStatus.FAILED);
     }
 
     // ── Nested Execution ──────────────────────────────────────────────────────
@@ -1353,14 +1353,14 @@ public sealed class StepFunctionsTests : IClassFixture<MicroStackFixture>, IAsyn
         });
 
         var desc = await WaitForExecution(exec.ExecutionArn);
-        Assert.Equal(ExecutionStatus.SUCCEEDED, desc.Status);
+        desc.Status.ShouldBe(ExecutionStatus.SUCCEEDED);
 
         var output = JsonSerializer.Deserialize<JsonElement>(desc.Output);
-        Assert.Equal("SUCCEEDED", output.GetProperty("Status").GetString());
+        output.GetProperty("Status").GetString().ShouldBe("SUCCEEDED");
         // Output should be a JSON string (not parsed)
         var outputStr = output.GetProperty("Output").GetString()!;
         var childOutput = JsonSerializer.Deserialize<JsonElement>(outputStr);
-        Assert.Equal("child-ok", childOutput.GetProperty("message").GetString());
+        childOutput.GetProperty("message").GetString().ShouldBe("child-ok");
     }
 
     [Fact]
@@ -1433,12 +1433,11 @@ public sealed class StepFunctionsTests : IClassFixture<MicroStackFixture>, IAsyn
         });
 
         var desc = await WaitForExecution(exec.ExecutionArn, 15000);
-        Assert.Equal(ExecutionStatus.SUCCEEDED, desc.Status);
+        desc.Status.ShouldBe(ExecutionStatus.SUCCEEDED);
 
         var output = JsonSerializer.Deserialize<JsonElement>(desc.Output);
-        Assert.Equal("SUCCEEDED", output.GetProperty("child").GetProperty("Status").GetString());
-        Assert.Equal("expected",
-            output.GetProperty("child").GetProperty("Output").GetProperty("childValue").GetString());
+        output.GetProperty("child").GetProperty("Status").GetString().ShouldBe("SUCCEEDED");
+        output.GetProperty("child").GetProperty("Output").GetProperty("childValue").GetString().ShouldBe("expected");
     }
 
     // ── Activities ────────────────────────────────────────────────────────────
@@ -1451,22 +1450,22 @@ public sealed class StepFunctionsTests : IClassFixture<MicroStackFixture>, IAsyn
             Name = "qa-act-crud",
         });
         var arn = resp.ActivityArn;
-        Assert.Contains(":activity:qa-act-crud", arn);
-        Assert.True(resp.CreationDate > DateTime.MinValue);
+        arn.ShouldContain(":activity:qa-act-crud");
+        (resp.CreationDate > DateTime.MinValue).ShouldBe(true);
 
         var desc = await _sfn.DescribeActivityAsync(new DescribeActivityRequest
         {
             ActivityArn = arn,
         });
-        Assert.Equal("qa-act-crud", desc.Name);
-        Assert.Equal(arn, desc.ActivityArn);
+        desc.Name.ShouldBe("qa-act-crud");
+        desc.ActivityArn.ShouldBe(arn);
 
         await _sfn.DeleteActivityAsync(new DeleteActivityRequest
         {
             ActivityArn = arn,
         });
 
-        await Assert.ThrowsAsync<ActivityDoesNotExistException>(() =>
+        await Should.ThrowAsync<ActivityDoesNotExistException>(() =>
             _sfn.DescribeActivityAsync(new DescribeActivityRequest
             {
                 ActivityArn = arn,
@@ -1481,8 +1480,8 @@ public sealed class StepFunctionsTests : IClassFixture<MicroStackFixture>, IAsyn
 
         var acts = await _sfn.ListActivitiesAsync(new ListActivitiesRequest());
         var names = acts.Activities.Select(a => a.Name).ToList();
-        Assert.Contains("qa-act-list-1", names);
-        Assert.Contains("qa-act-list-2", names);
+        names.ShouldContain("qa-act-list-1");
+        names.ShouldContain("qa-act-list-2");
     }
 
     [Fact]
@@ -1490,7 +1489,7 @@ public sealed class StepFunctionsTests : IClassFixture<MicroStackFixture>, IAsyn
     {
         await _sfn.CreateActivityAsync(new CreateActivityRequest { Name = "qa-act-idem" });
 
-        await Assert.ThrowsAsync<ActivityAlreadyExistsException>(() =>
+        await Should.ThrowAsync<ActivityAlreadyExistsException>(() =>
             _sfn.CreateActivityAsync(new CreateActivityRequest { Name = "qa-act-idem" }));
     }
 
@@ -1531,9 +1530,9 @@ public sealed class StepFunctionsTests : IClassFixture<MicroStackFixture>, IAsyn
                 ActivityArn = actArn,
                 WorkerName = "test-worker",
             });
-            Assert.NotEmpty(task.TaskToken);
+            task.TaskToken.ShouldNotBeEmpty();
             var input = JsonSerializer.Deserialize<JsonElement>(task.Input);
-            Assert.Equal("hello", input.GetProperty("msg").GetString());
+            input.GetProperty("msg").GetString().ShouldBe("hello");
 
             await _sfn.SendTaskSuccessAsync(new SendTaskSuccessRequest
             {
@@ -1545,9 +1544,9 @@ public sealed class StepFunctionsTests : IClassFixture<MicroStackFixture>, IAsyn
         await workerTask;
 
         var desc = await WaitForExecution(execArn, 15000);
-        Assert.Equal(ExecutionStatus.SUCCEEDED, desc.Status);
+        desc.Status.ShouldBe(ExecutionStatus.SUCCEEDED);
         var output = JsonSerializer.Deserialize<JsonElement>(desc.Output);
-        Assert.Equal("done", output.GetProperty("result").GetString());
+        output.GetProperty("result").GetString().ShouldBe("done");
     }
 
     [Fact]
@@ -1598,7 +1597,7 @@ public sealed class StepFunctionsTests : IClassFixture<MicroStackFixture>, IAsyn
         await workerTask;
 
         var desc = await WaitForExecution(execArn, 15000);
-        Assert.Equal(ExecutionStatus.FAILED, desc.Status);
+        desc.Status.ShouldBe(ExecutionStatus.FAILED);
     }
 
     // ── Timestamp SDK Compatibility ───────────────────────────────────────────
@@ -1615,66 +1614,66 @@ public sealed class StepFunctionsTests : IClassFixture<MicroStackFixture>, IAsyn
             Definition = definition,
             RoleArn = "arn:aws:iam::000000000000:role/R",
         });
-        Assert.True(create.CreationDate > DateTime.MinValue, "CreateStateMachine.CreationDate");
+        (create.CreationDate > DateTime.MinValue).ShouldBe(true, "CreateStateMachine.CreationDate");
 
         var arn = create.StateMachineArn;
         var desc = await _sfn.DescribeStateMachineAsync(new DescribeStateMachineRequest
         {
             StateMachineArn = arn,
         });
-        Assert.True(desc.CreationDate > DateTime.MinValue, "DescribeStateMachine.CreationDate");
+        (desc.CreationDate > DateTime.MinValue).ShouldBe(true, "DescribeStateMachine.CreationDate");
 
         var updated = await _sfn.UpdateStateMachineAsync(new UpdateStateMachineRequest
         {
             StateMachineArn = arn,
             Definition = definition,
         });
-        Assert.True(updated.UpdateDate > DateTime.MinValue, "UpdateStateMachine.UpdateDate");
+        (updated.UpdateDate > DateTime.MinValue).ShouldBe(true, "UpdateStateMachine.UpdateDate");
 
         var machines = (await _sfn.ListStateMachinesAsync(new ListStateMachinesRequest())).StateMachines;
         var listed = machines.First(m => m.StateMachineArn == arn);
-        Assert.True(listed.CreationDate > DateTime.MinValue, "ListStateMachines.CreationDate");
+        (listed.CreationDate > DateTime.MinValue).ShouldBe(true, "ListStateMachines.CreationDate");
 
         var start = await _sfn.StartExecutionAsync(new StartExecutionRequest
         {
             StateMachineArn = arn,
             Input = "{}",
         });
-        Assert.True(start.StartDate > DateTime.MinValue, "StartExecution.StartDate");
+        (start.StartDate > DateTime.MinValue).ShouldBe(true, "StartExecution.StartDate");
 
         var execDesc = await WaitForExecution(start.ExecutionArn);
-        Assert.True(execDesc.StartDate > DateTime.MinValue, "DescribeExecution.StartDate");
-        Assert.True(execDesc.StopDate > DateTime.MinValue, "DescribeExecution.StopDate");
+        (execDesc.StartDate > DateTime.MinValue).ShouldBe(true, "DescribeExecution.StartDate");
+        (execDesc.StopDate > DateTime.MinValue).ShouldBe(true, "DescribeExecution.StopDate");
 
         var smForExec = await _sfn.DescribeStateMachineForExecutionAsync(
             new DescribeStateMachineForExecutionRequest
             {
                 ExecutionArn = start.ExecutionArn,
             });
-        Assert.True(smForExec.UpdateDate > DateTime.MinValue, "DescribeStateMachineForExecution.UpdateDate");
+        (smForExec.UpdateDate > DateTime.MinValue).ShouldBe(true, "DescribeStateMachineForExecution.UpdateDate");
 
         var execs = (await _sfn.ListExecutionsAsync(new ListExecutionsRequest
         {
             StateMachineArn = arn,
         })).Executions;
         var listedExec = execs.First(e => e.ExecutionArn == start.ExecutionArn);
-        Assert.True(listedExec.StartDate > DateTime.MinValue, "ListExecutions.StartDate");
-        Assert.True(listedExec.StopDate > DateTime.MinValue, "ListExecutions.StopDate");
+        (listedExec.StartDate > DateTime.MinValue).ShouldBe(true, "ListExecutions.StartDate");
+        (listedExec.StopDate > DateTime.MinValue).ShouldBe(true, "ListExecutions.StopDate");
 
         var history = (await _sfn.GetExecutionHistoryAsync(new GetExecutionHistoryRequest
         {
             ExecutionArn = start.ExecutionArn,
         })).Events;
-        Assert.NotEmpty(history);
-        Assert.True(history[0].Timestamp > DateTime.MinValue, "GetExecutionHistory.Timestamp");
+        history.ShouldNotBeEmpty();
+        (history[0].Timestamp > DateTime.MinValue).ShouldBe(true, "GetExecutionHistory.Timestamp");
 
         var sync = await _sfn.StartSyncExecutionAsync(new StartSyncExecutionRequest
         {
             StateMachineArn = arn,
             Input = "{}",
         });
-        Assert.True(sync.StartDate > DateTime.MinValue, "StartSyncExecution.StartDate");
-        Assert.True(sync.StopDate > DateTime.MinValue, "StartSyncExecution.StopDate");
+        (sync.StartDate > DateTime.MinValue).ShouldBe(true, "StartSyncExecution.StartDate");
+        (sync.StopDate > DateTime.MinValue).ShouldBe(true, "StartSyncExecution.StopDate");
 
         // StopExecution timestamp
         var waitDef = """{"StartAt":"Wait","States":{"Wait":{"Type":"Wait","Seconds":60,"End":true}}}""";
@@ -1695,7 +1694,7 @@ public sealed class StepFunctionsTests : IClassFixture<MicroStackFixture>, IAsyn
             ExecutionArn = waitExec.ExecutionArn,
             Cause = "test stop",
         });
-        Assert.True(stopped.StopDate > DateTime.MinValue, "StopExecution.StopDate");
+        (stopped.StopDate > DateTime.MinValue).ShouldBe(true, "StopExecution.StopDate");
     }
 
     [Fact]
@@ -1706,17 +1705,17 @@ public sealed class StepFunctionsTests : IClassFixture<MicroStackFixture>, IAsyn
         {
             Name = $"sfn-act-ts-{unique}",
         });
-        Assert.True(created.CreationDate > DateTime.MinValue, "CreateActivity.CreationDate");
+        (created.CreationDate > DateTime.MinValue).ShouldBe(true, "CreateActivity.CreationDate");
 
         var desc = await _sfn.DescribeActivityAsync(new DescribeActivityRequest
         {
             ActivityArn = created.ActivityArn,
         });
-        Assert.True(desc.CreationDate > DateTime.MinValue, "DescribeActivity.CreationDate");
+        (desc.CreationDate > DateTime.MinValue).ShouldBe(true, "DescribeActivity.CreationDate");
 
         var activities = (await _sfn.ListActivitiesAsync(new ListActivitiesRequest())).Activities;
         var listed = activities.First(a => a.ActivityArn == created.ActivityArn);
-        Assert.True(listed.CreationDate > DateTime.MinValue, "ListActivities.CreationDate");
+        (listed.CreationDate > DateTime.MinValue).ShouldBe(true, "ListActivities.CreationDate");
     }
 
     // ── Mock Config ───────────────────────────────────────────────────────────
@@ -1774,10 +1773,10 @@ public sealed class StepFunctionsTests : IClassFixture<MicroStackFixture>, IAsyn
         });
 
         var desc = await WaitForExecution(exec.ExecutionArn);
-        Assert.Equal(ExecutionStatus.SUCCEEDED, desc.Status);
+        desc.Status.ShouldBe(ExecutionStatus.SUCCEEDED);
         var output = JsonSerializer.Deserialize<JsonElement>(desc.Output);
-        Assert.Equal("mocked", output.GetProperty("status").GetString());
-        Assert.Equal(42, output.GetProperty("value").GetInt32());
+        output.GetProperty("status").GetString().ShouldBe("mocked");
+        output.GetProperty("value").GetInt32().ShouldBe(42);
 
         // Clean up
         await _fixture.HttpClient.PostAsJsonAsync("/_ministack/config",
@@ -1836,7 +1835,7 @@ public sealed class StepFunctionsTests : IClassFixture<MicroStackFixture>, IAsyn
         });
 
         var desc = await WaitForExecution(exec.ExecutionArn);
-        Assert.Equal(ExecutionStatus.FAILED, desc.Status);
+        desc.Status.ShouldBe(ExecutionStatus.FAILED);
 
         // Clean up
         await _fixture.HttpClient.PostAsJsonAsync("/_ministack/config",
@@ -1855,11 +1854,11 @@ public sealed class StepFunctionsTests : IClassFixture<MicroStackFixture>, IAsyn
             RoleArn = "arn:aws:iam::000000000000:role/R",
         });
 
-        Assert.Equal("SUCCEEDED", resp.Status.Value);
+        resp.Status.Value.ShouldBe("SUCCEEDED");
         var output = JsonSerializer.Deserialize<JsonElement>(resp.Output);
-        Assert.Equal("hello", output.GetProperty("result").GetProperty("greeting").GetString());
-        Assert.Equal("data", output.GetProperty("existing").GetString());
-        Assert.Equal("NextStep", resp.NextState);
+        output.GetProperty("result").GetProperty("greeting").GetString().ShouldBe("hello");
+        output.GetProperty("existing").GetString().ShouldBe("data");
+        resp.NextState.ShouldBe("NextStep");
     }
 
     [Fact]
@@ -1881,8 +1880,8 @@ public sealed class StepFunctionsTests : IClassFixture<MicroStackFixture>, IAsyn
             RoleArn = "arn:aws:iam::000000000000:role/R",
         });
 
-        Assert.Equal("SUCCEEDED", resp.Status.Value);
-        Assert.Equal("Two", resp.NextState);
+        resp.Status.Value.ShouldBe("SUCCEEDED");
+        resp.NextState.ShouldBe("Two");
     }
 
     [Fact]
@@ -1895,9 +1894,9 @@ public sealed class StepFunctionsTests : IClassFixture<MicroStackFixture>, IAsyn
             RoleArn = "arn:aws:iam::000000000000:role/R",
         });
 
-        Assert.Equal("FAILED", resp.Status.Value);
-        Assert.Equal("CustomError", resp.Error);
-        Assert.Equal("Something went wrong", resp.Cause);
+        resp.Status.Value.ShouldBe("FAILED");
+        resp.Error.ShouldBe("CustomError");
+        resp.Cause.ShouldBe("Something went wrong");
     }
 
     // ── aws-sdk SSM Integration ───────────────────────────────────────────────
@@ -1944,9 +1943,9 @@ public sealed class StepFunctionsTests : IClassFixture<MicroStackFixture>, IAsyn
             StateMachineArn = sm.StateMachineArn,
             Input = "{}",
         });
-        Assert.Equal(SyncExecutionStatus.SUCCEEDED, resp.Status);
+        resp.Status.ShouldBe(SyncExecutionStatus.SUCCEEDED);
         var output = JsonSerializer.Deserialize<JsonElement>(resp.Output);
-        Assert.Equal("hello-from-sfn", output.GetProperty("Parameter").GetProperty("Value").GetString());
+        output.GetProperty("Parameter").GetProperty("Value").GetString().ShouldBe("hello-from-sfn");
     }
 
     // ── Multi-state chain (Pass → Pass) ───────────────────────────────────────
@@ -1985,11 +1984,11 @@ public sealed class StepFunctionsTests : IClassFixture<MicroStackFixture>, IAsyn
             StateMachineArn = sm.StateMachineArn,
             Input = """{"input":"data"}""",
         });
-        Assert.Equal(SyncExecutionStatus.SUCCEEDED, resp.Status);
+        resp.Status.ShouldBe(SyncExecutionStatus.SUCCEEDED);
         var output = JsonSerializer.Deserialize<JsonElement>(resp.Output);
-        Assert.Equal("first", output.GetProperty("first").GetProperty("step").GetString());
-        Assert.Equal("second", output.GetProperty("second").GetProperty("step").GetString());
-        Assert.Equal("data", output.GetProperty("input").GetString());
+        output.GetProperty("first").GetProperty("step").GetString().ShouldBe("first");
+        output.GetProperty("second").GetProperty("step").GetString().ShouldBe("second");
+        output.GetProperty("input").GetString().ShouldBe("data");
     }
 
     // ── Parallel State ────────────────────────────────────────────────────────
@@ -2034,12 +2033,12 @@ public sealed class StepFunctionsTests : IClassFixture<MicroStackFixture>, IAsyn
             StateMachineArn = sm.StateMachineArn,
             Input = "{}",
         });
-        Assert.Equal(SyncExecutionStatus.SUCCEEDED, resp.Status);
+        resp.Status.ShouldBe(SyncExecutionStatus.SUCCEEDED);
         var output = JsonSerializer.Deserialize<JsonElement>(resp.Output);
-        Assert.Equal(JsonValueKind.Array, output.ValueKind);
+        output.ValueKind.ShouldBe(JsonValueKind.Array);
         var arr = output.EnumerateArray().Select(e => e.GetString()).ToList();
-        Assert.Contains("branch1", arr);
-        Assert.Contains("branch2", arr);
+        arr.ShouldContain("branch1");
+        arr.ShouldContain("branch2");
     }
 
     // ── Map State ─────────────────────────────────────────────────────────────
@@ -2083,10 +2082,10 @@ public sealed class StepFunctionsTests : IClassFixture<MicroStackFixture>, IAsyn
             StateMachineArn = sm.StateMachineArn,
             Input = """{"items":[{"value":1},{"value":2},{"value":3}]}""",
         });
-        Assert.Equal(SyncExecutionStatus.SUCCEEDED, resp.Status);
+        resp.Status.ShouldBe(SyncExecutionStatus.SUCCEEDED);
         var output = JsonSerializer.Deserialize<JsonElement>(resp.Output);
-        Assert.Equal(JsonValueKind.Array, output.ValueKind);
-        Assert.Equal(3, output.GetArrayLength());
+        output.ValueKind.ShouldBe(JsonValueKind.Array);
+        output.GetArrayLength().ShouldBe(3);
     }
 
     // ── ResultPath ────────────────────────────────────────────────────────────
@@ -2119,10 +2118,10 @@ public sealed class StepFunctionsTests : IClassFixture<MicroStackFixture>, IAsyn
             StateMachineArn = sm.StateMachineArn,
             Input = """{"original":"data"}""",
         });
-        Assert.Equal(SyncExecutionStatus.SUCCEEDED, resp.Status);
+        resp.Status.ShouldBe(SyncExecutionStatus.SUCCEEDED);
         var output = JsonSerializer.Deserialize<JsonElement>(resp.Output);
-        Assert.Equal("data", output.GetProperty("original").GetString());
-        Assert.True(output.GetProperty("extra").GetProperty("added").GetBoolean());
+        output.GetProperty("original").GetString().ShouldBe("data");
+        output.GetProperty("extra").GetProperty("added").GetBoolean().ShouldBe(true);
     }
 
     // ── InputPath / OutputPath ────────────────────────────────────────────────
@@ -2157,8 +2156,8 @@ public sealed class StepFunctionsTests : IClassFixture<MicroStackFixture>, IAsyn
             StateMachineArn = sm.StateMachineArn,
             Input = """{"payload":{"data":"value"},"meta":"ignored"}""",
         });
-        Assert.Equal(SyncExecutionStatus.SUCCEEDED, resp.Status);
+        resp.Status.ShouldBe(SyncExecutionStatus.SUCCEEDED);
         var output = JsonSerializer.Deserialize<JsonElement>(resp.Output);
-        Assert.True(output.GetProperty("processed").GetBoolean());
+        output.GetProperty("processed").GetBoolean().ShouldBe(true);
     }
 }

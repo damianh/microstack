@@ -128,8 +128,8 @@ public sealed class CloudFormationTests : IClassFixture<MicroStackFixture>, IAsy
         {
             StackName = "cfn-t01",
         });
-        Assert.Single(desc.Stacks);
-        Assert.Equal("CREATE_COMPLETE", desc.Stacks[0].StackStatus.Value);
+        desc.Stacks.ShouldHaveSingleItem();
+        desc.Stacks[0].StackStatus.Value.ShouldBe("CREATE_COMPLETE");
 
         // Verify S3 bucket was created
         await AssertBucketExists("cfn-t01-bucket");
@@ -171,7 +171,7 @@ public sealed class CloudFormationTests : IClassFixture<MicroStackFixture>, IAsy
         });
 
         var queues = await _sqs.ListQueuesAsync("cfn-t02-default");
-        Assert.Contains(queues.QueueUrls, u => u.Contains("cfn-t02-default"));
+        queues.QueueUrls.ShouldContain(u => u.Contains("cfn-t02-default"));
 
         // With custom parameter
         await _cfn.CreateStackAsync(new CreateStackRequest
@@ -185,7 +185,7 @@ public sealed class CloudFormationTests : IClassFixture<MicroStackFixture>, IAsy
         });
 
         queues = await _sqs.ListQueuesAsync("cfn-t02-custom");
-        Assert.Contains(queues.QueueUrls, u => u.Contains("cfn-t02-custom"));
+        queues.QueueUrls.ShouldContain(u => u.Contains("cfn-t02-custom"));
     }
 
     [Fact]
@@ -230,7 +230,7 @@ public sealed class CloudFormationTests : IClassFixture<MicroStackFixture>, IAsy
         {
             Name = "cfn-t03-param",
         });
-        Assert.StartsWith("arn:aws:sqs:", param.Parameter.Value);
+        param.Parameter.Value.ShouldStartWith("arn:aws:sqs:");
     }
 
     [Fact]
@@ -287,7 +287,7 @@ public sealed class CloudFormationTests : IClassFixture<MicroStackFixture>, IAsy
         });
 
         var desc = await _cfn.DescribeStacksAsync(new DescribeStacksRequest { StackName = "cfn-t04b" });
-        Assert.Equal("CREATE_COMPLETE", desc.Stacks[0].StackStatus.Value);
+        desc.Stacks[0].StackStatus.Value.ShouldBe("CREATE_COMPLETE");
 
         await AssertBucketDoesNotExist("cfn-t04-cond");
     }
@@ -323,7 +323,7 @@ public sealed class CloudFormationTests : IClassFixture<MicroStackFixture>, IAsy
         });
 
         var exports = await _cfn.ListExportsAsync(new ListExportsRequest());
-        Assert.Contains(exports.Exports, e => e.Name == "cfn-t05-bucket-export");
+        exports.Exports.ShouldContain(e => e.Name == "cfn-t05-bucket-export");
     }
 
     [Fact]
@@ -362,7 +362,7 @@ public sealed class CloudFormationTests : IClassFixture<MicroStackFixture>, IAsy
         {
             Name = "cfn-t06-param",
         });
-        Assert.Equal("cfn-t06-src-replica", param.Parameter.Value);
+        param.Parameter.Value.ShouldBe("cfn-t06-src-replica");
     }
 
     [Fact]
@@ -426,7 +426,7 @@ public sealed class CloudFormationTests : IClassFixture<MicroStackFixture>, IAsy
         {
             FunctionName = "cfn-t07-func",
         });
-        Assert.Equal(role.Role.Arn, func.Configuration.Role);
+        func.Configuration.Role.ShouldBe(role.Role.Arn);
     }
 
     // ── Change set lifecycle ─────────────────────────────────────────────────────
@@ -460,7 +460,7 @@ public sealed class CloudFormationTests : IClassFixture<MicroStackFixture>, IAsy
             StackName = "cfn-t08",
             ChangeSetName = "cfn-t08-cs1",
         });
-        Assert.Equal("cfn-t08-cs1", cs.ChangeSetName);
+        cs.ChangeSetName.ShouldBe("cfn-t08-cs1");
 
         await _cfn.ExecuteChangeSetAsync(new ExecuteChangeSetRequest
         {
@@ -469,7 +469,7 @@ public sealed class CloudFormationTests : IClassFixture<MicroStackFixture>, IAsy
         });
 
         var desc = await _cfn.DescribeStacksAsync(new DescribeStacksRequest { StackName = "cfn-t08" });
-        Assert.Equal("CREATE_COMPLETE", desc.Stacks[0].StackStatus.Value);
+        desc.Stacks[0].StackStatus.Value.ShouldBe("CREATE_COMPLETE");
     }
 
     // ── Update stack ─────────────────────────────────────────────────────────────
@@ -521,7 +521,7 @@ public sealed class CloudFormationTests : IClassFixture<MicroStackFixture>, IAsy
         });
 
         var desc = await _cfn.DescribeStacksAsync(new DescribeStacksRequest { StackName = "cfn-t09" });
-        Assert.Equal("UPDATE_COMPLETE", desc.Stacks[0].StackStatus.Value);
+        desc.Stacks[0].StackStatus.Value.ShouldBe("UPDATE_COMPLETE");
 
         await _s3.GetBucketLocationAsync("cfn-t09-a");
         await _s3.GetBucketLocationAsync("cfn-t09-b");
@@ -536,7 +536,7 @@ public sealed class CloudFormationTests : IClassFixture<MicroStackFixture>, IAsy
         await _cfn.DeleteStackAsync(new DeleteStackRequest { StackName = "cfn-nonexistent-xyz" });
 
         // But describing it should fail
-        await Assert.ThrowsAsync<AmazonCloudFormationException>(
+        await Should.ThrowAsync<AmazonCloudFormationException>(
             () => _cfn.DescribeStacksAsync(new DescribeStacksRequest { StackName = "cfn-nonexistent-xyz" }));
     }
 
@@ -566,11 +566,11 @@ public sealed class CloudFormationTests : IClassFixture<MicroStackFixture>, IAsy
         {
             TemplateBody = validTemplate,
         });
-        Assert.Contains(result.Parameters, p => p.ParameterKey == "Env");
+        result.Parameters.ShouldContain(p => p.ParameterKey == "Env");
 
         // Invalid template (no Resources)
         var invalidTemplate = ToJson(new { AWSTemplateFormatVersion = "2010-09-09" });
-        await Assert.ThrowsAsync<AmazonCloudFormationException>(
+        await Should.ThrowAsync<AmazonCloudFormationException>(
             () => _cfn.ValidateTemplateAsync(new ValidateTemplateRequest
             {
                 TemplateBody = invalidTemplate,
@@ -605,8 +605,8 @@ public sealed class CloudFormationTests : IClassFixture<MicroStackFixture>, IAsy
 
         var summaries = await _cfn.ListStacksAsync(new ListStacksRequest());
         var names = summaries.StackSummaries.Select(s => s.StackName).ToList();
-        Assert.Contains("cfn-t12-a", names);
-        Assert.Contains("cfn-t12-b", names);
+        names.ShouldContain("cfn-t12-a");
+        names.ShouldContain("cfn-t12-b");
     }
 
     // ── Stack events ─────────────────────────────────────────────────────────────
@@ -637,8 +637,8 @@ public sealed class CloudFormationTests : IClassFixture<MicroStackFixture>, IAsy
         {
             StackName = "cfn-t13",
         });
-        Assert.NotEmpty(events.StackEvents);
-        Assert.All(events.StackEvents, e => Assert.NotNull(e.ResourceStatus));
+        events.StackEvents.ShouldNotBeEmpty();
+        events.StackEvents.ShouldAllBe(e => e.ResourceStatus != null);
     }
 
     // ── Rollback on failure ──────────────────────────────────────────────────────
@@ -672,7 +672,7 @@ public sealed class CloudFormationTests : IClassFixture<MicroStackFixture>, IAsy
         });
 
         var desc = await _cfn.DescribeStacksAsync(new DescribeStacksRequest { StackName = "cfn-t15" });
-        Assert.Equal("ROLLBACK_COMPLETE", desc.Stacks[0].StackStatus.Value);
+        desc.Stacks[0].StackStatus.Value.ShouldBe("ROLLBACK_COMPLETE");
 
         // Bucket should have been rolled back
         await AssertBucketDoesNotExist("cfn-t15-rollback");
@@ -727,7 +727,7 @@ public sealed class CloudFormationTests : IClassFixture<MicroStackFixture>, IAsy
         });
 
         var desc = await _cfn.DescribeStacksAsync(new DescribeStacksRequest { StackName = "cfn-t18" });
-        Assert.Equal("UPDATE_ROLLBACK_COMPLETE", desc.Stacks[0].StackStatus.Value);
+        desc.Stacks[0].StackStatus.Value.ShouldBe("UPDATE_ROLLBACK_COMPLETE");
 
         // Original bucket should still exist
         await _s3.GetBucketLocationAsync("cfn-t18-orig");
@@ -772,21 +772,21 @@ public sealed class CloudFormationTests : IClassFixture<MicroStackFixture>, IAsy
         });
 
         var desc = await _cfn.DescribeStacksAsync(new DescribeStacksRequest { StackName = "cfn-t-kinesis" });
-        Assert.Equal("CREATE_COMPLETE", desc.Stacks[0].StackStatus.Value);
+        desc.Stacks[0].StackStatus.Value.ShouldBe("CREATE_COMPLETE");
 
         var streamDesc = await _kinesis.DescribeStreamAsync(new Amazon.Kinesis.Model.DescribeStreamRequest
         {
             StreamName = "cfn-kinesis-cfn-test",
         });
-        Assert.Equal("ACTIVE", streamDesc.StreamDescription.StreamStatus.Value);
-        Assert.Equal(2, streamDesc.StreamDescription.Shards.Count);
+        streamDesc.StreamDescription.StreamStatus.Value.ShouldBe("ACTIVE");
+        streamDesc.StreamDescription.Shards.Count.ShouldBe(2);
 
         var outputs = desc.Stacks[0].Outputs.ToDictionary(o => o.OutputKey, o => o.OutputValue);
-        Assert.Equal(streamDesc.StreamDescription.StreamARN, outputs["StreamArn"]);
+        outputs["StreamArn"].ShouldBe(streamDesc.StreamDescription.StreamARN);
 
         await _cfn.DeleteStackAsync(new DeleteStackRequest { StackName = "cfn-t-kinesis" });
 
-        await Assert.ThrowsAsync<Amazon.Kinesis.Model.ResourceNotFoundException>(
+        await Should.ThrowAsync<Amazon.Kinesis.Model.ResourceNotFoundException>(
             () => _kinesis.DescribeStreamAsync(new Amazon.Kinesis.Model.DescribeStreamRequest
             {
                 StreamName = "cfn-kinesis-cfn-test",
@@ -826,7 +826,7 @@ public sealed class CloudFormationTests : IClassFixture<MicroStackFixture>, IAsy
         });
 
         var desc = await _cfn.DescribeStacksAsync(new DescribeStacksRequest { StackName = "cfn-wait" });
-        Assert.Equal("CREATE_COMPLETE", desc.Stacks[0].StackStatus.Value);
+        desc.Stacks[0].StackStatus.Value.ShouldBe("CREATE_COMPLETE");
 
         await _cfn.DeleteStackAsync(new DeleteStackRequest { StackName = "cfn-wait" });
     }
@@ -885,11 +885,11 @@ public sealed class CloudFormationTests : IClassFixture<MicroStackFixture>, IAsy
         {
             StackName = "intg-cfn-full-stack",
         });
-        Assert.Equal("CREATE_COMPLETE", desc.Stacks[0].StackStatus.Value);
+        desc.Stacks[0].StackStatus.Value.ShouldBe("CREATE_COMPLETE");
 
         // Verify DynamoDB table
         var tables = await _ddb.ListTablesAsync();
-        Assert.Contains("intg-cfn-full-tbl", tables.TableNames);
+        tables.TableNames.ShouldContain("intg-cfn-full-tbl");
 
         // Verify describe stack resources
         var resources = await _cfn.DescribeStackResourcesAsync(new DescribeStackResourcesRequest
@@ -897,9 +897,9 @@ public sealed class CloudFormationTests : IClassFixture<MicroStackFixture>, IAsy
             StackName = "intg-cfn-full-stack",
         });
         var resourceTypes = resources.StackResources.Select(r => r.ResourceType).ToHashSet();
-        Assert.Contains("AWS::S3::Bucket", resourceTypes);
-        Assert.Contains("AWS::DynamoDB::Table", resourceTypes);
-        Assert.Contains("AWS::Lambda::Function", resourceTypes);
+        resourceTypes.ShouldContain("AWS::S3::Bucket");
+        resourceTypes.ShouldContain("AWS::DynamoDB::Table");
+        resourceTypes.ShouldContain("AWS::Lambda::Function");
 
         // Delete and verify
         await _cfn.DeleteStackAsync(new DeleteStackRequest { StackName = "intg-cfn-full-stack" });
@@ -909,7 +909,7 @@ public sealed class CloudFormationTests : IClassFixture<MicroStackFixture>, IAsy
         var active = stackList
             .Where(s => s.StackName == "intg-cfn-full-stack" && !s.StackStatus.Value.Contains("DELETE"))
             .ToList();
-        Assert.Empty(active);
+        active.ShouldBeEmpty();
     }
 
     // ── CDK bootstrap resources ──────────────────────────────────────────────────
@@ -992,14 +992,14 @@ public sealed class CloudFormationTests : IClassFixture<MicroStackFixture>, IAsy
         });
 
         var desc = await _cfn.DescribeStacksAsync(new DescribeStacksRequest { StackName = "CDKToolkit-v44" });
-        Assert.Equal("CREATE_COMPLETE", desc.Stacks[0].StackStatus.Value);
+        desc.Stacks[0].StackStatus.Value.ShouldBe("CREATE_COMPLETE");
 
         // Verify S3 bucket
         await _s3.GetBucketLocationAsync("cdk-bootstrap-v44");
 
         // Verify ECR repo
         var repos = await _ecr.DescribeRepositoriesAsync(new Amazon.ECR.Model.DescribeRepositoriesRequest());
-        Assert.Contains(repos.Repositories, r => r.RepositoryName == "cdk-assets-v44");
+        repos.Repositories.ShouldContain(r => r.RepositoryName == "cdk-assets-v44");
 
         await _cfn.DeleteStackAsync(new DeleteStackRequest { StackName = "CDKToolkit-v44" });
     }
@@ -1036,12 +1036,12 @@ public sealed class CloudFormationTests : IClassFixture<MicroStackFixture>, IAsy
         });
 
         var desc = await _cfn.DescribeStacksAsync(new DescribeStacksRequest { StackName = "cfn-autoname-s3" });
-        Assert.Equal("CREATE_COMPLETE", desc.Stacks[0].StackStatus.Value);
+        desc.Stacks[0].StackStatus.Value.ShouldBe("CREATE_COMPLETE");
 
         var bucketName = desc.Stacks[0].Outputs.First(o => o.OutputKey == "BucketName").OutputValue;
-        Assert.Equal(bucketName, bucketName.ToLowerInvariant()); // Must be lowercase
-        Assert.StartsWith("cfn-autoname-s3-mybucket-", bucketName);
-        Assert.True(bucketName.Length <= 63, $"S3 name too long: {bucketName.Length}");
+        bucketName.ToLowerInvariant().ShouldBe(bucketName); // Must be lowercase
+        bucketName.ShouldStartWith("cfn-autoname-s3-mybucket-");
+        (bucketName.Length <= 63).ShouldBe(true, $"S3 name too long: {bucketName.Length}");
 
         // Verify bucket actually exists
         await _s3.GetBucketLocationAsync(bucketName);
@@ -1084,11 +1084,11 @@ public sealed class CloudFormationTests : IClassFixture<MicroStackFixture>, IAsy
         });
 
         var desc = await _cfn.DescribeStacksAsync(new DescribeStacksRequest { StackName = "cfn-autoname-sqs" });
-        Assert.Equal("CREATE_COMPLETE", desc.Stacks[0].StackStatus.Value);
+        desc.Stacks[0].StackStatus.Value.ShouldBe("CREATE_COMPLETE");
 
         var queueName = desc.Stacks[0].Outputs.First(o => o.OutputKey == "QueueName").OutputValue;
-        Assert.StartsWith("cfn-autoname-sqs-MyQueue-", queueName);
-        Assert.True(queueName.Length <= 80);
+        queueName.ShouldStartWith("cfn-autoname-sqs-MyQueue-");
+        (queueName.Length <= 80).ShouldBe(true);
 
         await _cfn.DeleteStackAsync(new DeleteStackRequest { StackName = "cfn-autoname-sqs" });
     }
@@ -1130,11 +1130,11 @@ public sealed class CloudFormationTests : IClassFixture<MicroStackFixture>, IAsy
         });
 
         var desc = await _cfn.DescribeStacksAsync(new DescribeStacksRequest { StackName = "cfn-autoname-ddb" });
-        Assert.Equal("CREATE_COMPLETE", desc.Stacks[0].StackStatus.Value);
+        desc.Stacks[0].StackStatus.Value.ShouldBe("CREATE_COMPLETE");
 
         var tableName = desc.Stacks[0].Outputs.First(o => o.OutputKey == "TableName").OutputValue;
-        Assert.StartsWith("cfn-autoname-ddb-MyTable-", tableName);
-        Assert.True(tableName.Length <= 255);
+        tableName.ShouldStartWith("cfn-autoname-ddb-MyTable-");
+        (tableName.Length <= 255).ShouldBe(true);
 
         // Verify table exists
         await _ddb.DescribeTableAsync(tableName);
@@ -1175,7 +1175,7 @@ public sealed class CloudFormationTests : IClassFixture<MicroStackFixture>, IAsy
 
         var desc = await _cfn.DescribeStacksAsync(new DescribeStacksRequest { StackName = "cfn-explicit-name" });
         var bucketName = desc.Stacks[0].Outputs.First(o => o.OutputKey == "BucketName").OutputValue;
-        Assert.Equal("cfn-explicit-name-test", bucketName);
+        bucketName.ShouldBe("cfn-explicit-name-test");
 
         await _cfn.DeleteStackAsync(new DeleteStackRequest { StackName = "cfn-explicit-name" });
     }
@@ -1227,10 +1227,10 @@ public sealed class CloudFormationTests : IClassFixture<MicroStackFixture>, IAsy
         });
 
         var desc = await _cfn.DescribeStacksAsync(new DescribeStacksRequest { StackName = "cfn-s3-policy" });
-        Assert.Equal("CREATE_COMPLETE", desc.Stacks[0].StackStatus.Value);
+        desc.Stacks[0].StackStatus.Value.ShouldBe("CREATE_COMPLETE");
 
         var policy = await _s3.GetBucketPolicyAsync("cfn-policy-test");
-        Assert.Contains("s3:GetObject", policy.Policy);
+        policy.Policy.ShouldContain("s3:GetObject");
 
         await _cfn.DeleteStackAsync(new DeleteStackRequest { StackName = "cfn-s3-policy" });
     }
@@ -1272,7 +1272,7 @@ public sealed class CloudFormationTests : IClassFixture<MicroStackFixture>, IAsy
         {
             StackName = "intg-cfn-gensecret-stack",
         });
-        Assert.Equal("CREATE_COMPLETE", desc.Stacks[0].StackStatus.Value);
+        desc.Stacks[0].StackStatus.Value.ShouldBe("CREATE_COMPLETE");
     }
 
     // ── ELBv2 LoadBalancer and Listener ──────────────────────────────────────────
@@ -1348,19 +1348,19 @@ public sealed class CloudFormationTests : IClassFixture<MicroStackFixture>, IAsy
         });
 
         var desc = await _cfn.DescribeStacksAsync(new DescribeStacksRequest { StackName = stackName });
-        Assert.Equal("CREATE_COMPLETE", desc.Stacks[0].StackStatus.Value);
+        desc.Stacks[0].StackStatus.Value.ShouldBe("CREATE_COMPLETE");
 
         var outputs = desc.Stacks[0].Outputs.ToDictionary(o => o.OutputKey, o => o.OutputValue);
-        Assert.EndsWith(".elb.amazonaws.com", outputs["AlbDnsName"]);
-        Assert.Contains(":listener/app/", outputs["AlbListenerArn"]);
+        outputs["AlbDnsName"].ShouldEndWith(".elb.amazonaws.com");
+        outputs["AlbListenerArn"].ShouldContain(":listener/app/");
 
         var lbs = await _elbv2.DescribeLoadBalancersAsync(
             new Amazon.ElasticLoadBalancingV2.Model.DescribeLoadBalancersRequest
             {
                 Names = [lbName],
             });
-        Assert.Single(lbs.LoadBalancers);
-        Assert.Equal("internal", lbs.LoadBalancers[0].Scheme.Value);
+        lbs.LoadBalancers.ShouldHaveSingleItem();
+        lbs.LoadBalancers[0].Scheme.Value.ShouldBe("internal");
 
         await _cfn.DeleteStackAsync(new DeleteStackRequest { StackName = stackName });
     }
@@ -1393,8 +1393,8 @@ public sealed class CloudFormationTests : IClassFixture<MicroStackFixture>, IAsy
         {
             StackName = "cfn-gettemplate",
         });
-        Assert.NotEmpty(result.TemplateBody);
-        Assert.Contains("cfn-gettemplate-bucket", result.TemplateBody);
+        result.TemplateBody.ShouldNotBeEmpty();
+        result.TemplateBody.ShouldContain("cfn-gettemplate-bucket");
 
         await _cfn.DeleteStackAsync(new DeleteStackRequest { StackName = "cfn-gettemplate" });
     }
@@ -1428,9 +1428,9 @@ public sealed class CloudFormationTests : IClassFixture<MicroStackFixture>, IAsy
             StackName = "cfn-describe-res",
             LogicalResourceId = "Bucket",
         });
-        Assert.Equal("AWS::S3::Bucket", result.StackResourceDetail.ResourceType);
-        Assert.Equal("Bucket", result.StackResourceDetail.LogicalResourceId);
-        Assert.NotEmpty(result.StackResourceDetail.PhysicalResourceId);
+        result.StackResourceDetail.ResourceType.ShouldBe("AWS::S3::Bucket");
+        result.StackResourceDetail.LogicalResourceId.ShouldBe("Bucket");
+        result.StackResourceDetail.PhysicalResourceId.ShouldNotBeEmpty();
 
         await _cfn.DeleteStackAsync(new DeleteStackRequest { StackName = "cfn-describe-res" });
     }
@@ -1468,7 +1468,7 @@ public sealed class CloudFormationTests : IClassFixture<MicroStackFixture>, IAsy
         {
             StackName = "cfn-list-res",
         });
-        Assert.Equal(2, result.StackResourceSummaries.Count);
+        result.StackResourceSummaries.Count.ShouldBe(2);
 
         await _cfn.DeleteStackAsync(new DeleteStackRequest { StackName = "cfn-list-res" });
     }
@@ -1500,8 +1500,8 @@ public sealed class CloudFormationTests : IClassFixture<MicroStackFixture>, IAsy
             TemplateBody = template,
         });
 
-        Assert.Contains(result.Parameters, p => p.ParameterKey == "Env");
-        Assert.Contains(result.ResourceTypes, t => t == "AWS::S3::Bucket");
+        result.Parameters.ShouldContain(p => p.ParameterKey == "Env");
+        result.ResourceTypes.ShouldContain(t => t == "AWS::S3::Bucket");
     }
 
     // ── ImportValue with nonexistent export ──────────────────────────────────────
@@ -1538,9 +1538,7 @@ public sealed class CloudFormationTests : IClassFixture<MicroStackFixture>, IAsy
 
         var desc = await _cfn.DescribeStacksAsync(new DescribeStacksRequest { StackName = "cfn-t16" });
         var status = desc.Stacks[0].StackStatus.Value;
-        Assert.True(
-            status == "CREATE_FAILED" || status == "ROLLBACK_COMPLETE",
-            $"Expected CREATE_FAILED or ROLLBACK_COMPLETE, got {status}");
+        (status == "CREATE_FAILED" || status == "ROLLBACK_COMPLETE").ShouldBe(true, $"Expected CREATE_FAILED or ROLLBACK_COMPLETE, got {status}");
     }
 
     // ── EC2 Launch Template via CloudFormation ───────────────────────────────────
@@ -1576,7 +1574,7 @@ public sealed class CloudFormationTests : IClassFixture<MicroStackFixture>, IAsy
         });
 
         var desc = await _cfn.DescribeStacksAsync(new DescribeStacksRequest { StackName = "cfn-lt-stack" });
-        Assert.Equal("CREATE_COMPLETE", desc.Stacks[0].StackStatus.Value);
+        desc.Stacks[0].StackStatus.Value.ShouldBe("CREATE_COMPLETE");
 
         await _cfn.DeleteStackAsync(new DeleteStackRequest { StackName = "cfn-lt-stack" });
     }
@@ -1585,13 +1583,13 @@ public sealed class CloudFormationTests : IClassFixture<MicroStackFixture>, IAsy
     {
         var buckets = await _s3.ListBucketsAsync();
         var list = buckets.Buckets ?? [];
-        Assert.Contains(list, b => b.BucketName == bucketName);
+        list.ShouldContain(b => b.BucketName == bucketName);
     }
 
     private async Task AssertBucketDoesNotExist(string bucketName)
     {
         var buckets = await _s3.ListBucketsAsync();
         var list = buckets.Buckets ?? [];
-        Assert.DoesNotContain(list, b => b.BucketName == bucketName);
+        list.ShouldNotContain(b => b.BucketName == bucketName);
     }
 }

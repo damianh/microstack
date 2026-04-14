@@ -59,10 +59,10 @@ public sealed class EcrTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             RepositoryName = "test-app",
         });
 
-        Assert.Equal("test-app", resp.Repository.RepositoryName);
-        Assert.NotNull(resp.Repository.RepositoryUri);
-        Assert.NotNull(resp.Repository.RepositoryArn);
-        Assert.Equal("MUTABLE", resp.Repository.ImageTagMutability.Value);
+        resp.Repository.RepositoryName.ShouldBe("test-app");
+        resp.Repository.RepositoryUri.ShouldNotBeNull();
+        resp.Repository.RepositoryArn.ShouldNotBeNull();
+        resp.Repository.ImageTagMutability.Value.ShouldBe("MUTABLE");
     }
 
     [Fact]
@@ -73,7 +73,7 @@ public sealed class EcrTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             RepositoryName = "dup-repo",
         });
 
-        await Assert.ThrowsAsync<RepositoryAlreadyExistsException>(() =>
+        await Should.ThrowAsync<RepositoryAlreadyExistsException>(() =>
             _ecr.CreateRepositoryAsync(new CreateRepositoryRequest
             {
                 RepositoryName = "dup-repo",
@@ -90,7 +90,7 @@ public sealed class EcrTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
 
         var resp = await _ecr.DescribeRepositoriesAsync(new DescribeRepositoriesRequest());
         var names = resp.Repositories.Select(r => r.RepositoryName).ToList();
-        Assert.Contains("desc-repo", names);
+        names.ShouldContain("desc-repo");
     }
 
     [Fact]
@@ -105,14 +105,14 @@ public sealed class EcrTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             RepositoryNames = ["by-name-repo"],
         });
-        Assert.Single(resp.Repositories);
-        Assert.Equal("by-name-repo", resp.Repositories[0].RepositoryName);
+        resp.Repositories.ShouldHaveSingleItem();
+        resp.Repositories[0].RepositoryName.ShouldBe("by-name-repo");
     }
 
     [Fact]
     public async Task DescribeNonexistentRepository()
     {
-        await Assert.ThrowsAsync<RepositoryNotFoundException>(() =>
+        await Should.ThrowAsync<RepositoryNotFoundException>(() =>
             _ecr.DescribeRepositoriesAsync(new DescribeRepositoriesRequest
             {
                 RepositoryNames = ["nonexistent"],
@@ -137,9 +137,9 @@ public sealed class EcrTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             ImageTag = "v1.0.0",
         });
 
-        Assert.Equal("img-repo", resp.Image.RepositoryName);
-        Assert.Equal("v1.0.0", resp.Image.ImageId.ImageTag);
-        Assert.NotNull(resp.Image.ImageId.ImageDigest);
+        resp.Image.RepositoryName.ShouldBe("img-repo");
+        resp.Image.ImageId.ImageTag.ShouldBe("v1.0.0");
+        resp.Image.ImageId.ImageDigest.ShouldNotBeNull();
     }
 
     [Fact]
@@ -160,9 +160,9 @@ public sealed class EcrTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             RepositoryName = "list-repo",
         });
-        Assert.True(resp.ImageIds.Count >= 1);
+        (resp.ImageIds.Count >= 1).ShouldBe(true);
         var tags = resp.ImageIds.Select(i => i.ImageTag).ToList();
-        Assert.Contains("v1.0.0", tags);
+        tags.ShouldContain("v1.0.0");
     }
 
     [Fact]
@@ -183,9 +183,9 @@ public sealed class EcrTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             RepositoryName = "desc-img-repo",
         });
-        Assert.True(resp.ImageDetails.Count >= 1);
-        Assert.NotNull(resp.ImageDetails[0].ImageDigest);
-        Assert.Contains("v1.0.0", resp.ImageDetails[0].ImageTags);
+        (resp.ImageDetails.Count >= 1).ShouldBe(true);
+        resp.ImageDetails[0].ImageDigest.ShouldNotBeNull();
+        resp.ImageDetails[0].ImageTags.ShouldContain("v1.0.0");
     }
 
     [Fact]
@@ -207,9 +207,9 @@ public sealed class EcrTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             RepositoryName = "batch-get-repo",
             ImageIds = [new ImageIdentifier { ImageTag = "v1.0.0" }],
         });
-        Assert.Single(resp.Images);
-        Assert.Equal("v1.0.0", resp.Images[0].ImageId.ImageTag);
-        Assert.Empty(resp.Failures);
+        resp.Images.ShouldHaveSingleItem();
+        resp.Images[0].ImageId.ImageTag.ShouldBe("v1.0.0");
+        resp.Failures.ShouldBeEmpty();
     }
 
     [Fact]
@@ -225,8 +225,8 @@ public sealed class EcrTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             RepositoryName = "batch-nf-repo",
             ImageIds = [new ImageIdentifier { ImageTag = "nonexistent" }],
         });
-        Assert.Empty(resp.Images);
-        Assert.Single(resp.Failures);
+        resp.Images.ShouldBeEmpty();
+        resp.Failures.ShouldHaveSingleItem();
     }
 
     [Fact]
@@ -248,8 +248,8 @@ public sealed class EcrTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             RepositoryName = "batch-del-repo",
             ImageIds = [new ImageIdentifier { ImageTag = "to-delete" }],
         });
-        Assert.Single(resp.ImageIds);
-        Assert.Empty(resp.Failures);
+        resp.ImageIds.ShouldHaveSingleItem();
+        resp.Failures.ShouldBeEmpty();
     }
 
     // ── Authorization ─────────────────────────────────────────────────────────
@@ -258,9 +258,9 @@ public sealed class EcrTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
     public async Task GetAuthorizationToken()
     {
         var resp = await _ecr.GetAuthorizationTokenAsync(new GetAuthorizationTokenRequest());
-        Assert.Single(resp.AuthorizationData);
-        Assert.NotNull(resp.AuthorizationData[0].AuthorizationToken);
-        Assert.NotNull(resp.AuthorizationData[0].ProxyEndpoint);
+        resp.AuthorizationData.ShouldHaveSingleItem();
+        resp.AuthorizationData[0].AuthorizationToken.ShouldNotBeNull();
+        resp.AuthorizationData[0].ProxyEndpoint.ShouldNotBeNull();
     }
 
     // ── Lifecycle Policy ──────────────────────────────────────────────────────
@@ -284,14 +284,14 @@ public sealed class EcrTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             RepositoryName = "lc-repo",
         });
-        Assert.Equal(policy, getResp.LifecyclePolicyText);
+        getResp.LifecyclePolicyText.ShouldBe(policy);
 
         await _ecr.DeleteLifecyclePolicyAsync(new DeleteLifecyclePolicyRequest
         {
             RepositoryName = "lc-repo",
         });
 
-        await Assert.ThrowsAsync<LifecyclePolicyNotFoundException>(() =>
+        await Should.ThrowAsync<LifecyclePolicyNotFoundException>(() =>
             _ecr.GetLifecyclePolicyAsync(new GetLifecyclePolicyRequest
             {
                 RepositoryName = "lc-repo",
@@ -319,14 +319,14 @@ public sealed class EcrTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             RepositoryName = "rp-repo",
         });
-        Assert.Equal(policy, getResp.PolicyText);
+        getResp.PolicyText.ShouldBe(policy);
 
         await _ecr.DeleteRepositoryPolicyAsync(new DeleteRepositoryPolicyRequest
         {
             RepositoryName = "rp-repo",
         });
 
-        await Assert.ThrowsAsync<RepositoryPolicyNotFoundException>(() =>
+        await Should.ThrowAsync<RepositoryPolicyNotFoundException>(() =>
             _ecr.GetRepositoryPolicyAsync(new GetRepositoryPolicyRequest
             {
                 RepositoryName = "rp-repo",
@@ -353,7 +353,7 @@ public sealed class EcrTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             RepositoryNames = ["mut-repo"],
         });
-        Assert.Equal("IMMUTABLE", desc.Repositories[0].ImageTagMutability.Value);
+        desc.Repositories[0].ImageTagMutability.Value.ShouldBe("IMMUTABLE");
 
         await _ecr.PutImageTagMutabilityAsync(new PutImageTagMutabilityRequest
         {
@@ -382,7 +382,7 @@ public sealed class EcrTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             RepositoryNames = ["scan-repo"],
         });
-        Assert.True(desc.Repositories[0].ImageScanningConfiguration.ScanOnPush);
+        desc.Repositories[0].ImageScanningConfiguration.ScanOnPush.ShouldBe(true);
     }
 
     // ── Tags ──────────────────────────────────────────────────────────────────
@@ -412,7 +412,7 @@ public sealed class EcrTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             ResourceArn = arn,
         });
         var tagKeys = tagsResp.Tags.Select(t => t.Key).ToList();
-        Assert.Contains("env", tagKeys);
+        tagKeys.ShouldContain("env");
 
         await _ecr.UntagResourceAsync(new UntagResourceRequest
         {
@@ -425,7 +425,7 @@ public sealed class EcrTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             ResourceArn = arn,
         });
         var tagKeys2 = tagsResp2.Tags.Select(t => t.Key).ToList();
-        Assert.DoesNotContain("env", tagKeys2);
+        tagKeys2.ShouldNotContain("env");
     }
 
     // ── Delete repository ─────────────────────────────────────────────────────
@@ -444,7 +444,7 @@ public sealed class EcrTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             ImageTag = "latest",
         });
 
-        await Assert.ThrowsAsync<RepositoryNotEmptyException>(() =>
+        await Should.ThrowAsync<RepositoryNotEmptyException>(() =>
             _ecr.DeleteRepositoryAsync(new DeleteRepositoryRequest
             {
                 RepositoryName = "notempty-repo",
@@ -470,7 +470,7 @@ public sealed class EcrTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             RepositoryName = "force-del-repo",
             Force = true,
         });
-        Assert.Equal("force-del-repo", resp.Repository.RepositoryName);
+        resp.Repository.RepositoryName.ShouldBe("force-del-repo");
     }
 
     // ── Describe Registry ─────────────────────────────────────────────────────
@@ -479,7 +479,7 @@ public sealed class EcrTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
     public async Task DescribeRegistry()
     {
         var resp = await _ecr.DescribeRegistryAsync(new DescribeRegistryRequest());
-        Assert.NotNull(resp.RegistryId);
-        Assert.NotNull(resp.ReplicationConfiguration);
+        resp.RegistryId.ShouldNotBeNull();
+        resp.ReplicationConfiguration.ShouldNotBeNull();
     }
 }

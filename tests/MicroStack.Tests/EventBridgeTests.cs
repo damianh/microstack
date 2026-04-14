@@ -58,13 +58,13 @@ public sealed class EventBridgeTests : IClassFixture<MicroStackFixture>, IAsyncL
     public async Task CreateEventBusAndDescribe()
     {
         var resp = await _eb.CreateEventBusAsync(new CreateEventBusRequest { Name = "eb-bus-v2" });
-        Assert.Contains("eb-bus-v2", resp.EventBusArn);
+        resp.EventBusArn.ShouldContain("eb-bus-v2");
 
         var buses = await _eb.ListEventBusesAsync(new ListEventBusesRequest());
-        Assert.Contains(buses.EventBuses, b => b.Name == "eb-bus-v2");
+        buses.EventBuses.ShouldContain(b => b.Name == "eb-bus-v2");
 
         var desc = await _eb.DescribeEventBusAsync(new DescribeEventBusRequest { Name = "eb-bus-v2" });
-        Assert.Equal("eb-bus-v2", desc.Name);
+        desc.Name.ShouldBe("eb-bus-v2");
     }
 
     [Fact]
@@ -79,7 +79,7 @@ public sealed class EventBridgeTests : IClassFixture<MicroStackFixture>, IAsyncL
         });
 
         var desc = await _eb.DescribeEventBusAsync(new DescribeEventBusRequest { Name = "eb-upd-bus" });
-        Assert.Equal("updated description", desc.Description);
+        desc.Description.ShouldBe("updated description");
     }
 
     [Fact]
@@ -89,15 +89,15 @@ public sealed class EventBridgeTests : IClassFixture<MicroStackFixture>, IAsyncL
         await _eb.DeleteEventBusAsync(new DeleteEventBusRequest { Name = "eb-del-bus" });
 
         var buses = await _eb.ListEventBusesAsync(new ListEventBusesRequest());
-        Assert.DoesNotContain(buses.EventBuses, b => b.Name == "eb-del-bus");
+        buses.EventBuses.ShouldNotContain(b => b.Name == "eb-del-bus");
     }
 
     [Fact]
     public async Task DeleteDefaultEventBusFails()
     {
-        var ex = await Assert.ThrowsAsync<AmazonEventBridgeException>(
+        var ex = await Should.ThrowAsync<AmazonEventBridgeException>(
             () => _eb.DeleteEventBusAsync(new DeleteEventBusRequest { Name = "default" }));
-        Assert.Equal("ValidationException", ex.ErrorCode);
+        ex.ErrorCode.ShouldBe("ValidationException");
     }
 
     // ── Rules ───────────────────────────────────────────────────────────────────
@@ -114,18 +114,18 @@ public sealed class EventBridgeTests : IClassFixture<MicroStackFixture>, IAsyncL
             EventPattern = JsonSerializer.Serialize(new { source = new[] { "my.app" } }),
             State = RuleState.ENABLED,
         });
-        Assert.NotEmpty(resp.RuleArn);
+        resp.RuleArn.ShouldNotBeEmpty();
 
         var rules = await _eb.ListRulesAsync(new ListRulesRequest { EventBusName = "eb-rule-bus" });
-        Assert.Contains(rules.Rules, r => r.Name == "eb-rule-v2");
+        rules.Rules.ShouldContain(r => r.Name == "eb-rule-v2");
 
         var described = await _eb.DescribeRuleAsync(new DescribeRuleRequest
         {
             Name = "eb-rule-v2",
             EventBusName = "eb-rule-bus",
         });
-        Assert.Equal("eb-rule-v2", described.Name);
-        Assert.Equal(RuleState.ENABLED, described.State);
+        described.Name.ShouldBe("eb-rule-v2");
+        described.State.ShouldBe(RuleState.ENABLED);
     }
 
     [Fact]
@@ -141,7 +141,7 @@ public sealed class EventBridgeTests : IClassFixture<MicroStackFixture>, IAsyncL
         });
 
         var rules = await _eb.ListRulesAsync(new ListRulesRequest { EventBusName = "test-bus" });
-        Assert.Contains(rules.Rules, r => r.Name == "test-rule");
+        rules.Rules.ShouldContain(r => r.Name == "test-rule");
     }
 
     [Fact]
@@ -156,9 +156,9 @@ public sealed class EventBridgeTests : IClassFixture<MicroStackFixture>, IAsyncL
 
         await _eb.DeleteRuleAsync(new DeleteRuleRequest { Name = "eb-del-v2" });
 
-        var ex = await Assert.ThrowsAsync<ResourceNotFoundException>(
+        var ex = await Should.ThrowAsync<ResourceNotFoundException>(
             () => _eb.DescribeRuleAsync(new DescribeRuleRequest { Name = "eb-del-v2" }));
-        Assert.Equal("ResourceNotFoundException", ex.ErrorCode);
+        ex.ErrorCode.ShouldBe("ResourceNotFoundException");
     }
 
     [Fact]
@@ -173,11 +173,11 @@ public sealed class EventBridgeTests : IClassFixture<MicroStackFixture>, IAsyncL
 
         await _eb.DisableRuleAsync(new DisableRuleRequest { Name = "toggle-rule" });
         var desc = await _eb.DescribeRuleAsync(new DescribeRuleRequest { Name = "toggle-rule" });
-        Assert.Equal(RuleState.DISABLED, desc.State);
+        desc.State.ShouldBe(RuleState.DISABLED);
 
         await _eb.EnableRuleAsync(new EnableRuleRequest { Name = "toggle-rule" });
         desc = await _eb.DescribeRuleAsync(new DescribeRuleRequest { Name = "toggle-rule" });
-        Assert.Equal(RuleState.ENABLED, desc.State);
+        desc.State.ShouldBe(RuleState.ENABLED);
     }
 
     // ── Targets ─────────────────────────────────────────────────────────────────
@@ -203,10 +203,10 @@ public sealed class EventBridgeTests : IClassFixture<MicroStackFixture>, IAsyncL
         });
 
         var resp = await _eb.ListTargetsByRuleAsync(new ListTargetsByRuleRequest { Rule = "eb-tgt-v2" });
-        Assert.Equal(2, resp.Targets.Count);
+        resp.Targets.Count.ShouldBe(2);
         var ids = resp.Targets.Select(t => t.Id).ToHashSet();
-        Assert.Contains("t1", ids);
-        Assert.Contains("t2", ids);
+        ids.ShouldContain("t1");
+        ids.ShouldContain("t2");
     }
 
     [Fact]
@@ -230,7 +230,7 @@ public sealed class EventBridgeTests : IClassFixture<MicroStackFixture>, IAsyncL
         });
 
         var before = await _eb.ListTargetsByRuleAsync(new ListTargetsByRuleRequest { Rule = "eb-rm-v2" });
-        Assert.Equal(2, before.Targets.Count);
+        before.Targets.Count.ShouldBe(2);
 
         await _eb.RemoveTargetsAsync(new RemoveTargetsRequest
         {
@@ -239,8 +239,8 @@ public sealed class EventBridgeTests : IClassFixture<MicroStackFixture>, IAsyncL
         });
 
         var after = await _eb.ListTargetsByRuleAsync(new ListTargetsByRuleRequest { Rule = "eb-rm-v2" });
-        Assert.Single(after.Targets);
-        Assert.Equal("rm2", after.Targets[0].Id);
+        after.Targets.ShouldHaveSingleItem();
+        after.Targets[0].Id.ShouldBe("rm2");
     }
 
     [Fact]
@@ -284,7 +284,7 @@ public sealed class EventBridgeTests : IClassFixture<MicroStackFixture>, IAsyncL
         });
 
         var sorted = result.RuleNames.OrderBy(x => x).ToList();
-        Assert.Equal(["rule-a", "rule-b"], sorted);
+        sorted.ShouldBe(["rule-a", "rule-b"]);
     }
 
     [Fact]
@@ -320,8 +320,8 @@ public sealed class EventBridgeTests : IClassFixture<MicroStackFixture>, IAsyncL
             TargetArn = fnArn,
             Limit = 1,
         });
-        Assert.Single(p1.RuleNames);
-        Assert.NotNull(p1.NextToken);
+        p1.RuleNames.ShouldHaveSingleItem();
+        p1.NextToken.ShouldNotBeNull();
 
         var p2 = await _eb.ListRuleNamesByTargetAsync(new ListRuleNamesByTargetRequest
         {
@@ -329,8 +329,8 @@ public sealed class EventBridgeTests : IClassFixture<MicroStackFixture>, IAsyncL
             Limit = 1,
             NextToken = p1.NextToken,
         });
-        Assert.Single(p2.RuleNames);
-        Assert.NotEqual(p1.RuleNames[0], p2.RuleNames[0]);
+        p2.RuleNames.ShouldHaveSingleItem();
+        p2.RuleNames[0].ShouldNotBe(p1.RuleNames[0]);
     }
 
     // ── PutEvents ───────────────────────────────────────────────────────────────
@@ -359,8 +359,8 @@ public sealed class EventBridgeTests : IClassFixture<MicroStackFixture>, IAsyncL
             ],
         });
 
-        Assert.Equal(0, resp.FailedEntryCount);
-        Assert.Equal(2, resp.Entries.Count);
+        resp.FailedEntryCount.ShouldBe(0);
+        resp.Entries.Count.ShouldBe(2);
     }
 
     [Fact]
@@ -394,9 +394,9 @@ public sealed class EventBridgeTests : IClassFixture<MicroStackFixture>, IAsyncL
             ],
         });
 
-        Assert.Equal(0, resp.FailedEntryCount);
-        Assert.Equal(3, resp.Entries.Count);
-        Assert.All(resp.Entries, e => Assert.NotEmpty(e.EventId));
+        resp.FailedEntryCount.ShouldBe(0);
+        resp.Entries.Count.ShouldBe(3);
+        resp.Entries.ShouldAllBe(e => !string.IsNullOrEmpty(e.EventId));
     }
 
     // ── TestEventPattern ────────────────────────────────────────────────────────
@@ -427,7 +427,7 @@ public sealed class EventBridgeTests : IClassFixture<MicroStackFixture>, IAsyncL
             EventPattern = patternJson,
         });
 
-        Assert.True(resp.Result);
+        resp.Result.ShouldBe(true);
     }
 
     [Fact]
@@ -442,19 +442,19 @@ public sealed class EventBridgeTests : IClassFixture<MicroStackFixture>, IAsyncL
             EventPattern = patternJson,
         });
 
-        Assert.False(resp.Result);
+        resp.Result.ShouldBe(false);
     }
 
     [Fact]
     public async Task TestEventPatternInvalidEvent()
     {
-        var ex = await Assert.ThrowsAsync<InvalidEventPatternException>(
+        var ex = await Should.ThrowAsync<InvalidEventPatternException>(
             () => _eb.TestEventPatternAsync(new TestEventPatternRequest
             {
                 Event = "not-json",
                 EventPattern = "{}",
             }));
-        Assert.Equal("InvalidEventPatternException", ex.ErrorCode);
+        ex.ErrorCode.ShouldBe("InvalidEventPatternException");
     }
 
     // ── Tags ────────────────────────────────────────────────────────────────────
@@ -482,8 +482,8 @@ public sealed class EventBridgeTests : IClassFixture<MicroStackFixture>, IAsyncL
 
         var tags = await _eb.ListTagsForResourceAsync(new ListTagsForResourceRequest { ResourceARN = arn });
         var tagMap = tags.Tags.ToDictionary(t => t.Key, t => t.Value);
-        Assert.Equal("dev", tagMap["stage"]);
-        Assert.Equal("ops", tagMap["team"]);
+        tagMap["stage"].ShouldBe("dev");
+        tagMap["team"].ShouldBe("ops");
 
         await _eb.UntagResourceAsync(new UntagResourceRequest
         {
@@ -492,8 +492,8 @@ public sealed class EventBridgeTests : IClassFixture<MicroStackFixture>, IAsyncL
         });
 
         var tags2 = await _eb.ListTagsForResourceAsync(new ListTagsForResourceRequest { ResourceARN = arn });
-        Assert.DoesNotContain(tags2.Tags, t => t.Key == "stage");
-        Assert.Contains(tags2.Tags, t => t.Key == "team");
+        tags2.Tags.ShouldNotContain(t => t.Key == "stage");
+        tags2.Tags.ShouldContain(t => t.Key == "team");
     }
 
     // ── Archives ────────────────────────────────────────────────────────────────
@@ -510,19 +510,19 @@ public sealed class EventBridgeTests : IClassFixture<MicroStackFixture>, IAsyncL
             Description = "test archive",
             RetentionDays = 7,
         });
-        Assert.NotEmpty(resp.ArchiveArn);
+        resp.ArchiveArn.ShouldNotBeEmpty();
 
         var desc = await _eb.DescribeArchiveAsync(new DescribeArchiveRequest { ArchiveName = archiveName });
-        Assert.Equal(archiveName, desc.ArchiveName);
-        Assert.Equal(7, desc.RetentionDays);
+        desc.ArchiveName.ShouldBe(archiveName);
+        desc.RetentionDays.ShouldBe(7);
 
         var archives = await _eb.ListArchivesAsync(new ListArchivesRequest());
-        Assert.Contains(archives.Archives, a => a.ArchiveName == archiveName);
+        archives.Archives.ShouldContain(a => a.ArchiveName == archiveName);
 
         await _eb.DeleteArchiveAsync(new DeleteArchiveRequest { ArchiveName = archiveName });
 
         var archives2 = await _eb.ListArchivesAsync(new ListArchivesRequest());
-        Assert.DoesNotContain(archives2.Archives, a => a.ArchiveName == archiveName);
+        archives2.Archives.ShouldNotContain(a => a.ArchiveName == archiveName);
     }
 
     [Fact]
@@ -547,9 +547,9 @@ public sealed class EventBridgeTests : IClassFixture<MicroStackFixture>, IAsyncL
         });
 
         var desc = await _eb.DescribeArchiveAsync(new DescribeArchiveRequest { ArchiveName = name });
-        Assert.Equal("new desc", desc.Description);
-        Assert.Equal(30, desc.RetentionDays);
-        Assert.Contains("app", desc.EventPattern);
+        desc.Description.ShouldBe("new desc");
+        desc.RetentionDays.ShouldBe(30);
+        desc.EventPattern.ShouldContain("app");
     }
 
     // ── Replays ─────────────────────────────────────────────────────────────────
@@ -577,20 +577,20 @@ public sealed class EventBridgeTests : IClassFixture<MicroStackFixture>, IAsyncL
             EventEndTime = new DateTime(2024, 1, 2, 0, 0, 0, DateTimeKind.Utc),
             Destination = new ReplayDestination { Arn = archiveArn },
         });
-        Assert.Equal("RUNNING", start.State.Value);
+        start.State.Value.ShouldBe("RUNNING");
 
         var desc = await _eb.DescribeReplayAsync(new DescribeReplayRequest { ReplayName = repName });
-        Assert.Equal(repName, desc.ReplayName);
-        Assert.Equal("RUNNING", desc.State.Value);
+        desc.ReplayName.ShouldBe(repName);
+        desc.State.Value.ShouldBe("RUNNING");
 
         var listed = await _eb.ListReplaysAsync(new ListReplaysRequest { NamePrefix = repName });
-        Assert.Contains(listed.Replays, r => r.ReplayName == repName);
+        listed.Replays.ShouldContain(r => r.ReplayName == repName);
 
         var cancel = await _eb.CancelReplayAsync(new CancelReplayRequest { ReplayName = repName });
-        Assert.Equal("CANCELLED", cancel.State.Value);
+        cancel.State.Value.ShouldBe("CANCELLED");
 
         var desc2 = await _eb.DescribeReplayAsync(new DescribeReplayRequest { ReplayName = repName });
-        Assert.Equal("CANCELLED", desc2.State.Value);
+        desc2.State.Value.ShouldBe("CANCELLED");
 
         await _eb.DeleteArchiveAsync(new DeleteArchiveRequest { ArchiveName = archName });
     }
@@ -638,10 +638,10 @@ public sealed class EventBridgeTests : IClassFixture<MicroStackFixture>, IAsyncL
                 },
             },
         });
-        Assert.NotEmpty(resp.ConnectionArn);
+        resp.ConnectionArn.ShouldNotBeEmpty();
 
         var desc = await _eb.DescribeConnectionAsync(new DescribeConnectionRequest { Name = "test-conn" });
-        Assert.Equal("test-conn", desc.Name);
+        desc.Name.ShouldBe("test-conn");
 
         await _eb.DeleteConnectionAsync(new DeleteConnectionRequest { Name = "test-conn" });
     }
@@ -665,10 +665,10 @@ public sealed class EventBridgeTests : IClassFixture<MicroStackFixture>, IAsyncL
 
         var result = await _eb.DeauthorizeConnectionAsync(
             new DeauthorizeConnectionRequest { Name = "deauth-conn" });
-        Assert.Equal(ConnectionState.DEAUTHORIZED, result.ConnectionState);
+        result.ConnectionState.ShouldBe(ConnectionState.DEAUTHORIZED);
 
         var desc = await _eb.DescribeConnectionAsync(new DescribeConnectionRequest { Name = "deauth-conn" });
-        Assert.Equal(ConnectionState.DEAUTHORIZED, desc.ConnectionState);
+        desc.ConnectionState.ShouldBe(ConnectionState.DEAUTHORIZED);
 
         await _eb.DeleteConnectionAsync(new DeleteConnectionRequest { Name = "deauth-conn" });
     }
@@ -699,11 +699,11 @@ public sealed class EventBridgeTests : IClassFixture<MicroStackFixture>, IAsyncL
             InvocationEndpoint = "https://example.com/webhook",
             HttpMethod = ApiDestinationHttpMethod.POST,
         });
-        Assert.NotEmpty(resp.ApiDestinationArn);
+        resp.ApiDestinationArn.ShouldNotBeEmpty();
 
         var desc = await _eb.DescribeApiDestinationAsync(
             new DescribeApiDestinationRequest { Name = "test-apid" });
-        Assert.Equal("test-apid", desc.Name);
+        desc.Name.ShouldBe("test-apid");
 
         await _eb.DeleteApiDestinationAsync(new DeleteApiDestinationRequest { Name = "test-apid" });
     }
@@ -740,11 +740,11 @@ public sealed class EventBridgeTests : IClassFixture<MicroStackFixture>, IAsyncL
         {
             Name = "my-global-endpoint",
         });
-        Assert.Equal(EndpointState.ACTIVE, desc.State);
-        Assert.NotEmpty(desc.Arn);
+        desc.State.ShouldBe(EndpointState.ACTIVE);
+        desc.Arn.ShouldNotBeEmpty();
 
         var listed = await _eb.ListEndpointsAsync(new ListEndpointsRequest());
-        Assert.Contains(listed.Endpoints, e => e.Name == "my-global-endpoint");
+        listed.Endpoints.ShouldContain(e => e.Name == "my-global-endpoint");
 
         await _eb.UpdateEndpointAsync(new UpdateEndpointRequest
         {
@@ -763,14 +763,14 @@ public sealed class EventBridgeTests : IClassFixture<MicroStackFixture>, IAsyncL
             Name = "aws.partner/saas/src",
             Account = "111111111111",
         });
-        Assert.NotEmpty(resp.EventSourceArn);
+        resp.EventSourceArn.ShouldNotBeEmpty();
 
         await _eb.DescribePartnerEventSourceAsync(
             new DescribePartnerEventSourceRequest { Name = "aws.partner/saas/src" });
 
         var list = await _eb.ListPartnerEventSourcesAsync(
             new ListPartnerEventSourcesRequest { NamePrefix = "aws.partner/saas/src" });
-        Assert.NotEmpty(list.PartnerEventSources);
+        list.PartnerEventSources.ShouldNotBeEmpty();
 
         await _eb.DeletePartnerEventSourceAsync(new DeletePartnerEventSourceRequest
         {
@@ -780,10 +780,10 @@ public sealed class EventBridgeTests : IClassFixture<MicroStackFixture>, IAsyncL
 
         var accounts = await _eb.ListPartnerEventSourceAccountsAsync(
             new ListPartnerEventSourceAccountsRequest { EventSourceName = "aws.partner/saas/accts" });
-        Assert.Empty(accounts.PartnerEventSourceAccounts);
+        accounts.PartnerEventSourceAccounts.ShouldBeEmpty();
 
         var eventSources = await _eb.ListEventSourcesAsync(new ListEventSourcesRequest());
-        Assert.Empty(eventSources.EventSources);
+        eventSources.EventSources.ShouldBeEmpty();
 
         var pe = await _eb.PutPartnerEventsAsync(new PutPartnerEventsRequest
         {
@@ -797,7 +797,7 @@ public sealed class EventBridgeTests : IClassFixture<MicroStackFixture>, IAsyncL
                 },
             ],
         });
-        Assert.Equal(0, pe.FailedEntryCount);
+        pe.FailedEntryCount.ShouldBe(0);
     }
 
     [Fact]
@@ -817,7 +817,7 @@ public sealed class EventBridgeTests : IClassFixture<MicroStackFixture>, IAsyncL
         {
             Name = "aws.partner/saas/foo",
         });
-        Assert.Equal("ENABLED", src.State);
+        src.State.Value.ShouldBe("ENABLED");
     }
 
     // ── Deleting event bus removes associated rules ─────────────────────────────
@@ -846,7 +846,7 @@ public sealed class EventBridgeTests : IClassFixture<MicroStackFixture>, IAsyncL
         // Re-create the bus, list rules should be empty
         await _eb.CreateEventBusAsync(new CreateEventBusRequest { Name = "cleanup-bus" });
         var rules = await _eb.ListRulesAsync(new ListRulesRequest { EventBusName = "cleanup-bus" });
-        Assert.Empty(rules.Rules);
+        rules.Rules.ShouldBeEmpty();
     }
 
     // ── Duplicate event bus fails ───────────────────────────────────────────────
@@ -856,8 +856,8 @@ public sealed class EventBridgeTests : IClassFixture<MicroStackFixture>, IAsyncL
     {
         await _eb.CreateEventBusAsync(new CreateEventBusRequest { Name = "dup-bus" });
 
-        var ex = await Assert.ThrowsAsync<ResourceAlreadyExistsException>(
+        var ex = await Should.ThrowAsync<ResourceAlreadyExistsException>(
             () => _eb.CreateEventBusAsync(new CreateEventBusRequest { Name = "dup-bus" }));
-        Assert.Equal("ResourceAlreadyExistsException", ex.ErrorCode);
+        ex.ErrorCode.ShouldBe("ResourceAlreadyExistsException");
     }
 }

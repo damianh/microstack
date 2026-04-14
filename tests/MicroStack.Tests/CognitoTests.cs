@@ -86,12 +86,12 @@ public sealed class CognitoTests : IClassFixture<MicroStackFixture>, IAsyncLifet
     {
         var resp = await _idp.CreateUserPoolAsync(new CreateUserPoolRequest { PoolName = "TestPool" });
         var pool = resp.UserPool;
-        Assert.Equal("TestPool", pool.Name);
-        Assert.StartsWith("us-east-1_", pool.Id);
+        pool.Name.ShouldBe("TestPool");
+        pool.Id.ShouldStartWith("us-east-1_");
 
         var desc = await _idp.DescribeUserPoolAsync(new DescribeUserPoolRequest { UserPoolId = pool.Id });
-        Assert.Equal(pool.Id, desc.UserPool.Id);
-        Assert.Equal("TestPool", desc.UserPool.Name);
+        desc.UserPool.Id.ShouldBe(pool.Id);
+        desc.UserPool.Name.ShouldBe("TestPool");
     }
 
     [Fact]
@@ -102,8 +102,8 @@ public sealed class CognitoTests : IClassFixture<MicroStackFixture>, IAsyncLifet
 
         var resp = await _idp.ListUserPoolsAsync(new ListUserPoolsRequest { MaxResults = 60 });
         var names = resp.UserPools.Select(p => p.Name).ToList();
-        Assert.Contains("ListPoolA", names);
-        Assert.Contains("ListPoolB", names);
+        names.ShouldContain("ListPoolA");
+        names.ShouldContain("ListPoolB");
     }
 
     [Fact]
@@ -119,7 +119,7 @@ public sealed class CognitoTests : IClassFixture<MicroStackFixture>, IAsyncLifet
         });
 
         var desc = await _idp.DescribeUserPoolAsync(new DescribeUserPoolRequest { UserPoolId = pid });
-        Assert.Equal("test", desc.UserPool.UserPoolTags["env"]);
+        desc.UserPool.UserPoolTags["env"].ShouldBe("test");
     }
 
     [Fact]
@@ -131,7 +131,7 @@ public sealed class CognitoTests : IClassFixture<MicroStackFixture>, IAsyncLifet
         await _idp.DeleteUserPoolAsync(new DeleteUserPoolRequest { UserPoolId = pid });
 
         var pools = await _idp.ListUserPoolsAsync(new ListUserPoolsRequest { MaxResults = 60 });
-        Assert.DoesNotContain(pools.UserPools, p => p.Id == pid);
+        pools.UserPools.ShouldNotContain(p => p.Id == pid);
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -149,15 +149,15 @@ public sealed class CognitoTests : IClassFixture<MicroStackFixture>, IAsyncLifet
             ExplicitAuthFlows = ["ALLOW_USER_PASSWORD_AUTH", "ALLOW_REFRESH_TOKEN_AUTH"],
         });
         var client = clientResp.UserPoolClient;
-        Assert.Equal("MyApp", client.ClientName);
+        client.ClientName.ShouldBe("MyApp");
 
         var desc = await _idp.DescribeUserPoolClientAsync(new DescribeUserPoolClientRequest
         {
             UserPoolId = pid,
             ClientId = client.ClientId,
         });
-        Assert.Equal(client.ClientId, desc.UserPoolClient.ClientId);
-        Assert.Equal("MyApp", desc.UserPoolClient.ClientName);
+        desc.UserPoolClient.ClientId.ShouldBe(client.ClientId);
+        desc.UserPoolClient.ClientName.ShouldBe("MyApp");
     }
 
     [Fact]
@@ -173,8 +173,8 @@ public sealed class CognitoTests : IClassFixture<MicroStackFixture>, IAsyncLifet
             MaxResults = 60,
         });
         var names = clients.UserPoolClients.Select(c => c.ClientName).ToList();
-        Assert.Contains("App1", names);
-        Assert.Contains("App2", names);
+        names.ShouldContain("App1");
+        names.ShouldContain("App2");
     }
 
     [Fact]
@@ -194,15 +194,15 @@ public sealed class CognitoTests : IClassFixture<MicroStackFixture>, IAsyncLifet
             ClientName = "UpdatedName",
             RefreshTokenValidity = 14,
         });
-        Assert.Equal("UpdatedName", updated.UserPoolClient.ClientName);
-        Assert.Equal(14, updated.UserPoolClient.RefreshTokenValidity);
+        updated.UserPoolClient.ClientName.ShouldBe("UpdatedName");
+        updated.UserPoolClient.RefreshTokenValidity.ShouldBe(14);
 
         var desc = await _idp.DescribeUserPoolClientAsync(new DescribeUserPoolClientRequest
         {
             UserPoolId = pid,
             ClientId = cid,
         });
-        Assert.Equal("UpdatedName", desc.UserPoolClient.ClientName);
+        desc.UserPoolClient.ClientName.ShouldBe("UpdatedName");
     }
 
     [Fact]
@@ -215,8 +215,8 @@ public sealed class CognitoTests : IClassFixture<MicroStackFixture>, IAsyncLifet
             ClientName = "SecretApp",
             GenerateSecret = true,
         })).UserPoolClient;
-        Assert.NotNull(client.ClientSecret);
-        Assert.True(client.ClientSecret.Length > 20);
+        client.ClientSecret.ShouldNotBeNull();
+        (client.ClientSecret.Length > 20).ShouldBe(true);
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -239,9 +239,9 @@ public sealed class CognitoTests : IClassFixture<MicroStackFixture>, IAsyncLifet
             UserPoolId = pid,
             Username = "alice",
         });
-        Assert.Equal("alice", user.Username);
+        user.Username.ShouldBe("alice");
         var attrs = user.UserAttributes.ToDictionary(a => a.Name, a => a.Value);
-        Assert.Equal("alice@example.com", attrs["email"]);
+        attrs["email"].ShouldBe("alice@example.com");
     }
 
     [Fact]
@@ -255,9 +255,9 @@ public sealed class CognitoTests : IClassFixture<MicroStackFixture>, IAsyncLifet
 
         var users = await _idp.ListUsersAsync(new ListUsersRequest { UserPoolId = pid });
         var usernames = users.Users.Select(u => u.Username).ToList();
-        Assert.Contains("user1", usernames);
-        Assert.Contains("user2", usernames);
-        Assert.Contains("user3", usernames);
+        usernames.ShouldContain("user1");
+        usernames.ShouldContain("user2");
+        usernames.ShouldContain("user3");
     }
 
     [Fact]
@@ -282,8 +282,8 @@ public sealed class CognitoTests : IClassFixture<MicroStackFixture>, IAsyncLifet
             UserPoolId = pid,
             Filter = "username = \"bob\"",
         });
-        Assert.Single(resp.Users);
-        Assert.Equal("bob", resp.Users[0].Username);
+        resp.Users.ShouldHaveSingleItem();
+        resp.Users[0].Username.ShouldBe("bob");
     }
 
     [Fact]
@@ -293,9 +293,9 @@ public sealed class CognitoTests : IClassFixture<MicroStackFixture>, IAsyncLifet
         await _idp.AdminCreateUserAsync(new AdminCreateUserRequest { UserPoolId = pid, Username = "kate" });
         await _idp.AdminDeleteUserAsync(new AdminDeleteUserRequest { UserPoolId = pid, Username = "kate" });
 
-        var ex = await Assert.ThrowsAsync<UserNotFoundException>(() =>
+        var ex = await Should.ThrowAsync<UserNotFoundException>(() =>
             _idp.AdminGetUserAsync(new AdminGetUserRequest { UserPoolId = pid, Username = "kate" }));
-        Assert.Equal("UserNotFoundException", ex.ErrorCode);
+        ex.ErrorCode.ShouldBe("UserNotFoundException");
     }
 
     [Fact]
@@ -317,7 +317,7 @@ public sealed class CognitoTests : IClassFixture<MicroStackFixture>, IAsyncLifet
 
         var user = await _idp.AdminGetUserAsync(new AdminGetUserRequest { UserPoolId = pid, Username = "irene" });
         var attrs = user.UserAttributes.ToDictionary(a => a.Name, a => a.Value);
-        Assert.Equal("irene@updated.com", attrs["email"]);
+        attrs["email"].ShouldBe("irene@updated.com");
     }
 
     [Fact]
@@ -328,11 +328,11 @@ public sealed class CognitoTests : IClassFixture<MicroStackFixture>, IAsyncLifet
 
         await _idp.AdminDisableUserAsync(new AdminDisableUserRequest { UserPoolId = pid, Username = "jack" });
         var user1 = await _idp.AdminGetUserAsync(new AdminGetUserRequest { UserPoolId = pid, Username = "jack" });
-        Assert.False(user1.Enabled);
+        user1.Enabled.ShouldBe(false);
 
         await _idp.AdminEnableUserAsync(new AdminEnableUserRequest { UserPoolId = pid, Username = "jack" });
         var user2 = await _idp.AdminGetUserAsync(new AdminGetUserRequest { UserPoolId = pid, Username = "jack" });
-        Assert.True(user2.Enabled);
+        user2.Enabled.ShouldBe(true);
     }
 
     [Fact]
@@ -340,9 +340,9 @@ public sealed class CognitoTests : IClassFixture<MicroStackFixture>, IAsyncLifet
     {
         var pid = (await _idp.CreateUserPoolAsync(new CreateUserPoolRequest { PoolName = "DupUserPool" })).UserPool.Id;
         await _idp.AdminCreateUserAsync(new AdminCreateUserRequest { UserPoolId = pid, Username = "dup" });
-        var ex = await Assert.ThrowsAsync<UsernameExistsException>(() =>
+        var ex = await Should.ThrowAsync<UsernameExistsException>(() =>
             _idp.AdminCreateUserAsync(new AdminCreateUserRequest { UserPoolId = pid, Username = "dup" }));
-        Assert.Equal("UsernameExistsException", ex.ErrorCode);
+        ex.ErrorCode.ShouldBe("UsernameExistsException");
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -380,8 +380,8 @@ public sealed class CognitoTests : IClassFixture<MicroStackFixture>, IAsyncLifet
                 ["PASSWORD"] = "NewPass123!",
             },
         });
-        Assert.NotNull(auth.AuthenticationResult);
-        Assert.NotEmpty(auth.AuthenticationResult.AccessToken);
+        auth.AuthenticationResult.ShouldNotBeNull();
+        auth.AuthenticationResult.AccessToken.ShouldNotBeEmpty();
     }
 
     [Fact]
@@ -404,7 +404,7 @@ public sealed class CognitoTests : IClassFixture<MicroStackFixture>, IAsyncLifet
             Permanent = true,
         });
 
-        var ex = await Assert.ThrowsAsync<NotAuthorizedException>(() =>
+        var ex = await Should.ThrowAsync<NotAuthorizedException>(() =>
             _idp.AdminInitiateAuthAsync(new AdminInitiateAuthRequest
             {
                 UserPoolId = pid,
@@ -416,7 +416,7 @@ public sealed class CognitoTests : IClassFixture<MicroStackFixture>, IAsyncLifet
                     ["PASSWORD"] = "Wrong1!",
                 },
             }));
-        Assert.Equal("NotAuthorizedException", ex.ErrorCode);
+        ex.ErrorCode.ShouldBe("NotAuthorizedException");
     }
 
     [Fact]
@@ -449,10 +449,10 @@ public sealed class CognitoTests : IClassFixture<MicroStackFixture>, IAsyncLifet
                 ["PASSWORD"] = "FrankPass1!",
             },
         });
-        Assert.NotNull(auth.AuthenticationResult);
-        Assert.NotEmpty(auth.AuthenticationResult.AccessToken);
-        Assert.NotEmpty(auth.AuthenticationResult.IdToken);
-        Assert.NotEmpty(auth.AuthenticationResult.RefreshToken);
+        auth.AuthenticationResult.ShouldNotBeNull();
+        auth.AuthenticationResult.AccessToken.ShouldNotBeEmpty();
+        auth.AuthenticationResult.IdToken.ShouldNotBeEmpty();
+        auth.AuthenticationResult.RefreshToken.ShouldNotBeEmpty();
     }
 
     [Fact]
@@ -484,8 +484,8 @@ public sealed class CognitoTests : IClassFixture<MicroStackFixture>, IAsyncLifet
                 ["PASSWORD"] = "TempPwd1!",
             },
         });
-        Assert.Equal(ChallengeNameType.NEW_PASSWORD_REQUIRED, auth.ChallengeName);
-        Assert.NotEmpty(auth.Session);
+        auth.ChallengeName.ShouldBe(ChallengeNameType.NEW_PASSWORD_REQUIRED);
+        auth.Session.ShouldNotBeEmpty();
     }
 
     [Fact]
@@ -518,7 +518,7 @@ public sealed class CognitoTests : IClassFixture<MicroStackFixture>, IAsyncLifet
                 ["PASSWORD"] = "TempPass1!",
             },
         });
-        Assert.Equal(ChallengeNameType.NEW_PASSWORD_REQUIRED, auth.ChallengeName);
+        auth.ChallengeName.ShouldBe(ChallengeNameType.NEW_PASSWORD_REQUIRED);
 
         var result = await _idp.RespondToAuthChallengeAsync(new RespondToAuthChallengeRequest
         {
@@ -531,10 +531,10 @@ public sealed class CognitoTests : IClassFixture<MicroStackFixture>, IAsyncLifet
                 ["NEW_PASSWORD"] = "FinalPass1!",
             },
         });
-        Assert.NotNull(result.AuthenticationResult);
+        result.AuthenticationResult.ShouldNotBeNull();
 
         var user = await _idp.AdminGetUserAsync(new AdminGetUserRequest { UserPoolId = pid, Username = "newpwduser" });
-        Assert.Equal("CONFIRMED", user.UserStatus);
+        user.UserStatus.Value.ShouldBe("CONFIRMED");
     }
 
     [Fact]
@@ -582,13 +582,13 @@ public sealed class CognitoTests : IClassFixture<MicroStackFixture>, IAsyncLifet
                 ["REFRESH_TOKEN"] = auth.AuthenticationResult.RefreshToken,
             },
         });
-        Assert.NotNull(refresh.AuthenticationResult);
+        refresh.AuthenticationResult.ShouldNotBeNull();
 
         var user = await _idp.GetUserAsync(new GetUserRequest
         {
             AccessToken = refresh.AuthenticationResult.AccessToken,
         });
-        Assert.Equal("second", user.Username);
+        user.Username.ShouldBe("second");
     }
 
     [Fact]
@@ -632,10 +632,10 @@ public sealed class CognitoTests : IClassFixture<MicroStackFixture>, IAsyncLifet
                 ["REFRESH_TOKEN"] = auth.AuthenticationResult.RefreshToken,
             },
         });
-        Assert.NotNull(refresh.AuthenticationResult);
-        Assert.NotEmpty(refresh.AuthenticationResult.AccessToken);
+        refresh.AuthenticationResult.ShouldNotBeNull();
+        refresh.AuthenticationResult.AccessToken.ShouldNotBeEmpty();
         // AWS doesn't return a new refresh token
-        Assert.Null(refresh.AuthenticationResult.RefreshToken);
+        refresh.AuthenticationResult.RefreshToken.ShouldBeNull();
     }
 
     [Fact]
@@ -659,7 +659,7 @@ public sealed class CognitoTests : IClassFixture<MicroStackFixture>, IAsyncLifet
         });
         await _idp.AdminDisableUserAsync(new AdminDisableUserRequest { UserPoolId = pid, Username = "disabled" });
 
-        await Assert.ThrowsAsync<NotAuthorizedException>(() =>
+        await Should.ThrowAsync<NotAuthorizedException>(() =>
             _idp.AdminInitiateAuthAsync(new AdminInitiateAuthRequest
             {
                 UserPoolId = pid,
@@ -694,7 +694,7 @@ public sealed class CognitoTests : IClassFixture<MicroStackFixture>, IAsyncLifet
             Password = "GracePass1!",
             UserAttributes = [new AttributeType { Name = "email", Value = "grace@example.com" }],
         });
-        Assert.NotEmpty(resp.UserSub);
+        resp.UserSub.ShouldNotBeEmpty();
 
         await _idp.ConfirmSignUpAsync(new ConfirmSignUpRequest
         {
@@ -704,7 +704,7 @@ public sealed class CognitoTests : IClassFixture<MicroStackFixture>, IAsyncLifet
         });
 
         var user = await _idp.AdminGetUserAsync(new AdminGetUserRequest { UserPoolId = pid, Username = "grace" });
-        Assert.Equal("CONFIRMED", user.UserStatus);
+        user.UserStatus.Value.ShouldBe("CONFIRMED");
     }
 
     [Fact]
@@ -728,10 +728,10 @@ public sealed class CognitoTests : IClassFixture<MicroStackFixture>, IAsyncLifet
             Password = "TestPass1!",
             UserAttributes = [new AttributeType { Name = "email", Value = "test@example.com" }],
         });
-        Assert.False(resp.UserConfirmed);
+        resp.UserConfirmed.ShouldBe(false);
 
         var user = await _idp.AdminGetUserAsync(new AdminGetUserRequest { UserPoolId = pid, Username = "testuser" });
-        Assert.Equal("UNCONFIRMED", user.UserStatus);
+        user.UserStatus.Value.ShouldBe("UNCONFIRMED");
     }
 
     [Fact]
@@ -757,7 +757,7 @@ public sealed class CognitoTests : IClassFixture<MicroStackFixture>, IAsyncLifet
         });
 
         var user = await _idp.AdminGetUserAsync(new AdminGetUserRequest { UserPoolId = pid, Username = "olivia" });
-        Assert.Equal("CONFIRMED", user.UserStatus);
+        user.UserStatus.Value.ShouldBe("CONFIRMED");
     }
 
     [Fact]
@@ -845,10 +845,10 @@ public sealed class CognitoTests : IClassFixture<MicroStackFixture>, IAsyncLifet
                 ["PASSWORD"] = "NewPass2!",
             },
         });
-        Assert.NotNull(auth2.AuthenticationResult);
+        auth2.AuthenticationResult.ShouldNotBeNull();
 
         // Old password fails
-        await Assert.ThrowsAsync<NotAuthorizedException>(() =>
+        await Should.ThrowAsync<NotAuthorizedException>(() =>
             _idp.AdminInitiateAuthAsync(new AdminInitiateAuthRequest
             {
                 UserPoolId = pid,
@@ -903,7 +903,7 @@ public sealed class CognitoTests : IClassFixture<MicroStackFixture>, IAsyncLifet
         {
             AccessToken = auth.AuthenticationResult.AccessToken,
         });
-        Assert.Equal("maya", user.Username);
+        user.Username.ShouldBe("maya");
     }
 
     [Fact]
@@ -955,7 +955,7 @@ public sealed class CognitoTests : IClassFixture<MicroStackFixture>, IAsyncLifet
             Username = "attrupdate",
         });
         var attrs = user.UserAttributes.ToDictionary(a => a.Name, a => a.Value);
-        Assert.Equal("new@example.com", attrs["email"]);
+        attrs["email"].ShouldBe("new@example.com");
     }
 
     [Fact]
@@ -995,7 +995,7 @@ public sealed class CognitoTests : IClassFixture<MicroStackFixture>, IAsyncLifet
             AccessToken = auth.AuthenticationResult.AccessToken,
         });
 
-        await Assert.ThrowsAsync<UserNotFoundException>(() =>
+        await Should.ThrowAsync<UserNotFoundException>(() =>
             _idp.AdminGetUserAsync(new AdminGetUserRequest { UserPoolId = pid, Username = "selfdelete" }));
     }
 
@@ -1098,7 +1098,7 @@ public sealed class CognitoTests : IClassFixture<MicroStackFixture>, IAsyncLifet
         });
 
         var user = await _idp.AdminGetUserAsync(new AdminGetUserRequest { UserPoolId = pid, Username = "resetuser" });
-        Assert.Equal("RESET_REQUIRED", user.UserStatus);
+        user.UserStatus.Value.ShouldBe("RESET_REQUIRED");
     }
 
     [Fact]
@@ -1130,17 +1130,17 @@ public sealed class CognitoTests : IClassFixture<MicroStackFixture>, IAsyncLifet
             GroupName = "admins",
             Description = "Admins",
         });
-        Assert.Equal("admins", createResp.Group.GroupName);
+        createResp.Group.GroupName.ShouldBe("admins");
 
         var group = (await _idp.GetGroupAsync(new GetGroupRequest { UserPoolId = pid, GroupName = "admins" })).Group;
-        Assert.Equal("Admins", group.Description);
+        group.Description.ShouldBe("Admins");
 
         var groups = (await _idp.ListGroupsAsync(new ListGroupsRequest { UserPoolId = pid })).Groups;
-        Assert.Contains(groups, g => g.GroupName == "admins");
+        groups.ShouldContain(g => g.GroupName == "admins");
 
         await _idp.DeleteGroupAsync(new DeleteGroupRequest { UserPoolId = pid, GroupName = "admins" });
         var groups2 = (await _idp.ListGroupsAsync(new ListGroupsRequest { UserPoolId = pid })).Groups;
-        Assert.DoesNotContain(groups2, g => g.GroupName == "admins");
+        groups2.ShouldNotContain(g => g.GroupName == "admins");
     }
 
     [Fact]
@@ -1162,14 +1162,14 @@ public sealed class CognitoTests : IClassFixture<MicroStackFixture>, IAsyncLifet
             UserPoolId = pid,
             GroupName = "editors",
         })).Users;
-        Assert.Contains(members, u => u.Username == "liam");
+        members.ShouldContain(u => u.Username == "liam");
 
         var groupsForUser = (await _idp.AdminListGroupsForUserAsync(new AdminListGroupsForUserRequest
         {
             UserPoolId = pid,
             Username = "liam",
         })).Groups;
-        Assert.Contains(groupsForUser, g => g.GroupName == "editors");
+        groupsForUser.ShouldContain(g => g.GroupName == "editors");
 
         await _idp.AdminRemoveUserFromGroupAsync(new AdminRemoveUserFromGroupRequest
         {
@@ -1183,7 +1183,7 @@ public sealed class CognitoTests : IClassFixture<MicroStackFixture>, IAsyncLifet
             UserPoolId = pid,
             GroupName = "editors",
         })).Users;
-        Assert.DoesNotContain(members2, u => u.Username == "liam");
+        members2.ShouldNotContain(u => u.Username == "liam");
     }
 
     [Fact]
@@ -1209,7 +1209,7 @@ public sealed class CognitoTests : IClassFixture<MicroStackFixture>, IAsyncLifet
             GroupName = "grp",
         })).Users;
         var names = members.Select(u => u.Username).ToHashSet();
-        Assert.Equal(new HashSet<string> { "u1", "u2", "u3" }, names);
+        names.ShouldBe(new HashSet<string> { "u1", "u2", "u3" });
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -1226,14 +1226,14 @@ public sealed class CognitoTests : IClassFixture<MicroStackFixture>, IAsyncLifet
             UserPoolId = pid,
             Domain = "my-test-domain",
         });
-        Assert.NotNull(createResp.CloudFrontDomain);
+        createResp.CloudFrontDomain.ShouldNotBeNull();
 
         var desc = await _idp.DescribeUserPoolDomainAsync(new DescribeUserPoolDomainRequest
         {
             Domain = "my-test-domain",
         });
-        Assert.Equal(pid, desc.DomainDescription.UserPoolId);
-        Assert.Equal("ACTIVE", desc.DomainDescription.Status.Value);
+        desc.DomainDescription.UserPoolId.ShouldBe(pid);
+        desc.DomainDescription.Status.Value.ShouldBe("ACTIVE");
 
         await _idp.DeleteUserPoolDomainAsync(new DeleteUserPoolDomainRequest
         {
@@ -1245,7 +1245,7 @@ public sealed class CognitoTests : IClassFixture<MicroStackFixture>, IAsyncLifet
         {
             Domain = "my-test-domain",
         });
-        Assert.Null(desc2.DomainDescription.UserPoolId);
+        desc2.DomainDescription.UserPoolId.ShouldBeNull();
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -1258,7 +1258,7 @@ public sealed class CognitoTests : IClassFixture<MicroStackFixture>, IAsyncLifet
         var pid = (await _idp.CreateUserPoolAsync(new CreateUserPoolRequest { PoolName = "MfaPool" })).UserPool.Id;
 
         var resp = await _idp.GetUserPoolMfaConfigAsync(new GetUserPoolMfaConfigRequest { UserPoolId = pid });
-        Assert.Equal(UserPoolMfaType.OFF, resp.MfaConfiguration);
+        resp.MfaConfiguration.ShouldBe(UserPoolMfaType.OFF);
 
         await _idp.SetUserPoolMfaConfigAsync(new SetUserPoolMfaConfigRequest
         {
@@ -1268,8 +1268,8 @@ public sealed class CognitoTests : IClassFixture<MicroStackFixture>, IAsyncLifet
         });
 
         var resp2 = await _idp.GetUserPoolMfaConfigAsync(new GetUserPoolMfaConfigRequest { UserPoolId = pid });
-        Assert.Equal(UserPoolMfaType.OPTIONAL, resp2.MfaConfiguration);
-        Assert.True(resp2.SoftwareTokenMfaConfiguration.Enabled);
+        resp2.MfaConfiguration.ShouldBe(UserPoolMfaType.OPTIONAL);
+        resp2.SoftwareTokenMfaConfiguration.Enabled.ShouldBe(true);
     }
 
     [Fact]
@@ -1316,7 +1316,7 @@ public sealed class CognitoTests : IClassFixture<MicroStackFixture>, IAsyncLifet
                 ["PASSWORD"] = "Perm1!",
             },
         });
-        Assert.NotNull(auth.AuthenticationResult);
+        auth.AuthenticationResult.ShouldNotBeNull();
         var accessToken = auth.AuthenticationResult.AccessToken;
 
         // Associate software token
@@ -1324,7 +1324,7 @@ public sealed class CognitoTests : IClassFixture<MicroStackFixture>, IAsyncLifet
         {
             AccessToken = accessToken,
         });
-        Assert.NotEmpty(assoc.SecretCode);
+        assoc.SecretCode.ShouldNotBeEmpty();
 
         // Verify software token
         var verify = await _idp.VerifySoftwareTokenAsync(new VerifySoftwareTokenRequest
@@ -1332,7 +1332,7 @@ public sealed class CognitoTests : IClassFixture<MicroStackFixture>, IAsyncLifet
             AccessToken = accessToken,
             UserCode = "123456",
         });
-        Assert.Equal(VerifySoftwareTokenResponseType.SUCCESS, verify.Status);
+        verify.Status.ShouldBe(VerifySoftwareTokenResponseType.SUCCESS);
 
         // Now auth should return SOFTWARE_TOKEN_MFA challenge
         var auth2 = await _idp.AdminInitiateAuthAsync(new AdminInitiateAuthRequest
@@ -1346,8 +1346,8 @@ public sealed class CognitoTests : IClassFixture<MicroStackFixture>, IAsyncLifet
                 ["PASSWORD"] = "Perm1!",
             },
         });
-        Assert.Equal(ChallengeNameType.SOFTWARE_TOKEN_MFA, auth2.ChallengeName);
-        Assert.NotEmpty(auth2.Session);
+        auth2.ChallengeName.ShouldBe(ChallengeNameType.SOFTWARE_TOKEN_MFA);
+        auth2.Session.ShouldNotBeEmpty();
 
         // Respond with TOTP code
         var result = await _idp.AdminRespondToAuthChallengeAsync(new AdminRespondToAuthChallengeRequest
@@ -1361,8 +1361,8 @@ public sealed class CognitoTests : IClassFixture<MicroStackFixture>, IAsyncLifet
                 ["SOFTWARE_TOKEN_MFA_CODE"] = "123456",
             },
         });
-        Assert.NotNull(result.AuthenticationResult);
-        Assert.NotEmpty(result.AuthenticationResult.AccessToken);
+        result.AuthenticationResult.ShouldNotBeNull();
+        result.AuthenticationResult.AccessToken.ShouldNotBeEmpty();
     }
 
     [Fact]
@@ -1393,7 +1393,7 @@ public sealed class CognitoTests : IClassFixture<MicroStackFixture>, IAsyncLifet
             AuthFlow = AuthFlowType.ADMIN_USER_PASSWORD_AUTH,
             AuthParameters = new Dictionary<string, string> { ["USERNAME"] = "no-mfa-user", ["PASSWORD"] = "Perm1!" },
         });
-        Assert.NotNull(auth.AuthenticationResult); // no challenge
+        auth.AuthenticationResult.ShouldNotBeNull(); // no challenge
 
         // User with MFA enrolled
         await _idp.AdminCreateUserAsync(new AdminCreateUserRequest { UserPoolId = pid, Username = "mfa-user", TemporaryPassword = "Tmp1!" });
@@ -1412,7 +1412,7 @@ public sealed class CognitoTests : IClassFixture<MicroStackFixture>, IAsyncLifet
             AuthFlow = AuthFlowType.ADMIN_USER_PASSWORD_AUTH,
             AuthParameters = new Dictionary<string, string> { ["USERNAME"] = "mfa-user", ["PASSWORD"] = "Perm1!" },
         });
-        Assert.Equal(ChallengeNameType.SOFTWARE_TOKEN_MFA, auth2.ChallengeName);
+        auth2.ChallengeName.ShouldBe(ChallengeNameType.SOFTWARE_TOKEN_MFA);
     }
 
     [Fact]
@@ -1434,8 +1434,8 @@ public sealed class CognitoTests : IClassFixture<MicroStackFixture>, IAsyncLifet
         });
 
         var u = await _idp.AdminGetUserAsync(new AdminGetUserRequest { UserPoolId = pid, Username = "mfa-check" });
-        Assert.Empty(u.UserMFASettingList ?? []);
-        Assert.True(string.IsNullOrEmpty(u.PreferredMfaSetting));
+        u.UserMFASettingList.ShouldBeEmpty();
+        string.IsNullOrEmpty(u.PreferredMfaSetting).ShouldBe(true);
 
         await _idp.AdminSetUserMFAPreferenceAsync(new AdminSetUserMFAPreferenceRequest
         {
@@ -1445,8 +1445,8 @@ public sealed class CognitoTests : IClassFixture<MicroStackFixture>, IAsyncLifet
         });
 
         var u2 = await _idp.AdminGetUserAsync(new AdminGetUserRequest { UserPoolId = pid, Username = "mfa-check" });
-        Assert.Contains("SOFTWARE_TOKEN_MFA", u2.UserMFASettingList);
-        Assert.Equal("SOFTWARE_TOKEN_MFA", u2.PreferredMfaSetting);
+        u2.UserMFASettingList.ShouldContain("SOFTWARE_TOKEN_MFA");
+        u2.PreferredMfaSetting.ShouldBe("SOFTWARE_TOKEN_MFA");
     }
 
     [Fact]
@@ -1478,8 +1478,8 @@ public sealed class CognitoTests : IClassFixture<MicroStackFixture>, IAsyncLifet
         });
 
         var u = await _idp.AdminGetUserAsync(new AdminGetUserRequest { UserPoolId = pid, Username = "self-enroll" });
-        Assert.Contains("SOFTWARE_TOKEN_MFA", u.UserMFASettingList);
-        Assert.Equal("SOFTWARE_TOKEN_MFA", u.PreferredMfaSetting);
+        u.UserMFASettingList.ShouldContain("SOFTWARE_TOKEN_MFA");
+        u.PreferredMfaSetting.ShouldBe("SOFTWARE_TOKEN_MFA");
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -1499,7 +1499,7 @@ public sealed class CognitoTests : IClassFixture<MicroStackFixture>, IAsyncLifet
         });
 
         var tags = (await _idp.ListTagsForResourceAsync(new ListTagsForResourceRequest { ResourceArn = arn })).Tags;
-        Assert.Equal("microstack", tags["project"]);
+        tags["project"].ShouldBe("microstack");
 
         await _idp.UntagResourceAsync(new UntagResourceRequest
         {
@@ -1508,7 +1508,7 @@ public sealed class CognitoTests : IClassFixture<MicroStackFixture>, IAsyncLifet
         });
 
         var tags2 = (await _idp.ListTagsForResourceAsync(new ListTagsForResourceRequest { ResourceArn = arn })).Tags;
-        Assert.DoesNotContain("project", tags2.Keys);
+        tags2.Keys.ShouldNotContain("project");
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -1524,15 +1524,15 @@ public sealed class CognitoTests : IClassFixture<MicroStackFixture>, IAsyncLifet
             AllowUnauthenticatedIdentities = false,
         });
         var iid = resp.IdentityPoolId;
-        Assert.Equal("TestIdPool", resp.IdentityPoolName);
-        Assert.StartsWith("us-east-1:", iid);
+        resp.IdentityPoolName.ShouldBe("TestIdPool");
+        iid.ShouldStartWith("us-east-1:");
 
         var desc = await _identity.DescribeIdentityPoolAsync(new DescribeIdentityPoolRequest { IdentityPoolId = iid });
-        Assert.Equal(iid, desc.IdentityPoolId);
-        Assert.Equal("TestIdPool", desc.IdentityPoolName);
+        desc.IdentityPoolId.ShouldBe(iid);
+        desc.IdentityPoolName.ShouldBe("TestIdPool");
 
         var pools = (await _identity.ListIdentityPoolsAsync(new ListIdentityPoolsRequest { MaxResults = 60 })).IdentityPools;
-        Assert.Contains(pools, p => p.IdentityPoolId == iid);
+        pools.ShouldContain(p => p.IdentityPoolId == iid);
 
         await _identity.UpdateIdentityPoolAsync(new UpdateIdentityPoolRequest
         {
@@ -1541,11 +1541,11 @@ public sealed class CognitoTests : IClassFixture<MicroStackFixture>, IAsyncLifet
             AllowUnauthenticatedIdentities = true,
         });
         var desc2 = await _identity.DescribeIdentityPoolAsync(new DescribeIdentityPoolRequest { IdentityPoolId = iid });
-        Assert.True(desc2.AllowUnauthenticatedIdentities);
+        desc2.AllowUnauthenticatedIdentities.ShouldBe(true);
 
         await _identity.DeleteIdentityPoolAsync(new DeleteIdentityPoolRequest { IdentityPoolId = iid });
         var pools2 = (await _identity.ListIdentityPoolsAsync(new ListIdentityPoolsRequest { MaxResults = 60 })).IdentityPools;
-        Assert.DoesNotContain(pools2, p => p.IdentityPoolId == iid);
+        pools2.ShouldNotContain(p => p.IdentityPoolId == iid);
     }
 
     [Fact]
@@ -1564,16 +1564,16 @@ public sealed class CognitoTests : IClassFixture<MicroStackFixture>, IAsyncLifet
             AccountId = "000000000000",
         });
         var identityId = idResp.IdentityId;
-        Assert.NotEmpty(identityId);
+        identityId.ShouldNotBeEmpty();
 
         var creds = await _identity.GetCredentialsForIdentityAsync(new GetCredentialsForIdentityRequest
         {
             IdentityId = identityId,
         });
-        Assert.Equal(identityId, creds.IdentityId);
-        Assert.StartsWith("ASIA", creds.Credentials.AccessKeyId);
-        Assert.NotEmpty(creds.Credentials.SecretKey);
-        Assert.NotEmpty(creds.Credentials.SessionToken);
+        creds.IdentityId.ShouldBe(identityId);
+        creds.Credentials.AccessKeyId.ShouldStartWith("ASIA");
+        creds.Credentials.SecretKey.ShouldNotBeEmpty();
+        creds.Credentials.SessionToken.ShouldNotBeEmpty();
     }
 
     [Fact]
@@ -1597,8 +1597,8 @@ public sealed class CognitoTests : IClassFixture<MicroStackFixture>, IAsyncLifet
         });
 
         var roles = await _identity.GetIdentityPoolRolesAsync(new GetIdentityPoolRolesRequest { IdentityPoolId = iid });
-        Assert.Equal("arn:aws:iam::000000000000:role/AuthRole", roles.Roles["authenticated"]);
-        Assert.Equal("arn:aws:iam::000000000000:role/UnauthRole", roles.Roles["unauthenticated"]);
+        roles.Roles["authenticated"].ShouldBe("arn:aws:iam::000000000000:role/AuthRole");
+        roles.Roles["unauthenticated"].ShouldBe("arn:aws:iam::000000000000:role/UnauthRole");
     }
 
     [Fact]
@@ -1620,8 +1620,8 @@ public sealed class CognitoTests : IClassFixture<MicroStackFixture>, IAsyncLifet
             MaxResults = 60,
         })).Identities;
         var ids = identities.Select(i => i.IdentityId).ToList();
-        Assert.Contains(id1, ids);
-        Assert.Contains(id2, ids);
+        ids.ShouldContain(id1);
+        ids.ShouldContain(id2);
     }
 
     [Fact]
@@ -1636,9 +1636,9 @@ public sealed class CognitoTests : IClassFixture<MicroStackFixture>, IAsyncLifet
         var identityId = (await _identity.GetIdAsync(new GetIdRequest { IdentityPoolId = iid, AccountId = "000000000000" })).IdentityId;
 
         var tokenResp = await _identity.GetOpenIdTokenAsync(new GetOpenIdTokenRequest { IdentityId = identityId });
-        Assert.Equal(identityId, tokenResp.IdentityId);
+        tokenResp.IdentityId.ShouldBe(identityId);
         var parts = tokenResp.Token.Split('.');
-        Assert.Equal(3, parts.Length);
+        parts.Length.ShouldBe(3);
     }
 
     [Fact]
@@ -1653,7 +1653,7 @@ public sealed class CognitoTests : IClassFixture<MicroStackFixture>, IAsyncLifet
         var identityId = (await _identity.GetIdAsync(new GetIdRequest { IdentityPoolId = iid, AccountId = "000000000000" })).IdentityId;
 
         var desc = await _identity.DescribeIdentityAsync(new DescribeIdentityRequest { IdentityId = identityId });
-        Assert.Equal(identityId, desc.IdentityId);
+        desc.IdentityId.ShouldBe(identityId);
     }
 
     [Fact]
@@ -1674,7 +1674,7 @@ public sealed class CognitoTests : IClassFixture<MicroStackFixture>, IAsyncLifet
             DeveloperProviderName = "login.myapp",
             IdentityPoolId = iid,
         });
-        Assert.NotEmpty(result.IdentityId);
+        result.IdentityId.ShouldNotBeEmpty();
     }
 
     [Fact]
@@ -1697,10 +1697,10 @@ public sealed class CognitoTests : IClassFixture<MicroStackFixture>, IAsyncLifet
             IdentityId = identityId,
         });
         var c = creds.Credentials;
-        Assert.NotEmpty(c.SecretKey);
-        Assert.StartsWith("ASIA", c.AccessKeyId);
-        Assert.NotEmpty(c.SessionToken);
-        Assert.True(c.Expiration > DateTime.UtcNow);
+        c.SecretKey.ShouldNotBeEmpty();
+        c.AccessKeyId.ShouldStartWith("ASIA");
+        c.SessionToken.ShouldNotBeEmpty();
+        (c.Expiration > DateTime.UtcNow).ShouldBe(true);
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -1714,15 +1714,15 @@ public sealed class CognitoTests : IClassFixture<MicroStackFixture>, IAsyncLifet
         var poolId = pool.Id;
 
         var resp = await _fixture.HttpClient.GetAsync($"/{poolId}/.well-known/jwks.json");
-        Assert.Equal(System.Net.HttpStatusCode.OK, resp.StatusCode);
+        resp.StatusCode.ShouldBe(System.Net.HttpStatusCode.OK);
 
         var json = await resp.Content.ReadAsStringAsync();
         using var doc = System.Text.Json.JsonDocument.Parse(json);
-        Assert.True(doc.RootElement.TryGetProperty("keys", out var keys));
-        Assert.True(keys.GetArrayLength() >= 1);
+        doc.RootElement.TryGetProperty("keys", out var keys).ShouldBe(true);
+        (keys.GetArrayLength() >= 1).ShouldBe(true);
         var key = keys[0];
-        Assert.Equal("RSA", key.GetProperty("kty").GetString());
-        Assert.Equal("RS256", key.GetProperty("alg").GetString());
+        key.GetProperty("kty").GetString().ShouldBe("RSA");
+        key.GetProperty("alg").GetString().ShouldBe("RS256");
     }
 
     [Fact]
@@ -1732,13 +1732,13 @@ public sealed class CognitoTests : IClassFixture<MicroStackFixture>, IAsyncLifet
         var poolId = pool.Id;
 
         var resp = await _fixture.HttpClient.GetAsync($"/{poolId}/.well-known/openid-configuration");
-        Assert.Equal(System.Net.HttpStatusCode.OK, resp.StatusCode);
+        resp.StatusCode.ShouldBe(System.Net.HttpStatusCode.OK);
 
         var json = await resp.Content.ReadAsStringAsync();
         using var doc = System.Text.Json.JsonDocument.Parse(json);
-        Assert.True(doc.RootElement.TryGetProperty("issuer", out var issuer));
-        Assert.Contains(poolId, issuer.GetString());
-        Assert.True(doc.RootElement.TryGetProperty("jwks_uri", out _));
-        Assert.True(doc.RootElement.TryGetProperty("token_endpoint", out _));
+        doc.RootElement.TryGetProperty("issuer", out var issuer).ShouldBe(true);
+        issuer.GetString()!.ShouldContain(poolId);
+        doc.RootElement.TryGetProperty("jwks_uri", out _).ShouldBe(true);
+        doc.RootElement.TryGetProperty("token_endpoint", out _).ShouldBe(true);
     }
 }

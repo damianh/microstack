@@ -63,18 +63,18 @@ public sealed class SecretsManagerTests : IClassFixture<MicroStackFixture>, IAsy
             SecretString = "{\"user\":\"admin\",\"pass\":\"hunter2\"}",
         });
 
-        Assert.Contains("test/secret1", create.ARN);
-        Assert.Equal("test/secret1", create.Name);
-        Assert.NotEmpty(create.VersionId);
+        create.ARN.ShouldContain("test/secret1");
+        create.Name.ShouldBe("test/secret1");
+        create.VersionId.ShouldNotBeEmpty();
 
         var get = await _sm.GetSecretValueAsync(new GetSecretValueRequest
         {
             SecretId = "test/secret1",
         });
 
-        Assert.Equal("{\"user\":\"admin\",\"pass\":\"hunter2\"}", get.SecretString);
-        Assert.Equal(create.VersionId, get.VersionId);
-        Assert.Contains("AWSCURRENT", get.VersionStages);
+        get.SecretString.ShouldBe("{\"user\":\"admin\",\"pass\":\"hunter2\"}");
+        get.VersionId.ShouldBe(create.VersionId);
+        get.VersionStages.ShouldContain("AWSCURRENT");
     }
 
     [Fact]
@@ -86,20 +86,20 @@ public sealed class SecretsManagerTests : IClassFixture<MicroStackFixture>, IAsy
             SecretString = "value1",
         });
 
-        var ex = await Assert.ThrowsAsync<ResourceExistsException>(() =>
+        var ex = await Should.ThrowAsync<ResourceExistsException>(() =>
             _sm.CreateSecretAsync(new CreateSecretRequest
             {
                 Name = "dup-secret",
                 SecretString = "value2",
             }));
 
-        Assert.Contains("already exists", ex.Message);
+        ex.Message.ShouldContain("already exists");
     }
 
     [Fact]
     public async Task GetSecretValueNotFoundReturnsError()
     {
-        await Assert.ThrowsAsync<ResourceNotFoundException>(() =>
+        await Should.ThrowAsync<ResourceNotFoundException>(() =>
             _sm.GetSecretValueAsync(new GetSecretValueRequest
             {
                 SecretId = "nonexistent-secret",
@@ -123,7 +123,7 @@ public sealed class SecretsManagerTests : IClassFixture<MicroStackFixture>, IAsy
             VersionId = create.VersionId,
         });
 
-        Assert.Equal("original", get.SecretString);
+        get.SecretString.ShouldBe("original");
     }
 
     [Fact]
@@ -135,7 +135,7 @@ public sealed class SecretsManagerTests : IClassFixture<MicroStackFixture>, IAsy
             SecretString = "val",
         });
 
-        await Assert.ThrowsAsync<ResourceNotFoundException>(() =>
+        await Should.ThrowAsync<ResourceNotFoundException>(() =>
             _sm.GetSecretValueAsync(new GetSecretValueRequest
             {
                 SecretId = "invalid-vid-test",
@@ -160,11 +160,11 @@ public sealed class SecretsManagerTests : IClassFixture<MicroStackFixture>, IAsy
             RecoveryWindowInDays = 7,
         });
 
-        Assert.Equal("del-restore", del.Name);
-        Assert.NotEqual(default, del.DeletionDate);
+        del.Name.ShouldBe("del-restore");
+        del.DeletionDate.ShouldNotBe(default);
 
         // Cannot get value while scheduled for deletion
-        await Assert.ThrowsAsync<InvalidRequestException>(() =>
+        await Should.ThrowAsync<InvalidRequestException>(() =>
             _sm.GetSecretValueAsync(new GetSecretValueRequest { SecretId = "del-restore" }));
 
         // Restore
@@ -173,7 +173,7 @@ public sealed class SecretsManagerTests : IClassFixture<MicroStackFixture>, IAsy
             SecretId = "del-restore",
         });
 
-        Assert.Equal("del-restore", restore.Name);
+        restore.Name.ShouldBe("del-restore");
 
         // Can get value again
         var get = await _sm.GetSecretValueAsync(new GetSecretValueRequest
@@ -181,7 +181,7 @@ public sealed class SecretsManagerTests : IClassFixture<MicroStackFixture>, IAsy
             SecretId = "del-restore",
         });
 
-        Assert.Equal("val", get.SecretString);
+        get.SecretString.ShouldBe("val");
     }
 
     [Fact]
@@ -199,7 +199,7 @@ public sealed class SecretsManagerTests : IClassFixture<MicroStackFixture>, IAsy
             ForceDeleteWithoutRecovery = true,
         });
 
-        await Assert.ThrowsAsync<ResourceNotFoundException>(() =>
+        await Should.ThrowAsync<ResourceNotFoundException>(() =>
             _sm.GetSecretValueAsync(new GetSecretValueRequest { SecretId = "force-del" }));
     }
 
@@ -212,7 +212,7 @@ public sealed class SecretsManagerTests : IClassFixture<MicroStackFixture>, IAsy
             SecretString = "val",
         });
 
-        await Assert.ThrowsAsync<InvalidParameterException>(() =>
+        await Should.ThrowAsync<InvalidParameterException>(() =>
             _sm.DeleteSecretAsync(new DeleteSecretRequest
             {
                 SecretId = "mutual-excl",
@@ -230,7 +230,7 @@ public sealed class SecretsManagerTests : IClassFixture<MicroStackFixture>, IAsy
             SecretString = "val",
         });
 
-        await Assert.ThrowsAsync<InvalidParameterException>(() =>
+        await Should.ThrowAsync<InvalidParameterException>(() =>
             _sm.DeleteSecretAsync(new DeleteSecretRequest
             {
                 SecretId = "bad-window",
@@ -247,7 +247,7 @@ public sealed class SecretsManagerTests : IClassFixture<MicroStackFixture>, IAsy
             SecretString = "val",
         });
 
-        await Assert.ThrowsAsync<InvalidRequestException>(() =>
+        await Should.ThrowAsync<InvalidRequestException>(() =>
             _sm.RestoreSecretAsync(new RestoreSecretRequest { SecretId = "not-deleted" }));
     }
 
@@ -268,14 +268,14 @@ public sealed class SecretsManagerTests : IClassFixture<MicroStackFixture>, IAsy
             Description = "new description",
         });
 
-        Assert.Equal("update-desc", update.Name);
+        update.Name.ShouldBe("update-desc");
 
         var desc = await _sm.DescribeSecretAsync(new DescribeSecretRequest
         {
             SecretId = "update-desc",
         });
 
-        Assert.Equal("new description", desc.Description);
+        desc.Description.ShouldBe("new description");
     }
 
     [Fact]
@@ -293,14 +293,14 @@ public sealed class SecretsManagerTests : IClassFixture<MicroStackFixture>, IAsy
             SecretString = "updated",
         });
 
-        Assert.NotEqual(create.VersionId, update.VersionId);
+        update.VersionId.ShouldNotBe(create.VersionId);
 
         var get = await _sm.GetSecretValueAsync(new GetSecretValueRequest
         {
             SecretId = "update-val",
         });
 
-        Assert.Equal("updated", get.SecretString);
+        get.SecretString.ShouldBe("updated");
     }
 
     // -- DescribeSecret --------------------------------------------------------
@@ -321,14 +321,14 @@ public sealed class SecretsManagerTests : IClassFixture<MicroStackFixture>, IAsy
             SecretId = "describe-me",
         });
 
-        Assert.Equal("describe-me", desc.Name);
-        Assert.Equal("test desc", desc.Description);
-        Assert.Contains("describe-me", desc.ARN);
-        Assert.NotEqual(default, desc.CreatedDate);
-        Assert.Single(desc.Tags);
-        Assert.Equal("env", desc.Tags[0].Key);
-        Assert.Equal("test", desc.Tags[0].Value);
-        Assert.NotEmpty(desc.VersionIdsToStages);
+        desc.Name.ShouldBe("describe-me");
+        desc.Description.ShouldBe("test desc");
+        desc.ARN.ShouldContain("describe-me");
+        desc.CreatedDate.ShouldNotBe(default);
+        desc.Tags.ShouldHaveSingleItem();
+        desc.Tags[0].Key.ShouldBe("env");
+        desc.Tags[0].Value.ShouldBe("test");
+        desc.VersionIdsToStages.ShouldNotBeEmpty();
     }
 
     // -- PutSecretValue --------------------------------------------------------
@@ -348,15 +348,15 @@ public sealed class SecretsManagerTests : IClassFixture<MicroStackFixture>, IAsy
             SecretString = "v2",
         });
 
-        Assert.NotEqual(create.VersionId, put.VersionId);
-        Assert.Contains("AWSCURRENT", put.VersionStages);
+        put.VersionId.ShouldNotBe(create.VersionId);
+        put.VersionStages.ShouldContain("AWSCURRENT");
 
         var get = await _sm.GetSecretValueAsync(new GetSecretValueRequest
         {
             SecretId = "put-val",
         });
 
-        Assert.Equal("v2", get.SecretString);
+        get.SecretString.ShouldBe("v2");
     }
 
     [Fact]
@@ -375,7 +375,7 @@ public sealed class SecretsManagerTests : IClassFixture<MicroStackFixture>, IAsy
             VersionStages = ["AWSPENDING"],
         });
 
-        Assert.Contains("AWSPENDING", put.VersionStages);
+        put.VersionStages.ShouldContain("AWSPENDING");
 
         // AWSCURRENT still returns v1
         var get = await _sm.GetSecretValueAsync(new GetSecretValueRequest
@@ -383,7 +383,7 @@ public sealed class SecretsManagerTests : IClassFixture<MicroStackFixture>, IAsy
             SecretId = "put-pending",
         });
 
-        Assert.Equal("v1", get.SecretString);
+        get.SecretString.ShouldBe("v1");
     }
 
     // -- ListSecrets -----------------------------------------------------------
@@ -405,9 +405,9 @@ public sealed class SecretsManagerTests : IClassFixture<MicroStackFixture>, IAsy
 
         var list = await _sm.ListSecretsAsync(new ListSecretsRequest());
 
-        Assert.True(list.SecretList.Count >= 2);
-        Assert.Contains(list.SecretList, s => s.Name == "list-a");
-        Assert.Contains(list.SecretList, s => s.Name == "list-b");
+        (list.SecretList.Count >= 2).ShouldBe(true);
+        list.SecretList.ShouldContain(s => s.Name == "list-a");
+        list.SecretList.ShouldContain(s => s.Name == "list-b");
     }
 
     [Fact]
@@ -430,8 +430,8 @@ public sealed class SecretsManagerTests : IClassFixture<MicroStackFixture>, IAsy
             Filters = [new Filter { Key = FilterNameStringType.Name, Values = ["alpha"] }],
         });
 
-        Assert.Single(list.SecretList);
-        Assert.Equal("filtered-alpha", list.SecretList[0].Name);
+        list.SecretList.ShouldHaveSingleItem();
+        list.SecretList[0].Name.ShouldBe("filtered-alpha");
     }
 
     [Fact]
@@ -450,7 +450,7 @@ public sealed class SecretsManagerTests : IClassFixture<MicroStackFixture>, IAsy
         });
 
         var list = await _sm.ListSecretsAsync(new ListSecretsRequest());
-        Assert.DoesNotContain(list.SecretList, s => s.Name == "list-deleted");
+        list.SecretList.ShouldNotContain(s => s.Name == "list-deleted");
     }
 
     // -- TagResource / UntagResource -------------------------------------------
@@ -483,7 +483,7 @@ public sealed class SecretsManagerTests : IClassFixture<MicroStackFixture>, IAsy
             SecretId = "tag-test",
         });
 
-        Assert.Equal(2, desc2.Tags.Count);
+        desc2.Tags.Count.ShouldBe(2);
 
         await _sm.UntagResourceAsync(new UntagResourceRequest
         {
@@ -496,8 +496,8 @@ public sealed class SecretsManagerTests : IClassFixture<MicroStackFixture>, IAsy
             SecretId = "tag-test",
         });
 
-        Assert.Single(desc3.Tags);
-        Assert.Equal("env", desc3.Tags[0].Key);
+        desc3.Tags.ShouldHaveSingleItem();
+        desc3.Tags[0].Key.ShouldBe("env");
     }
 
     // -- ListSecretVersionIds --------------------------------------------------
@@ -522,8 +522,8 @@ public sealed class SecretsManagerTests : IClassFixture<MicroStackFixture>, IAsy
             SecretId = "versions-list",
         });
 
-        Assert.True(list.Versions.Count >= 2);
-        Assert.Equal("versions-list", list.Name);
+        (list.Versions.Count >= 2).ShouldBe(true);
+        list.Name.ShouldBe("versions-list");
     }
 
     // -- UpdateSecretVersionStage ----------------------------------------------
@@ -558,7 +558,7 @@ public sealed class SecretsManagerTests : IClassFixture<MicroStackFixture>, IAsy
             SecretId = "stage-move",
         });
 
-        Assert.Equal("v1", get.SecretString);
+        get.SecretString.ShouldBe("v1");
     }
 
     // -- RotateSecret ----------------------------------------------------------
@@ -577,8 +577,8 @@ public sealed class SecretsManagerTests : IClassFixture<MicroStackFixture>, IAsy
             SecretId = "rotate-test",
         });
 
-        Assert.NotEmpty(rotate.VersionId);
-        Assert.Equal("rotate-test", rotate.Name);
+        rotate.VersionId.ShouldNotBeEmpty();
+        rotate.Name.ShouldBe("rotate-test");
 
         // After rotation, AWSCURRENT should still return the value
         var get = await _sm.GetSecretValueAsync(new GetSecretValueRequest
@@ -586,7 +586,7 @@ public sealed class SecretsManagerTests : IClassFixture<MicroStackFixture>, IAsy
             SecretId = "rotate-test",
         });
 
-        Assert.Equal("original", get.SecretString);
+        get.SecretString.ShouldBe("original");
     }
 
     // -- GetRandomPassword -----------------------------------------------------
@@ -595,7 +595,7 @@ public sealed class SecretsManagerTests : IClassFixture<MicroStackFixture>, IAsy
     public async Task GetRandomPasswordDefault()
     {
         var resp = await _sm.GetRandomPasswordAsync(new GetRandomPasswordRequest());
-        Assert.Equal(32, resp.RandomPassword.Length);
+        resp.RandomPassword.Length.ShouldBe(32);
     }
 
     [Fact]
@@ -606,7 +606,7 @@ public sealed class SecretsManagerTests : IClassFixture<MicroStackFixture>, IAsy
             PasswordLength = 64,
         });
 
-        Assert.Equal(64, resp.RandomPassword.Length);
+        resp.RandomPassword.Length.ShouldBe(64);
     }
 
     [Fact]
@@ -618,7 +618,7 @@ public sealed class SecretsManagerTests : IClassFixture<MicroStackFixture>, IAsy
             ExcludeNumbers = true,
         });
 
-        Assert.DoesNotContain(resp.RandomPassword, c => char.IsDigit(c));
+        resp.RandomPassword.ShouldNotContain(c => char.IsDigit(c));
     }
 
     [Fact]
@@ -630,7 +630,7 @@ public sealed class SecretsManagerTests : IClassFixture<MicroStackFixture>, IAsy
             ExcludeUppercase = true,
         });
 
-        Assert.DoesNotContain(resp.RandomPassword, c => char.IsUpper(c));
+        resp.RandomPassword.ShouldNotContain(c => char.IsUpper(c));
     }
 
     [Fact]
@@ -642,7 +642,7 @@ public sealed class SecretsManagerTests : IClassFixture<MicroStackFixture>, IAsy
             ExcludeLowercase = true,
         });
 
-        Assert.DoesNotContain(resp.RandomPassword, c => char.IsLower(c));
+        resp.RandomPassword.ShouldNotContain(c => char.IsLower(c));
     }
 
     [Fact]
@@ -655,7 +655,7 @@ public sealed class SecretsManagerTests : IClassFixture<MicroStackFixture>, IAsy
         });
 
         var punctuation = "!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~";
-        Assert.DoesNotContain(resp.RandomPassword, c => punctuation.Contains(c));
+        resp.RandomPassword.ShouldNotContain(c => punctuation.Contains(c));
     }
 
     [Fact]
@@ -668,7 +668,7 @@ public sealed class SecretsManagerTests : IClassFixture<MicroStackFixture>, IAsy
             IncludeSpace = true,
         });
 
-        Assert.Equal(4096, resp.RandomPassword.Length);
+        resp.RandomPassword.Length.ShouldBe(4096);
     }
 
     [Fact]
@@ -681,16 +681,16 @@ public sealed class SecretsManagerTests : IClassFixture<MicroStackFixture>, IAsy
             RequireEachIncludedType = true,
         });
 
-        Assert.Equal(20, resp.RandomPassword.Length);
-        Assert.Contains(resp.RandomPassword, c => char.IsLower(c));
-        Assert.Contains(resp.RandomPassword, c => char.IsUpper(c));
-        Assert.Contains(resp.RandomPassword, c => char.IsDigit(c));
+        resp.RandomPassword.Length.ShouldBe(20);
+        resp.RandomPassword.ShouldContain(c => char.IsLower(c));
+        resp.RandomPassword.ShouldContain(c => char.IsUpper(c));
+        resp.RandomPassword.ShouldContain(c => char.IsDigit(c));
     }
 
     [Fact]
     public async Task GetRandomPasswordAllExcludedFails()
     {
-        await Assert.ThrowsAsync<InvalidParameterException>(() =>
+        await Should.ThrowAsync<InvalidParameterException>(() =>
             _sm.GetRandomPasswordAsync(new GetRandomPasswordRequest
             {
                 PasswordLength = 32,
@@ -710,7 +710,7 @@ public sealed class SecretsManagerTests : IClassFixture<MicroStackFixture>, IAsy
             ExcludeCharacters = "abcABC123",
         });
 
-        Assert.DoesNotContain(resp.RandomPassword, c => "abcABC123".Contains(c));
+        resp.RandomPassword.ShouldNotContain(c => "abcABC123".Contains(c));
     }
 
     // -- ReplicateSecretToRegions ----------------------------------------------
@@ -730,9 +730,9 @@ public sealed class SecretsManagerTests : IClassFixture<MicroStackFixture>, IAsy
             AddReplicaRegions = [new ReplicaRegionType { Region = "eu-west-1" }],
         });
 
-        Assert.Single(resp.ReplicationStatus);
-        Assert.Equal("eu-west-1", resp.ReplicationStatus[0].Region);
-        Assert.Equal("InSync", resp.ReplicationStatus[0].Status);
+        resp.ReplicationStatus.ShouldHaveSingleItem();
+        resp.ReplicationStatus[0].Region.ShouldBe("eu-west-1");
+        resp.ReplicationStatus[0].Status.Value.ShouldBe("InSync");
     }
 
     // -- Resource Policies -----------------------------------------------------
@@ -757,7 +757,7 @@ public sealed class SecretsManagerTests : IClassFixture<MicroStackFixture>, IAsy
             SecretId = "policy-test",
         });
 
-        Assert.Equal("{\"Version\":\"2012-10-17\",\"Statement\":[]}", get.ResourcePolicy);
+        get.ResourcePolicy.ShouldBe("{\"Version\":\"2012-10-17\",\"Statement\":[]}");
 
         await _sm.DeleteResourcePolicyAsync(new DeleteResourcePolicyRequest
         {
@@ -769,7 +769,7 @@ public sealed class SecretsManagerTests : IClassFixture<MicroStackFixture>, IAsy
             SecretId = "policy-test",
         });
 
-        Assert.Null(get2.ResourcePolicy);
+        get2.ResourcePolicy.ShouldBeNull();
     }
 
     [Fact]
@@ -781,8 +781,8 @@ public sealed class SecretsManagerTests : IClassFixture<MicroStackFixture>, IAsy
             SecretId = "anything",
         });
 
-        Assert.True(resp.PolicyValidationPassed);
-        Assert.Empty(resp.ValidationErrors);
+        resp.PolicyValidationPassed.ShouldBe(true);
+        resp.ValidationErrors.ShouldBeEmpty();
     }
 
     // -- BatchGetSecretValue ---------------------------------------------------
@@ -807,8 +807,8 @@ public sealed class SecretsManagerTests : IClassFixture<MicroStackFixture>, IAsy
             SecretIdList = ["batch-a", "batch-b"],
         });
 
-        Assert.Equal(2, resp.SecretValues.Count);
-        Assert.Empty(resp.Errors);
+        resp.SecretValues.Count.ShouldBe(2);
+        resp.Errors.ShouldBeEmpty();
     }
 
     [Fact]
@@ -825,9 +825,9 @@ public sealed class SecretsManagerTests : IClassFixture<MicroStackFixture>, IAsy
             SecretIdList = ["batch-ok", "nonexistent"],
         });
 
-        Assert.Single(resp.SecretValues);
-        Assert.Single(resp.Errors);
-        Assert.Equal("nonexistent", resp.Errors[0].SecretId);
+        resp.SecretValues.ShouldHaveSingleItem();
+        resp.Errors.ShouldHaveSingleItem();
+        resp.Errors[0].SecretId.ShouldBe("nonexistent");
     }
 
     // -- Resolve by ARN -------------------------------------------------------
@@ -846,7 +846,7 @@ public sealed class SecretsManagerTests : IClassFixture<MicroStackFixture>, IAsy
             SecretId = create.ARN,
         });
 
-        Assert.Equal("by-arn", get.SecretString);
+        get.SecretString.ShouldBe("by-arn");
     }
 
     // -- Deleted secret edge cases ---------------------------------------------
@@ -866,7 +866,7 @@ public sealed class SecretsManagerTests : IClassFixture<MicroStackFixture>, IAsy
             RecoveryWindowInDays = 7,
         });
 
-        await Assert.ThrowsAsync<InvalidRequestException>(() =>
+        await Should.ThrowAsync<InvalidRequestException>(() =>
             _sm.UpdateSecretAsync(new UpdateSecretRequest
             {
                 SecretId = "del-update",
@@ -889,7 +889,7 @@ public sealed class SecretsManagerTests : IClassFixture<MicroStackFixture>, IAsy
             RecoveryWindowInDays = 7,
         });
 
-        await Assert.ThrowsAsync<InvalidRequestException>(() =>
+        await Should.ThrowAsync<InvalidRequestException>(() =>
             _sm.PutSecretValueAsync(new PutSecretValueRequest
             {
                 SecretId = "del-put",
@@ -912,7 +912,7 @@ public sealed class SecretsManagerTests : IClassFixture<MicroStackFixture>, IAsy
             RecoveryWindowInDays = 7,
         });
 
-        await Assert.ThrowsAsync<InvalidRequestException>(() =>
+        await Should.ThrowAsync<InvalidRequestException>(() =>
             _sm.RotateSecretAsync(new RotateSecretRequest
             {
                 SecretId = "del-rotate",
@@ -934,7 +934,7 @@ public sealed class SecretsManagerTests : IClassFixture<MicroStackFixture>, IAsy
             RecoveryWindowInDays = 7,
         });
 
-        await Assert.ThrowsAsync<InvalidRequestException>(() =>
+        await Should.ThrowAsync<InvalidRequestException>(() =>
             _sm.DeleteSecretAsync(new DeleteSecretRequest
             {
                 SecretId = "del-double",
@@ -966,8 +966,8 @@ public sealed class SecretsManagerTests : IClassFixture<MicroStackFixture>, IAsy
             Filters = [new Filter { Key = FilterNameStringType.TagKey, Values = ["dept"] }],
         });
 
-        Assert.Single(list.SecretList);
-        Assert.Equal("tag-filter-a", list.SecretList[0].Name);
+        list.SecretList.ShouldHaveSingleItem();
+        list.SecretList[0].Name.ShouldBe("tag-filter-a");
     }
 
     [Fact]
@@ -992,8 +992,8 @@ public sealed class SecretsManagerTests : IClassFixture<MicroStackFixture>, IAsy
             Filters = [new Filter { Key = FilterNameStringType.TagValue, Values = ["production"] }],
         });
 
-        Assert.Single(list.SecretList);
-        Assert.Equal("tv-filter-a", list.SecretList[0].Name);
+        list.SecretList.ShouldHaveSingleItem();
+        list.SecretList[0].Name.ShouldBe("tv-filter-a");
     }
 
     [Fact]
@@ -1018,8 +1018,8 @@ public sealed class SecretsManagerTests : IClassFixture<MicroStackFixture>, IAsy
             Filters = [new Filter { Key = FilterNameStringType.Description, Values = ["database"] }],
         });
 
-        Assert.Single(list.SecretList);
-        Assert.Equal("desc-filter-a", list.SecretList[0].Name);
+        list.SecretList.ShouldHaveSingleItem();
+        list.SecretList[0].Name.ShouldBe("desc-filter-a");
     }
 
     // -- DescribeSecret with optional fields -----------------------------------
@@ -1044,7 +1044,7 @@ public sealed class SecretsManagerTests : IClassFixture<MicroStackFixture>, IAsy
             SecretId = "desc-deleted",
         });
 
-        Assert.NotEqual(default, desc.DeletedDate);
+        desc.DeletedDate.ShouldNotBe(default);
     }
 
     [Fact]
@@ -1062,7 +1062,7 @@ public sealed class SecretsManagerTests : IClassFixture<MicroStackFixture>, IAsy
             SecretId = "desc-kms",
         });
 
-        Assert.Equal("alias/my-key", desc.KmsKeyId);
+        desc.KmsKeyId.ShouldBe("alias/my-key");
     }
 
     // -- UpdateSecretVersionStage edge cases ------------------------------------
@@ -1085,7 +1085,7 @@ public sealed class SecretsManagerTests : IClassFixture<MicroStackFixture>, IAsy
             SecretString = "val",
         });
 
-        await Assert.ThrowsAsync<InvalidParameterException>(() =>
+        await Should.ThrowAsync<InvalidParameterException>(() =>
             _sm.UpdateSecretVersionStageAsync(new UpdateSecretVersionStageRequest
             {
                 SecretId = "stage-no-move",

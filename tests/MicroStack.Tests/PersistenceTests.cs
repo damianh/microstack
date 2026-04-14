@@ -137,7 +137,7 @@ public sealed class PersistenceTests : IClassFixture<MicroStackFixture>, IAsyncL
     {
         // Create a queue
         var created = await _sqs.CreateQueueAsync("persist-sqs-q");
-        Assert.NotEmpty(created.QueueUrl);
+        created.QueueUrl.ShouldNotBeEmpty();
 
         // Send a message so there's data in the queue
         await _sqs.SendMessageAsync(new SendMessageRequest
@@ -149,17 +149,17 @@ public sealed class PersistenceTests : IClassFixture<MicroStackFixture>, IAsyncL
         // Get state
         var handler = _registry.Resolve("sqs")!;
         var state = handler.GetState();
-        Assert.NotNull(state);
+        state.ShouldNotBeNull();
 
         // Reset and verify queue is gone
         handler.Reset();
-        await Assert.ThrowsAsync<QueueDoesNotExistException>(
+        await Should.ThrowAsync<QueueDoesNotExistException>(
             () => _sqs.GetQueueUrlAsync("persist-sqs-q"));
 
         // Restore and verify queue is back
         handler.RestoreState(state.Value);
         var restored = await _sqs.GetQueueUrlAsync("persist-sqs-q");
-        Assert.Equal(created.QueueUrl, restored.QueueUrl);
+        restored.QueueUrl.ShouldBe(created.QueueUrl);
     }
 
     // ── SNS persistence roundtrip ───────────────────────────────────────────────
@@ -169,22 +169,22 @@ public sealed class PersistenceTests : IClassFixture<MicroStackFixture>, IAsyncL
     {
         // Create a topic
         var created = await _sns.CreateTopicAsync("persist-sns-topic");
-        Assert.NotEmpty(created.TopicArn);
+        created.TopicArn.ShouldNotBeEmpty();
 
         // Get state
         var handler = _registry.Resolve("sns")!;
         var state = handler.GetState();
-        Assert.NotNull(state);
+        state.ShouldNotBeNull();
 
         // Reset and verify topic is gone
         handler.Reset();
         var topics = await _sns.ListTopicsAsync();
-        Assert.DoesNotContain(topics.Topics ?? [], t => t.TopicArn == created.TopicArn);
+        topics.Topics.ShouldNotContain(t => t.TopicArn == created.TopicArn);
 
         // Restore and verify topic is back
         handler.RestoreState(state.Value);
         var restoredTopics = await _sns.ListTopicsAsync();
-        Assert.Contains(restoredTopics.Topics ?? [], t => t.TopicArn == created.TopicArn);
+        restoredTopics.Topics.ShouldContain(t => t.TopicArn == created.TopicArn);
     }
 
     // ── SSM persistence roundtrip ───────────────────────────────────────────────
@@ -202,22 +202,22 @@ public sealed class PersistenceTests : IClassFixture<MicroStackFixture>, IAsyncL
 
         // Verify it exists
         var got = await _ssm.GetParameterAsync(new GetParameterRequest { Name = "/persist/ssm-key" });
-        Assert.Equal("persist-val", got.Parameter.Value);
+        got.Parameter.Value.ShouldBe("persist-val");
 
         // Get state
         var handler = _registry.Resolve("ssm")!;
         var state = handler.GetState();
-        Assert.NotNull(state);
+        state.ShouldNotBeNull();
 
         // Reset and verify parameter is gone
         handler.Reset();
-        await Assert.ThrowsAsync<ParameterNotFoundException>(
+        await Should.ThrowAsync<ParameterNotFoundException>(
             () => _ssm.GetParameterAsync(new GetParameterRequest { Name = "/persist/ssm-key" }));
 
         // Restore and verify parameter is back
         handler.RestoreState(state.Value);
         var restored = await _ssm.GetParameterAsync(new GetParameterRequest { Name = "/persist/ssm-key" });
-        Assert.Equal("persist-val", restored.Parameter.Value);
+        restored.Parameter.Value.ShouldBe("persist-val");
     }
 
     // ── SecretsManager persistence roundtrip ────────────────────────────────────
@@ -237,16 +237,16 @@ public sealed class PersistenceTests : IClassFixture<MicroStackFixture>, IAsyncL
         {
             SecretId = "persist-sm-secret",
         });
-        Assert.Equal("s3cr3t-persist", got.SecretString);
+        got.SecretString.ShouldBe("s3cr3t-persist");
 
         // Get state
         var handler = _registry.Resolve("secretsmanager")!;
         var state = handler.GetState();
-        Assert.NotNull(state);
+        state.ShouldNotBeNull();
 
         // Reset and verify secret is gone
         handler.Reset();
-        await Assert.ThrowsAsync<Amazon.SecretsManager.Model.ResourceNotFoundException>(
+        await Should.ThrowAsync<Amazon.SecretsManager.Model.ResourceNotFoundException>(
             () => _sm.GetSecretValueAsync(new GetSecretValueRequest
             {
                 SecretId = "persist-sm-secret",
@@ -258,7 +258,7 @@ public sealed class PersistenceTests : IClassFixture<MicroStackFixture>, IAsyncL
         {
             SecretId = "persist-sm-secret",
         });
-        Assert.Equal("s3cr3t-persist", restored.SecretString);
+        restored.SecretString.ShouldBe("s3cr3t-persist");
     }
 
     // ── GetState returns null for unimplemented services ────────────────────────
@@ -276,8 +276,8 @@ public sealed class PersistenceTests : IClassFixture<MicroStackFixture>, IAsyncL
     public void GetStateReturnsNullForUnimplementedServices(string serviceName)
     {
         var handler = _registry.Resolve(serviceName);
-        Assert.NotNull(handler);
-        Assert.Null(handler.GetState());
+        handler.ShouldNotBeNull();
+        handler.GetState().ShouldBeNull();
     }
 
     // ── Reset clears all state ──────────────────────────────────────────────────
@@ -297,16 +297,16 @@ public sealed class PersistenceTests : IClassFixture<MicroStackFixture>, IAsyncL
 
         // Hit the reset endpoint
         var response = await _fixture.HttpClient.PostAsync("/_ministack/reset", null);
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
 
         // Verify all resources are gone
-        await Assert.ThrowsAsync<QueueDoesNotExistException>(
+        await Should.ThrowAsync<QueueDoesNotExistException>(
             () => _sqs.GetQueueUrlAsync("persist-reset-q"));
 
         var topics = await _sns.ListTopicsAsync();
-        Assert.Empty(topics.Topics ?? []);
+        topics.Topics.ShouldBeEmpty();
 
-        await Assert.ThrowsAsync<ParameterNotFoundException>(
+        await Should.ThrowAsync<ParameterNotFoundException>(
             () => _ssm.GetParameterAsync(new GetParameterRequest { Name = "/persist/reset-key" }));
     }
 
@@ -319,12 +319,12 @@ public sealed class PersistenceTests : IClassFixture<MicroStackFixture>, IAsyncL
 
         var handler = _registry.Resolve("sqs")!;
         var state = handler.GetState();
-        Assert.NotNull(state);
+        state.ShouldNotBeNull();
 
         // State should be a JsonElement with "Queues" and "Names" keys
-        Assert.Equal(System.Text.Json.JsonValueKind.Object, state.Value.ValueKind);
-        Assert.True(state.Value.TryGetProperty("Queues", out _));
-        Assert.True(state.Value.TryGetProperty("Names", out _));
+        state.Value.ValueKind.ShouldBe(System.Text.Json.JsonValueKind.Object);
+        state.Value.TryGetProperty("Queues", out _).ShouldBe(true);
+        state.Value.TryGetProperty("Names", out _).ShouldBe(true);
     }
 
     // ── SNS state includes topics key ───────────────────────────────────────────
@@ -336,10 +336,10 @@ public sealed class PersistenceTests : IClassFixture<MicroStackFixture>, IAsyncL
 
         var handler = _registry.Resolve("sns")!;
         var state = handler.GetState();
-        Assert.NotNull(state);
+        state.ShouldNotBeNull();
 
-        Assert.Equal(System.Text.Json.JsonValueKind.Object, state.Value.ValueKind);
-        Assert.True(state.Value.TryGetProperty("Topics", out _));
+        state.Value.ValueKind.ShouldBe(System.Text.Json.JsonValueKind.Object);
+        state.Value.TryGetProperty("Topics", out _).ShouldBe(true);
     }
 
     // ── SSM state includes parameters key ───────────────────────────────────────
@@ -356,10 +356,10 @@ public sealed class PersistenceTests : IClassFixture<MicroStackFixture>, IAsyncL
 
         var handler = _registry.Resolve("ssm")!;
         var state = handler.GetState();
-        Assert.NotNull(state);
+        state.ShouldNotBeNull();
 
-        Assert.Equal(System.Text.Json.JsonValueKind.Object, state.Value.ValueKind);
-        Assert.True(state.Value.TryGetProperty("Parameters", out _));
+        state.Value.ValueKind.ShouldBe(System.Text.Json.JsonValueKind.Object);
+        state.Value.TryGetProperty("Parameters", out _).ShouldBe(true);
     }
 
     // ── SecretsManager state includes secrets key ───────────────────────────────
@@ -375,9 +375,9 @@ public sealed class PersistenceTests : IClassFixture<MicroStackFixture>, IAsyncL
 
         var handler = _registry.Resolve("secretsmanager")!;
         var state = handler.GetState();
-        Assert.NotNull(state);
+        state.ShouldNotBeNull();
 
-        Assert.Equal(System.Text.Json.JsonValueKind.Object, state.Value.ValueKind);
-        Assert.True(state.Value.TryGetProperty("Secrets", out _));
+        state.Value.ValueKind.ShouldBe(System.Text.Json.JsonValueKind.Object);
+        state.Value.TryGetProperty("Secrets", out _).ShouldBe(true);
     }
 }

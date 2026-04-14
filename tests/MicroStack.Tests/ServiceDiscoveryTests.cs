@@ -136,31 +136,31 @@ public sealed class ServiceDiscoveryTests : IClassFixture<MicroStackFixture>, IA
         // 1. Create Private DNS Namespace
         var nsName = "example.terraform.local";
         var (nsId, nsOpId) = await CreatePrivateDnsNamespace(nsName, "example");
-        Assert.NotEmpty(nsOpId);
+        nsOpId.ShouldNotBeEmpty();
 
         // Verify Operation
         var op = (await _sd.GetOperationAsync(new GetOperationRequest { OperationId = nsOpId })).Operation;
-        Assert.Equal("SUCCESS", op.Status.Value);
-        Assert.Equal(nsId, op.Targets["NAMESPACE"]);
+        op.Status.Value.ShouldBe("SUCCESS");
+        op.Targets["NAMESPACE"].ShouldBe(nsId);
 
         // Verify Namespace
         var ns = (await _sd.GetNamespaceAsync(new GetNamespaceRequest { Id = nsId })).Namespace;
-        Assert.Equal(nsName, ns.Name);
+        ns.Name.ShouldBe(nsName);
 
         // Verify Hosted Zone integration
         var dnsProps = ns.Properties.DnsProperties;
-        Assert.NotNull(dnsProps);
+        dnsProps.ShouldNotBeNull();
         var hzId = dnsProps.HostedZoneId;
-        Assert.NotEmpty(hzId);
+        hzId.ShouldNotBeEmpty();
 
         var hz = (await _r53.GetHostedZoneAsync(new Amazon.Route53.Model.GetHostedZoneRequest { Id = hzId })).HostedZone;
-        Assert.Equal(nsName + ".", hz.Name);
-        Assert.True(hz.Config.PrivateZone);
+        hz.Name.ShouldBe(nsName + ".");
+        hz.Config.PrivateZone.ShouldBe(true);
 
         // 2. Create Service
         var svcName = "example-service";
         var svcId = await CreateService(svcName, nsId);
-        Assert.NotEmpty(svcId);
+        svcId.ShouldNotBeEmpty();
 
         // 3. Register Instance
         var instId = "example-instance-id";
@@ -174,7 +174,7 @@ public sealed class ServiceDiscoveryTests : IClassFixture<MicroStackFixture>, IA
                 ["custom_attribute"] = "custom",
             },
         });
-        Assert.NotEmpty(regResp.OperationId);
+        regResp.OperationId.ShouldNotBeEmpty();
 
         // 4. Discover Instances
         var discoverResp = await _sd.DiscoverInstancesAsync(new DiscoverInstancesRequest
@@ -182,19 +182,19 @@ public sealed class ServiceDiscoveryTests : IClassFixture<MicroStackFixture>, IA
             NamespaceName = nsName,
             ServiceName = svcName,
         });
-        Assert.Single(discoverResp.Instances);
-        Assert.Equal(instId, discoverResp.Instances[0].InstanceId);
-        Assert.Equal("172.18.0.1", discoverResp.Instances[0].Attributes["AWS_INSTANCE_IPV4"]);
+        discoverResp.Instances.ShouldHaveSingleItem();
+        discoverResp.Instances[0].InstanceId.ShouldBe(instId);
+        discoverResp.Instances[0].Attributes["AWS_INSTANCE_IPV4"].ShouldBe("172.18.0.1");
 
         // 5. List operations
         var namespaces = (await _sd.ListNamespacesAsync(new ListNamespacesRequest())).Namespaces;
-        Assert.Contains(namespaces, n => n.Id == nsId);
+        namespaces.ShouldContain(n => n.Id == nsId);
 
         var services = (await _sd.ListServicesAsync(new ListServicesRequest())).Services;
-        Assert.Contains(services, s => s.Id == svcId);
+        services.ShouldContain(s => s.Id == svcId);
 
         var instances = (await _sd.ListInstancesAsync(new ListInstancesRequest { ServiceId = svcId })).Instances;
-        Assert.Contains(instances, i => i.Id == instId);
+        instances.ShouldContain(i => i.Id == instId);
 
         // 6. Deregister & Delete
         await _sd.DeregisterInstanceAsync(new DeregisterInstanceRequest
@@ -203,7 +203,7 @@ public sealed class ServiceDiscoveryTests : IClassFixture<MicroStackFixture>, IA
             InstanceId = instId,
         });
         instances = (await _sd.ListInstancesAsync(new ListInstancesRequest { ServiceId = svcId })).Instances;
-        Assert.Empty(instances);
+        instances.ShouldBeEmpty();
 
         await _sd.DeleteServiceAsync(new DeleteServiceRequest { Id = svcId });
         await _sd.DeleteNamespaceAsync(new DeleteNamespaceRequest { Id = nsId });
@@ -228,7 +228,7 @@ public sealed class ServiceDiscoveryTests : IClassFixture<MicroStackFixture>, IA
         {
             ResourceARN = nsArn,
         })).Tags;
-        Assert.Contains(tags, t => t.Key == "Owner" && t.Value == "TeamA");
+        tags.ShouldContain(t => t.Key == "Owner" && t.Value == "TeamA");
 
         // 3. Add more tags
         await _sd.TagResourceAsync(new TagResourceRequest
@@ -240,7 +240,7 @@ public sealed class ServiceDiscoveryTests : IClassFixture<MicroStackFixture>, IA
         {
             ResourceARN = nsArn,
         })).Tags;
-        Assert.Equal(2, tags.Count);
+        tags.Count.ShouldBe(2);
 
         // 4. Untag
         await _sd.UntagResourceAsync(new UntagResourceRequest
@@ -252,8 +252,8 @@ public sealed class ServiceDiscoveryTests : IClassFixture<MicroStackFixture>, IA
         {
             ResourceARN = nsArn,
         })).Tags;
-        Assert.Single(tags);
-        Assert.Equal("Env", tags[0].Key);
+        tags.ShouldHaveSingleItem();
+        tags[0].Key.ShouldBe("Env");
 
         // Cleanup
         await _sd.DeleteNamespaceAsync(new DeleteNamespaceRequest { Id = nsId });
@@ -280,8 +280,8 @@ public sealed class ServiceDiscoveryTests : IClassFixture<MicroStackFixture>, IA
         {
             ServiceId = svcId,
         })).ServiceAttributes.Attributes;
-        Assert.Equal("core", attrs["team"]);
-        Assert.Equal("test", attrs["env"]);
+        attrs["team"].ShouldBe("core");
+        attrs["env"].ShouldBe("test");
 
         // Delete one attribute
         await _sd.DeleteServiceAttributesAsync(new DeleteServiceAttributesRequest
@@ -294,8 +294,8 @@ public sealed class ServiceDiscoveryTests : IClassFixture<MicroStackFixture>, IA
         {
             ServiceId = svcId,
         })).ServiceAttributes.Attributes;
-        Assert.DoesNotContain("env", (IDictionary<string, string>)attrs);
-        Assert.Equal("core", attrs["team"]);
+        attrs.ShouldNotContainKey("env");
+        attrs["team"].ShouldBe("core");
 
         // Cleanup
         await _sd.DeleteServiceAsync(new DeleteServiceRequest { Id = svcId });
@@ -319,7 +319,7 @@ public sealed class ServiceDiscoveryTests : IClassFixture<MicroStackFixture>, IA
         {
             OperationId = nsUpdateOpId,
         })).Operation;
-        Assert.Equal(nsId, nsUpdateOp.Targets["NAMESPACE"]);
+        nsUpdateOp.Targets["NAMESPACE"].ShouldBe(nsId);
 
         // Update service
         var svcUpdateResp = await _sd.UpdateServiceAsync(new UpdateServiceRequest
@@ -332,15 +332,15 @@ public sealed class ServiceDiscoveryTests : IClassFixture<MicroStackFixture>, IA
         {
             OperationId = svcUpdateOpId,
         })).Operation;
-        Assert.Equal(svcId, svcUpdateOp.Targets["SERVICE"]);
+        svcUpdateOp.Targets["SERVICE"].ShouldBe(svcId);
 
         // List operations should contain both
         var ops = (await _sd.ListOperationsAsync(new ListOperationsRequest
         {
             MaxResults = 50,
         })).Operations;
-        Assert.Contains(ops, o => o.Id == nsUpdateOpId);
-        Assert.Contains(ops, o => o.Id == svcUpdateOpId);
+        ops.ShouldContain(o => o.Id == nsUpdateOpId);
+        ops.ShouldContain(o => o.Id == svcUpdateOpId);
 
         // Cleanup
         await _sd.DeleteServiceAsync(new DeleteServiceRequest { Id = svcId });
@@ -382,7 +382,7 @@ public sealed class ServiceDiscoveryTests : IClassFixture<MicroStackFixture>, IA
         {
             ServiceId = svcId,
         })).Status;
-        Assert.Equal("UNHEALTHY", health["inst-1"]);
+        health["inst-1"].ShouldBe("UNHEALTHY");
 
         // Discover with HealthStatus=ALL should include unhealthy
         var discovered = (await _sd.DiscoverInstancesAsync(new DiscoverInstancesRequest
@@ -391,8 +391,8 @@ public sealed class ServiceDiscoveryTests : IClassFixture<MicroStackFixture>, IA
             ServiceName = "health-service",
             HealthStatus = HealthStatusFilter.ALL,
         })).Instances;
-        Assert.Single(discovered);
-        Assert.Equal("UNHEALTHY", discovered[0].HealthStatus);
+        discovered.ShouldHaveSingleItem();
+        discovered[0].HealthStatus.Value.ShouldBe("UNHEALTHY");
 
         // Revision should have increased
         var revAfter = (await _sd.DiscoverInstancesRevisionAsync(new DiscoverInstancesRevisionRequest
@@ -400,7 +400,7 @@ public sealed class ServiceDiscoveryTests : IClassFixture<MicroStackFixture>, IA
             NamespaceName = nsName,
             ServiceName = "health-service",
         })).InstancesRevision;
-        Assert.True(revAfter > revBefore);
+        (revAfter > revBefore).ShouldBe(true);
 
         // Cleanup
         await _sd.DeregisterInstanceAsync(new DeregisterInstanceRequest
@@ -423,8 +423,8 @@ public sealed class ServiceDiscoveryTests : IClassFixture<MicroStackFixture>, IA
         var (nsId, _) = await CreateHttpNamespace(nsName);
 
         var ns = (await _sd.GetNamespaceAsync(new GetNamespaceRequest { Id = nsId })).Namespace;
-        Assert.Equal(nsName, ns.Name);
-        Assert.Equal(NamespaceType.HTTP, ns.Type);
+        ns.Name.ShouldBe(nsName);
+        ns.Type.ShouldBe(NamespaceType.HTTP);
 
         // Cleanup
         await _sd.DeleteNamespaceAsync(new DeleteNamespaceRequest { Id = nsId });
@@ -443,19 +443,19 @@ public sealed class ServiceDiscoveryTests : IClassFixture<MicroStackFixture>, IA
             Name = nsName,
         });
         var opId = resp.OperationId;
-        Assert.NotEmpty(opId);
+        opId.ShouldNotBeEmpty();
 
         var op = (await _sd.GetOperationAsync(new GetOperationRequest { OperationId = opId })).Operation;
         var nsId = op.Targets["NAMESPACE"];
 
         var ns = (await _sd.GetNamespaceAsync(new GetNamespaceRequest { Id = nsId })).Namespace;
-        Assert.Equal(nsName, ns.Name);
-        Assert.Equal(NamespaceType.DNS_PUBLIC, ns.Type);
+        ns.Name.ShouldBe(nsName);
+        ns.Type.ShouldBe(NamespaceType.DNS_PUBLIC);
 
         // Verify hosted zone was created
         var dnsProps = ns.Properties.DnsProperties;
-        Assert.NotNull(dnsProps);
-        Assert.NotEmpty(dnsProps.HostedZoneId);
+        dnsProps.ShouldNotBeNull();
+        dnsProps.HostedZoneId.ShouldNotBeEmpty();
 
         // Cleanup
         await _sd.DeleteNamespaceAsync(new DeleteNamespaceRequest { Id = nsId });
@@ -483,8 +483,8 @@ public sealed class ServiceDiscoveryTests : IClassFixture<MicroStackFixture>, IA
             ServiceId = svcId,
             InstanceId = "inst-get-1",
         })).Instance;
-        Assert.Equal("inst-get-1", inst.Id);
-        Assert.Equal("value", inst.Attributes["key"]);
+        inst.Id.ShouldBe("inst-get-1");
+        inst.Attributes["key"].ShouldBe("value");
 
         // Cleanup
         await _sd.DeregisterInstanceAsync(new DeregisterInstanceRequest
@@ -507,8 +507,8 @@ public sealed class ServiceDiscoveryTests : IClassFixture<MicroStackFixture>, IA
         var svcId = await CreateService("getsvc-svc", nsId);
 
         var svc = (await _sd.GetServiceAsync(new GetServiceRequest { Id = svcId })).Service;
-        Assert.Equal(svcId, svc.Id);
-        Assert.Equal("getsvc-svc", svc.Name);
+        svc.Id.ShouldBe(svcId);
+        svc.Name.ShouldBe("getsvc-svc");
 
         // Cleanup
         await _sd.DeleteServiceAsync(new DeleteServiceRequest { Id = svcId });
@@ -555,8 +555,8 @@ public sealed class ServiceDiscoveryTests : IClassFixture<MicroStackFixture>, IA
             ServiceName = "filter-svc",
             HealthStatus = HealthStatusFilter.HEALTHY,
         })).Instances;
-        Assert.Single(healthyInstances);
-        Assert.Equal("healthy-inst", healthyInstances[0].InstanceId);
+        healthyInstances.ShouldHaveSingleItem();
+        healthyInstances[0].InstanceId.ShouldBe("healthy-inst");
 
         // Discover only UNHEALTHY instances
         var unhealthyInstances = (await _sd.DiscoverInstancesAsync(new DiscoverInstancesRequest
@@ -565,8 +565,8 @@ public sealed class ServiceDiscoveryTests : IClassFixture<MicroStackFixture>, IA
             ServiceName = "filter-svc",
             HealthStatus = HealthStatusFilter.UNHEALTHY,
         })).Instances;
-        Assert.Single(unhealthyInstances);
-        Assert.Equal("unhealthy-inst", unhealthyInstances[0].InstanceId);
+        unhealthyInstances.ShouldHaveSingleItem();
+        unhealthyInstances[0].InstanceId.ShouldBe("unhealthy-inst");
 
         // Discover ALL instances
         var allInstances = (await _sd.DiscoverInstancesAsync(new DiscoverInstancesRequest
@@ -575,7 +575,7 @@ public sealed class ServiceDiscoveryTests : IClassFixture<MicroStackFixture>, IA
             ServiceName = "filter-svc",
             HealthStatus = HealthStatusFilter.ALL,
         })).Instances;
-        Assert.Equal(2, allInstances.Count);
+        allInstances.Count.ShouldBe(2);
 
         // Cleanup
         await _sd.DeregisterInstanceAsync(new DeregisterInstanceRequest
@@ -613,7 +613,7 @@ public sealed class ServiceDiscoveryTests : IClassFixture<MicroStackFixture>, IA
         {
             ResourceARN = svcArn,
         })).Tags;
-        Assert.Contains(tags, t => t.Key == "Team" && t.Value == "Platform");
+        tags.ShouldContain(t => t.Key == "Team" && t.Value == "Platform");
 
         // Cleanup
         await _sd.DeleteServiceAsync(new DeleteServiceRequest { Id = resp.Service.Id });
@@ -634,10 +634,10 @@ public sealed class ServiceDiscoveryTests : IClassFixture<MicroStackFixture>, IA
             Id = nsId,
             Namespace = new HttpNamespaceChange { Description = "updated description" },
         });
-        Assert.NotEmpty(resp.OperationId);
+        resp.OperationId.ShouldNotBeEmpty();
 
         var ns = (await _sd.GetNamespaceAsync(new GetNamespaceRequest { Id = nsId })).Namespace;
-        Assert.Equal("updated description", ns.Description);
+        ns.Description.ShouldBe("updated description");
 
         // Cleanup
         await _sd.DeleteNamespaceAsync(new DeleteNamespaceRequest { Id = nsId });
@@ -665,7 +665,7 @@ public sealed class ServiceDiscoveryTests : IClassFixture<MicroStackFixture>, IA
             Id = nsId,
             Namespace = new PublicDnsNamespaceChange { Description = "updated public" },
         });
-        Assert.NotEmpty(updateResp.OperationId);
+        updateResp.OperationId.ShouldNotBeEmpty();
 
         // Cleanup
         await _sd.DeleteNamespaceAsync(new DeleteNamespaceRequest { Id = nsId });
@@ -678,9 +678,9 @@ public sealed class ServiceDiscoveryTests : IClassFixture<MicroStackFixture>, IA
     [Fact]
     public async Task DeleteNamespaceNotFound()
     {
-        var ex = await Assert.ThrowsAsync<NamespaceNotFoundException>(() =>
+        var ex = await Should.ThrowAsync<NamespaceNotFoundException>(() =>
             _sd.DeleteNamespaceAsync(new DeleteNamespaceRequest { Id = "ns-nonexistent" }));
-        Assert.Contains("not found", ex.Message, StringComparison.OrdinalIgnoreCase);
+        ex.Message.ShouldContain("not found", Case.Insensitive);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -690,9 +690,9 @@ public sealed class ServiceDiscoveryTests : IClassFixture<MicroStackFixture>, IA
     [Fact]
     public async Task DeleteServiceNotFound()
     {
-        var ex = await Assert.ThrowsAsync<ServiceNotFoundException>(() =>
+        var ex = await Should.ThrowAsync<ServiceNotFoundException>(() =>
             _sd.DeleteServiceAsync(new DeleteServiceRequest { Id = "srv-nonexistent" }));
-        Assert.Contains("not found", ex.Message, StringComparison.OrdinalIgnoreCase);
+        ex.Message.ShouldContain("not found", Case.Insensitive);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -717,7 +717,7 @@ public sealed class ServiceDiscoveryTests : IClassFixture<MicroStackFixture>, IA
                 },
             ],
         })).Operations;
-        Assert.True(ops.Count >= 1);
+        (ops.Count >= 1).ShouldBe(true);
 
         // Cleanup
         await _sd.DeleteServiceAsync(new DeleteServiceRequest { Id = svcId });

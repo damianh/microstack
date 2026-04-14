@@ -80,7 +80,7 @@ public sealed class StsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
     public async Task GetCallerIdentity()
     {
         var resp = await _sts.GetCallerIdentityAsync(new GetCallerIdentityRequest());
-        Assert.Equal("000000000000", resp.Account);
+        resp.Account.ShouldBe("000000000000");
     }
 
     [Fact]
@@ -92,11 +92,11 @@ public sealed class StsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             RoleSessionName = "intg-session",
         });
 
-        Assert.NotEmpty(resp.Credentials.AccessKeyId);
-        Assert.NotEmpty(resp.Credentials.SecretAccessKey);
-        Assert.NotEmpty(resp.Credentials.SessionToken);
-        Assert.NotEqual(default, resp.Credentials.Expiration);
-        Assert.NotEmpty(resp.AssumedRoleUser.Arn);
+        resp.Credentials.AccessKeyId.ShouldNotBeEmpty();
+        resp.Credentials.SecretAccessKey.ShouldNotBeEmpty();
+        resp.Credentials.SessionToken.ShouldNotBeEmpty();
+        resp.Credentials.Expiration.ShouldNotBe(default);
+        resp.AssumedRoleUser.Arn.ShouldNotBeEmpty();
     }
 
     [Fact]
@@ -107,16 +107,16 @@ public sealed class StsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             AccessKeyId = "AKIAIOSFODNN7EXAMPLE",
         });
 
-        Assert.Equal("000000000000", resp.Account);
+        resp.Account.ShouldBe("000000000000");
     }
 
     [Fact]
     public async Task GetCallerIdentityFull()
     {
         var resp = await _sts.GetCallerIdentityAsync(new GetCallerIdentityRequest());
-        Assert.Equal("000000000000", resp.Account);
-        Assert.NotEmpty(resp.Arn);
-        Assert.NotEmpty(resp.UserId);
+        resp.Account.ShouldBe("000000000000");
+        resp.Arn.ShouldNotBeEmpty();
+        resp.UserId.ShouldNotBeEmpty();
     }
 
     [Fact]
@@ -129,12 +129,12 @@ public sealed class StsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             DurationSeconds = 900,
         });
 
-        Assert.StartsWith("ASIA", resp.Credentials.AccessKeyId);
-        Assert.NotEmpty(resp.Credentials.SecretAccessKey);
-        Assert.NotEmpty(resp.Credentials.SessionToken);
-        Assert.NotEqual(default, resp.Credentials.Expiration);
-        Assert.Contains("test-session", resp.AssumedRoleUser.Arn);
-        Assert.NotEmpty(resp.AssumedRoleUser.AssumedRoleId);
+        resp.Credentials.AccessKeyId.ShouldStartWith("ASIA");
+        resp.Credentials.SecretAccessKey.ShouldNotBeEmpty();
+        resp.Credentials.SessionToken.ShouldNotBeEmpty();
+        resp.Credentials.Expiration.ShouldNotBe(default);
+        resp.AssumedRoleUser.Arn.ShouldContain("test-session");
+        resp.AssumedRoleUser.AssumedRoleId.ShouldNotBeEmpty();
     }
 
     [Fact]
@@ -145,10 +145,10 @@ public sealed class StsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             DurationSeconds = 900,
         });
 
-        Assert.NotEmpty(resp.Credentials.AccessKeyId);
-        Assert.NotEmpty(resp.Credentials.SecretAccessKey);
-        Assert.NotEmpty(resp.Credentials.SessionToken);
-        Assert.NotEqual(default, resp.Credentials.Expiration);
+        resp.Credentials.AccessKeyId.ShouldNotBeEmpty();
+        resp.Credentials.SecretAccessKey.ShouldNotBeEmpty();
+        resp.Credentials.SessionToken.ShouldNotBeEmpty();
+        resp.Credentials.Expiration.ShouldNotBe(default);
     }
 
     [Fact]
@@ -169,9 +169,9 @@ public sealed class StsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             WebIdentityToken = "fake-oidc-token-value",
         });
 
-        Assert.NotEmpty(resp.Credentials.AccessKeyId);
-        Assert.NotEmpty(resp.Credentials.SecretAccessKey);
-        Assert.NotEmpty(resp.Credentials.SessionToken);
-        Assert.NotEqual(default, resp.Credentials.Expiration);
+        resp.Credentials.AccessKeyId.ShouldNotBeEmpty();
+        resp.Credentials.SecretAccessKey.ShouldNotBeEmpty();
+        resp.Credentials.SessionToken.ShouldNotBeEmpty();
+        resp.Credentials.Expiration.ShouldNotBe(default);
     }
 }

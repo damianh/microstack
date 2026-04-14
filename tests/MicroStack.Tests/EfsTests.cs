@@ -70,18 +70,18 @@ public sealed class EfsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             ],
         });
 
-        Assert.StartsWith("fs-", createResp.FileSystemId);
-        Assert.Equal(LifeCycleState.Available, createResp.LifeCycleState);
-        Assert.Equal(ThroughputMode.Bursting, createResp.ThroughputMode);
+        createResp.FileSystemId.ShouldStartWith("fs-");
+        createResp.LifeCycleState.ShouldBe(LifeCycleState.Available);
+        createResp.ThroughputMode.ShouldBe(ThroughputMode.Bursting);
 
         var descResp = await _efs.DescribeFileSystemsAsync(new DescribeFileSystemsRequest
         {
             FileSystemId = createResp.FileSystemId,
         });
 
-        Assert.Single(descResp.FileSystems);
-        Assert.Equal(createResp.FileSystemId, descResp.FileSystems[0].FileSystemId);
-        Assert.Equal("test-fs", descResp.FileSystems[0].Name);
+        descResp.FileSystems.ShouldHaveSingleItem();
+        descResp.FileSystems[0].FileSystemId.ShouldBe(createResp.FileSystemId);
+        descResp.FileSystems[0].Name.ShouldBe("test-fs");
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -103,7 +103,7 @@ public sealed class EfsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             CreationToken = token,
         });
 
-        Assert.Equal(r1.FileSystemId, r2.FileSystemId);
+        r2.FileSystemId.ShouldBe(r1.FileSystemId);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -126,7 +126,7 @@ public sealed class EfsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             FileSystemId = fsId,
         });
 
-        Assert.Empty(descResp.FileSystems);
+        descResp.FileSystems.ShouldBeEmpty();
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -145,23 +145,23 @@ public sealed class EfsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             SubnetId = "subnet-00000001",
         });
 
-        Assert.StartsWith("fsmt-", mt.MountTargetId);
-        Assert.Equal(LifeCycleState.Available, mt.LifeCycleState);
+        mt.MountTargetId.ShouldStartWith("fsmt-");
+        mt.LifeCycleState.ShouldBe(LifeCycleState.Available);
 
         var descResp = await _efs.DescribeMountTargetsAsync(new DescribeMountTargetsRequest
         {
             FileSystemId = fsId,
         });
-        Assert.Single(descResp.MountTargets);
-        Assert.Equal(mt.MountTargetId, descResp.MountTargets[0].MountTargetId);
+        descResp.MountTargets.ShouldHaveSingleItem();
+        descResp.MountTargets[0].MountTargetId.ShouldBe(mt.MountTargetId);
 
         // Cannot delete file system with mount targets
-        var ex = await Assert.ThrowsAsync<FileSystemInUseException>(() =>
+        var ex = await Should.ThrowAsync<FileSystemInUseException>(() =>
             _efs.DeleteFileSystemAsync(new DeleteFileSystemRequest
             {
                 FileSystemId = fsId,
             }));
-        Assert.NotNull(ex);
+        ex.ShouldNotBeNull();
 
         await _efs.DeleteMountTargetAsync(new DeleteMountTargetRequest
         {
@@ -172,7 +172,7 @@ public sealed class EfsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             FileSystemId = fsId,
         });
-        Assert.Empty(desc2.MountTargets);
+        desc2.MountTargets.ShouldBeEmpty();
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -195,14 +195,14 @@ public sealed class EfsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             RootDirectory = new RootDirectory { Path = "/data" },
         });
 
-        Assert.StartsWith("fsap-", ap.AccessPointId);
-        Assert.Equal(LifeCycleState.Available, ap.LifeCycleState);
+        ap.AccessPointId.ShouldStartWith("fsap-");
+        ap.LifeCycleState.ShouldBe(LifeCycleState.Available);
 
         var descResp = await _efs.DescribeAccessPointsAsync(new DescribeAccessPointsRequest
         {
             FileSystemId = fsId,
         });
-        Assert.Contains(descResp.AccessPoints, a => a.AccessPointId == ap.AccessPointId);
+        descResp.AccessPoints.ShouldContain(a => a.AccessPointId == ap.AccessPointId);
 
         await _efs.DeleteAccessPointAsync(new DeleteAccessPointRequest
         {
@@ -213,7 +213,7 @@ public sealed class EfsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             FileSystemId = fsId,
         });
-        Assert.DoesNotContain(desc2.AccessPoints, a => a.AccessPointId == ap.AccessPointId);
+        desc2.AccessPoints.ShouldNotContain(a => a.AccessPointId == ap.AccessPointId);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -243,8 +243,8 @@ public sealed class EfsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             ResourceId = fsArn,
         });
         var tagMap = tagsResp.Tags.ToDictionary(t => t.Key, t => t.Value);
-        Assert.Equal("test", tagMap["env"]);
-        Assert.Equal("data", tagMap["team"]);
+        tagMap["env"].ShouldBe("test");
+        tagMap["team"].ShouldBe("data");
 
         await _efs.UntagResourceAsync(new UntagResourceRequest
         {
@@ -257,8 +257,8 @@ public sealed class EfsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             ResourceId = fsArn,
         });
         var keys = tags2.Tags.ConvertAll(t => t.Key);
-        Assert.DoesNotContain("env", keys);
-        Assert.Contains("team", keys);
+        keys.ShouldNotContain("env");
+        keys.ShouldContain("team");
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -286,8 +286,8 @@ public sealed class EfsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
                 FileSystemId = fsId,
             });
 
-        Assert.Single(resp.LifecyclePolicies);
-        Assert.Equal(TransitionToIARules.AFTER_30_DAYS, resp.LifecyclePolicies[0].TransitionToIA);
+        resp.LifecyclePolicies.ShouldHaveSingleItem();
+        resp.LifecyclePolicies[0].TransitionToIA.ShouldBe(TransitionToIARules.AFTER_30_DAYS);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -311,6 +311,6 @@ public sealed class EfsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             FileSystemId = fsId,
         });
 
-        Assert.Equal(Status.ENABLED, resp.BackupPolicy.Status);
+        resp.BackupPolicy.Status.ShouldBe(Status.ENABLED);
     }
 }

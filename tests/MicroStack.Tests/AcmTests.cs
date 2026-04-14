@@ -64,7 +64,7 @@ public sealed class AcmTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             SubjectAlternativeNames = ["www.example.com"],
         });
 
-        Assert.StartsWith("arn:aws:acm:us-east-1:000000000000:certificate/", resp.CertificateArn);
+        resp.CertificateArn.ShouldStartWith("arn:aws:acm:us-east-1:000000000000:certificate/");
     }
 
     // -- DescribeCertificate --------------------------------------------------
@@ -82,10 +82,10 @@ public sealed class AcmTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             CertificateArn = reqResp.CertificateArn,
         });
 
-        Assert.Equal("describe.example.com", resp.Certificate.DomainName);
-        Assert.Equal(CertificateStatus.ISSUED, resp.Certificate.Status);
-        Assert.True(resp.Certificate.DomainValidationOptions.Count >= 1);
-        Assert.NotNull(resp.Certificate.DomainValidationOptions[0].ResourceRecord);
+        resp.Certificate.DomainName.ShouldBe("describe.example.com");
+        resp.Certificate.Status.ShouldBe(CertificateStatus.ISSUED);
+        (resp.Certificate.DomainValidationOptions.Count >= 1).ShouldBe(true);
+        resp.Certificate.DomainValidationOptions[0].ResourceRecord.ShouldNotBeNull();
     }
 
     // -- ListCertificates -----------------------------------------------------
@@ -100,7 +100,7 @@ public sealed class AcmTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
 
         var resp = await _acm.ListCertificatesAsync(new ListCertificatesRequest());
         var arns = resp.CertificateSummaryList.ConvertAll(c => c.CertificateArn);
-        Assert.Contains(reqResp.CertificateArn, arns);
+        arns.ShouldContain(reqResp.CertificateArn);
     }
 
     // -- Tags (Add, List, Remove) ---------------------------------------------
@@ -130,7 +130,7 @@ public sealed class AcmTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             CertificateArn = arn,
         });
 
-        Assert.Contains(tagsResp.Tags, t => t.Key == "env" && t.Value == "test");
+        tagsResp.Tags.ShouldContain(t => t.Key == "env" && t.Value == "test");
 
         await _acm.RemoveTagsFromCertificateAsync(new RemoveTagsFromCertificateRequest
         {
@@ -143,7 +143,7 @@ public sealed class AcmTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             CertificateArn = arn,
         });
 
-        Assert.DoesNotContain(tags2.Tags, t => t.Key == "team");
+        tags2.Tags.ShouldNotContain(t => t.Key == "team");
     }
 
     // -- GetCertificate -------------------------------------------------------
@@ -161,7 +161,7 @@ public sealed class AcmTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             CertificateArn = reqResp.CertificateArn,
         });
 
-        Assert.Contains("BEGIN CERTIFICATE", resp.Certificate);
+        resp.Certificate.ShouldContain("BEGIN CERTIFICATE");
     }
 
     // -- ImportCertificate ----------------------------------------------------
@@ -183,7 +183,7 @@ public sealed class AcmTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             CertificateArn = resp.CertificateArn,
         });
 
-        Assert.Equal(CertificateType.IMPORTED, desc.Certificate.Type);
+        desc.Certificate.Type.ShouldBe(CertificateType.IMPORTED);
     }
 
     // -- DeleteCertificate ----------------------------------------------------
@@ -203,7 +203,7 @@ public sealed class AcmTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
 
         var resp = await _acm.ListCertificatesAsync(new ListCertificatesRequest());
         var arns = resp.CertificateSummaryList.ConvertAll(c => c.CertificateArn);
-        Assert.DoesNotContain(reqResp.CertificateArn, arns);
+        arns.ShouldNotContain(reqResp.CertificateArn);
     }
 
     // -- DescribeCertificate not found ----------------------------------------
@@ -211,12 +211,12 @@ public sealed class AcmTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
     [Fact]
     public async Task DescribeCertificateNotFound()
     {
-        var ex = await Assert.ThrowsAsync<ResourceNotFoundException>(() =>
+        var ex = await Should.ThrowAsync<ResourceNotFoundException>(() =>
             _acm.DescribeCertificateAsync(new DescribeCertificateRequest
             {
                 CertificateArn = "arn:aws:acm:us-east-1:000000000000:certificate/nonexistent",
             }));
 
-        Assert.Equal("ResourceNotFoundException", ex.ErrorCode);
+        ex.ErrorCode.ShouldBe("ResourceNotFoundException");
     }
 }

@@ -73,7 +73,7 @@ public sealed class WafTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         });
 
         var uid = createResp.Summary.Id;
-        Assert.Equal("test-acl", createResp.Summary.Name);
+        createResp.Summary.Name.ShouldBe("test-acl");
 
         var getResp = await _waf.GetWebACLAsync(new GetWebACLRequest
         {
@@ -81,14 +81,14 @@ public sealed class WafTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             Scope = "REGIONAL",
             Id = uid,
         });
-        Assert.Equal("test-acl", getResp.WebACL.Name);
+        getResp.WebACL.Name.ShouldBe("test-acl");
 
         var listResp = await _waf.ListWebACLsAsync(new ListWebACLsRequest
         {
             Scope = "REGIONAL",
         });
         var ids = listResp.WebACLs.ConvertAll(a => a.Id);
-        Assert.Contains(uid, ids);
+        ids.ShouldContain(uid);
 
         await _waf.DeleteWebACLAsync(new DeleteWebACLRequest
         {
@@ -103,7 +103,7 @@ public sealed class WafTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             Scope = "REGIONAL",
         });
         var ids2 = list2.WebACLs.ConvertAll(a => a.Id);
-        Assert.DoesNotContain(uid, ids2);
+        ids2.ShouldNotContain(uid);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -144,8 +144,8 @@ public sealed class WafTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             },
         });
 
-        Assert.NotNull(updateResp.NextLockToken);
-        Assert.True(updateResp.NextLockToken.Length > 0);
+        updateResp.NextLockToken.ShouldNotBeNull();
+        (updateResp.NextLockToken.Length > 0).ShouldBe(true);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -181,19 +181,19 @@ public sealed class WafTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             ResourceArn = resourceArn,
         });
-        Assert.Equal(aclArn, getResp.WebACL.ARN);
+        getResp.WebACL.ARN.ShouldBe(aclArn);
 
         await _waf.DisassociateWebACLAsync(new DisassociateWebACLRequest
         {
             ResourceArn = resourceArn,
         });
 
-        var ex = await Assert.ThrowsAsync<WAFNonexistentItemException>(() =>
+        var ex = await Should.ThrowAsync<WAFNonexistentItemException>(() =>
             _waf.GetWebACLForResourceAsync(new GetWebACLForResourceRequest
             {
                 ResourceArn = resourceArn,
             }));
-        Assert.NotNull(ex);
+        ex.ShouldNotBeNull();
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -220,7 +220,7 @@ public sealed class WafTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             Scope = "REGIONAL",
             Id = uid,
         });
-        Assert.Contains("1.2.3.4/32", getResp.IPSet.Addresses);
+        getResp.IPSet.Addresses.ShouldContain("1.2.3.4/32");
 
         var updateResp = await _waf.UpdateIPSetAsync(new UpdateIPSetRequest
         {
@@ -230,14 +230,14 @@ public sealed class WafTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             LockToken = lockToken,
             Addresses = ["5.6.7.8/32"],
         });
-        Assert.NotNull(updateResp.NextLockToken);
+        updateResp.NextLockToken.ShouldNotBeNull();
 
         var listResp = await _waf.ListIPSetsAsync(new ListIPSetsRequest
         {
             Scope = "REGIONAL",
         });
         var ids = listResp.IPSets.ConvertAll(s => s.Id);
-        Assert.Contains(uid, ids);
+        ids.ShouldContain(uid);
 
         await _waf.DeleteIPSetAsync(new DeleteIPSetRequest
         {
@@ -252,7 +252,7 @@ public sealed class WafTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             Scope = "REGIONAL",
         });
         var ids2 = list2.IPSets.ConvertAll(s => s.Id);
-        Assert.DoesNotContain(uid, ids2);
+        ids2.ShouldNotContain(uid);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -284,7 +284,7 @@ public sealed class WafTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             Scope = "REGIONAL",
             Id = uid,
         });
-        Assert.Equal("test-rg", getResp.RuleGroup.Name);
+        getResp.RuleGroup.Name.ShouldBe("test-rg");
 
         var updateResp = await _waf.UpdateRuleGroupAsync(new UpdateRuleGroupRequest
         {
@@ -299,14 +299,14 @@ public sealed class WafTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
                 MetricName = "m2",
             },
         });
-        Assert.NotNull(updateResp.NextLockToken);
+        updateResp.NextLockToken.ShouldNotBeNull();
 
         var listResp = await _waf.ListRuleGroupsAsync(new ListRuleGroupsRequest
         {
             Scope = "REGIONAL",
         });
         var ids = listResp.RuleGroups.ConvertAll(r => r.Id);
-        Assert.Contains(uid, ids);
+        ids.ShouldContain(uid);
 
         await _waf.DeleteRuleGroupAsync(new DeleteRuleGroupRequest
         {
@@ -321,7 +321,7 @@ public sealed class WafTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             Scope = "REGIONAL",
         });
         var ids2 = list2.RuleGroups.ConvertAll(r => r.Id);
-        Assert.DoesNotContain(uid, ids2);
+        ids2.ShouldNotContain(uid);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -351,7 +351,7 @@ public sealed class WafTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             ResourceARN = arn,
         });
-        Assert.Contains(tagsResp.TagInfoForResource.TagList, t => t.Key == "env");
+        tagsResp.TagInfoForResource.TagList.ShouldContain(t => t.Key == "env");
 
         await _waf.TagResourceAsync(new TagResourceRequest
         {
@@ -363,7 +363,7 @@ public sealed class WafTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             ResourceARN = arn,
         });
-        Assert.Contains(tags2.TagInfoForResource.TagList, t => t.Key == "team");
+        tags2.TagInfoForResource.TagList.ShouldContain(t => t.Key == "team");
 
         await _waf.UntagResourceAsync(new UntagResourceRequest
         {
@@ -375,7 +375,7 @@ public sealed class WafTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             ResourceARN = arn,
         });
-        Assert.DoesNotContain(tags3.TagInfoForResource.TagList, t => t.Key == "env");
+        tags3.TagInfoForResource.TagList.ShouldNotContain(t => t.Key == "env");
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -413,7 +413,7 @@ public sealed class WafTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             ],
         });
 
-        Assert.True(resp.Capacity > 0);
+        (resp.Capacity > 0).ShouldBe(true);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -430,8 +430,8 @@ public sealed class WafTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             Scope = "REGIONAL",
         });
 
-        Assert.True(resp.Capacity > 0);
-        Assert.NotNull(resp.Rules);
+        (resp.Capacity > 0).ShouldBe(true);
+        resp.Rules.ShouldNotBeNull();
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -469,6 +469,6 @@ public sealed class WafTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             ResourceType = ResourceType.APPLICATION_LOAD_BALANCER,
         });
 
-        Assert.Contains(resourceArn, listResp.ResourceArns);
+        listResp.ResourceArns.ShouldContain(resourceArn);
     }
 }

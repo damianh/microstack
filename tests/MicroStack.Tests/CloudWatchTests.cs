@@ -69,8 +69,8 @@ public sealed class CloudWatchTests : IClassFixture<MicroStackFixture>, IAsyncLi
 
         var resp = await _cw.ListMetricsAsync(new ListMetricsRequest { Namespace = "MyApp" });
         var names = resp.Metrics.ConvertAll(m => m.MetricName);
-        Assert.Contains("RequestCount", names);
-        Assert.Contains("Latency", names);
+        names.ShouldContain("RequestCount");
+        names.ShouldContain("Latency");
     }
 
     // ── PutMetricAlarm + DescribeAlarms ──────────────────────────────────────
@@ -95,7 +95,7 @@ public sealed class CloudWatchTests : IClassFixture<MicroStackFixture>, IAsyncLi
             AlarmNames = ["high-latency"],
         });
 
-        Assert.Single(resp.MetricAlarms);
+        resp.MetricAlarms.ShouldHaveSingleItem();
     }
 
     // ── Dashboard CRUD ──────────────────────────────────────────────────────
@@ -122,11 +122,11 @@ public sealed class CloudWatchTests : IClassFixture<MicroStackFixture>, IAsyncLi
             DashboardName = "test-dash",
         });
 
-        Assert.Equal("test-dash", getResp.DashboardName);
-        Assert.NotNull(getResp.DashboardBody);
+        getResp.DashboardName.ShouldBe("test-dash");
+        getResp.DashboardBody.ShouldNotBeNull();
 
         var listResp = await _cw.ListDashboardsAsync(new ListDashboardsRequest());
-        Assert.Contains(listResp.DashboardEntries, d => d.DashboardName == "test-dash");
+        listResp.DashboardEntries.ShouldContain(d => d.DashboardName == "test-dash");
 
         await _cw.DeleteDashboardsAsync(new DeleteDashboardsRequest
         {
@@ -134,7 +134,7 @@ public sealed class CloudWatchTests : IClassFixture<MicroStackFixture>, IAsyncLi
         });
 
         var listResp2 = await _cw.ListDashboardsAsync(new ListDashboardsRequest());
-        Assert.DoesNotContain(listResp2.DashboardEntries, d => d.DashboardName == "test-dash");
+        listResp2.DashboardEntries.ShouldNotContain(d => d.DashboardName == "test-dash");
     }
 
     // ── PutMetricData with Dimensions + ListMetrics filtered ─────────────────
@@ -160,15 +160,15 @@ public sealed class CloudWatchTests : IClassFixture<MicroStackFixture>, IAsyncLi
 
         var resp = await _cw.ListMetricsAsync(new ListMetricsRequest { Namespace = "CWv2" });
         var names = resp.Metrics.ConvertAll(m => m.MetricName);
-        Assert.Contains("Reqs", names);
-        Assert.Contains("Errs", names);
+        names.ShouldContain("Reqs");
+        names.ShouldContain("Errs");
 
         var filtered = await _cw.ListMetricsAsync(new ListMetricsRequest
         {
             Namespace = "CWv2",
             MetricName = "Reqs",
         });
-        Assert.All(filtered.Metrics, m => Assert.Equal("Reqs", m.MetricName));
+        filtered.Metrics.ShouldAllBe(m => m.MetricName == "Reqs");
     }
 
     // ── GetMetricStatistics ─────────────────────────────────────────────────
@@ -197,13 +197,13 @@ public sealed class CloudWatchTests : IClassFixture<MicroStackFixture>, IAsyncLi
             Statistics = [Statistic.Average, Statistic.Sum, Statistic.SampleCount, Statistic.Minimum, Statistic.Maximum],
         });
 
-        Assert.NotEmpty(resp.Datapoints);
+        resp.Datapoints.ShouldNotBeEmpty();
         var dp = resp.Datapoints[0];
-        Assert.True(dp.Average > 0);
-        Assert.True(dp.Sum > 0);
-        Assert.True(dp.SampleCount > 0);
-        Assert.True(dp.Minimum > 0);
-        Assert.True(dp.Maximum > 0);
+        (dp.Average > 0).ShouldBe(true);
+        (dp.Sum > 0).ShouldBe(true);
+        (dp.SampleCount > 0).ShouldBe(true);
+        (dp.Minimum > 0).ShouldBe(true);
+        (dp.Maximum > 0).ShouldBe(true);
     }
 
     // ── PutMetricAlarm with details ─────────────────────────────────────────
@@ -231,10 +231,10 @@ public sealed class CloudWatchTests : IClassFixture<MicroStackFixture>, IAsyncLi
         });
 
         var alarm = resp.MetricAlarms[0];
-        Assert.Equal("cw-v2-high-err", alarm.AlarmName);
-        Assert.Equal(10.0, alarm.Threshold);
-        Assert.Equal(ComparisonOperator.GreaterThanOrEqualToThreshold, alarm.ComparisonOperator);
-        Assert.Equal(2, alarm.EvaluationPeriods);
+        alarm.AlarmName.ShouldBe("cw-v2-high-err");
+        alarm.Threshold.ShouldBe(10.0);
+        alarm.ComparisonOperator.ShouldBe(ComparisonOperator.GreaterThanOrEqualToThreshold);
+        alarm.EvaluationPeriods.ShouldBe(2);
     }
 
     // ── DescribeAlarms with prefix filter ────────────────────────────────────
@@ -264,7 +264,7 @@ public sealed class CloudWatchTests : IClassFixture<MicroStackFixture>, IAsyncLi
 
         var names = resp.MetricAlarms.ConvertAll(a => a.AlarmName);
         for (var i = 0; i < 3; i++)
-            Assert.Contains($"cw-da-v2-{i}", names);
+            names.ShouldContain($"cw-da-v2-{i}");
     }
 
     // ── DeleteAlarms ────────────────────────────────────────────────────────
@@ -294,7 +294,7 @@ public sealed class CloudWatchTests : IClassFixture<MicroStackFixture>, IAsyncLi
             AlarmNames = ["cw-del-v2"],
         });
 
-        Assert.Empty(resp.MetricAlarms);
+        resp.MetricAlarms.ShouldBeEmpty();
     }
 
     // ── SetAlarmState ───────────────────────────────────────────────────────
@@ -318,7 +318,7 @@ public sealed class CloudWatchTests : IClassFixture<MicroStackFixture>, IAsyncLi
         {
             AlarmNames = ["cw-state-v2"],
         })).MetricAlarms[0];
-        Assert.Equal(StateValue.INSUFFICIENT_DATA, initial.StateValue);
+        initial.StateValue.ShouldBe(StateValue.INSUFFICIENT_DATA);
 
         await _cw.SetAlarmStateAsync(new SetAlarmStateRequest
         {
@@ -331,8 +331,8 @@ public sealed class CloudWatchTests : IClassFixture<MicroStackFixture>, IAsyncLi
         {
             AlarmNames = ["cw-state-v2"],
         })).MetricAlarms[0];
-        Assert.Equal(StateValue.ALARM, after.StateValue);
-        Assert.Equal("Manual trigger for testing", after.StateReason);
+        after.StateValue.ShouldBe(StateValue.ALARM);
+        after.StateReason.ShouldBe("Manual trigger for testing");
     }
 
     // ── GetMetricData ───────────────────────────────────────────────────────
@@ -374,10 +374,10 @@ public sealed class CloudWatchTests : IClassFixture<MicroStackFixture>, IAsyncLi
             EndTime = now.AddMinutes(10).UtcDateTime,
         });
 
-        Assert.Single(resp.MetricDataResults);
-        Assert.Equal("q1", resp.MetricDataResults[0].Id);
-        Assert.Equal(StatusCode.Complete, resp.MetricDataResults[0].StatusCode);
-        Assert.NotEmpty(resp.MetricDataResults[0].Values);
+        resp.MetricDataResults.ShouldHaveSingleItem();
+        resp.MetricDataResults[0].Id.ShouldBe("q1");
+        resp.MetricDataResults[0].StatusCode.ShouldBe(StatusCode.Complete);
+        resp.MetricDataResults[0].Values.ShouldNotBeEmpty();
     }
 
     // ── Tags CRUD ───────────────────────────────────────────────────────────
@@ -417,8 +417,8 @@ public sealed class CloudWatchTests : IClassFixture<MicroStackFixture>, IAsyncLi
             ResourceARN = arn,
         });
         var tagMap = resp.Tags.ToDictionary(t => t.Key, t => t.Value);
-        Assert.Equal("prod", tagMap["env"]);
-        Assert.Equal("sre", tagMap["team"]);
+        tagMap["env"].ShouldBe("prod");
+        tagMap["team"].ShouldBe("sre");
 
         await _cw.UntagResourceAsync(new UntagResourceRequest
         {
@@ -430,8 +430,8 @@ public sealed class CloudWatchTests : IClassFixture<MicroStackFixture>, IAsyncLi
         {
             ResourceARN = arn,
         });
-        Assert.DoesNotContain(resp2.Tags, t => t.Key == "env");
-        Assert.Contains(resp2.Tags, t => t.Key == "team");
+        resp2.Tags.ShouldNotContain(t => t.Key == "env");
+        resp2.Tags.ShouldContain(t => t.Key == "team");
     }
 
     // ── CompositeAlarm ──────────────────────────────────────────────────────
@@ -472,7 +472,7 @@ public sealed class CloudWatchTests : IClassFixture<MicroStackFixture>, IAsyncLi
             AlarmTypes = [AlarmType.CompositeAlarm],
         });
 
-        Assert.Contains(resp.CompositeAlarms, a => a.AlarmName == compositeName);
+        resp.CompositeAlarms.ShouldContain(a => a.AlarmName == compositeName);
 
         await _cw.DeleteAlarmsAsync(new DeleteAlarmsRequest
         {
@@ -505,7 +505,7 @@ public sealed class CloudWatchTests : IClassFixture<MicroStackFixture>, IAsyncLi
             Namespace = "AWS/EC2",
         });
 
-        Assert.Contains(resp.MetricAlarms, a => a.AlarmName == alarmName);
+        resp.MetricAlarms.ShouldContain(a => a.AlarmName == alarmName);
 
         await _cw.DeleteAlarmsAsync(new DeleteAlarmsRequest { AlarmNames = [alarmName] });
     }
@@ -541,7 +541,7 @@ public sealed class CloudWatchTests : IClassFixture<MicroStackFixture>, IAsyncLi
             AlarmName = alarmName,
         });
 
-        Assert.NotEmpty(resp.AlarmHistoryItems);
+        resp.AlarmHistoryItems.ShouldNotBeEmpty();
 
         await _cw.DeleteAlarmsAsync(new DeleteAlarmsRequest { AlarmNames = [alarmName] });
     }
@@ -586,10 +586,10 @@ public sealed class CloudWatchTests : IClassFixture<MicroStackFixture>, IAsyncLi
         });
 
         var result = resp.MetricDataResults.Find(r => r.Id == "m1");
-        Assert.NotNull(result);
-        Assert.Equal(StatusCode.Complete, result.StatusCode);
-        Assert.NotEmpty(result.Values);
-        Assert.True(result.Values.Sum() >= 100.0);
+        result.ShouldNotBeNull();
+        result.StatusCode.ShouldBe(StatusCode.Complete);
+        result.Values.ShouldNotBeEmpty();
+        (result.Values.Sum() >= 100.0).ShouldBe(true);
     }
 
     // ── Alarm state transitions ─────────────────────────────────────────────
@@ -620,7 +620,7 @@ public sealed class CloudWatchTests : IClassFixture<MicroStackFixture>, IAsyncLi
         {
             AlarmNames = ["qa-cw-state-alarm"],
         })).MetricAlarms;
-        Assert.Equal(StateValue.ALARM, alarms[0].StateValue);
+        alarms[0].StateValue.ShouldBe(StateValue.ALARM);
 
         await _cw.SetAlarmStateAsync(new SetAlarmStateRequest
         {
@@ -633,7 +633,7 @@ public sealed class CloudWatchTests : IClassFixture<MicroStackFixture>, IAsyncLi
         {
             AlarmNames = ["qa-cw-state-alarm"],
         })).MetricAlarms;
-        Assert.Equal(StateValue.OK, alarms2[0].StateValue);
+        alarms2[0].StateValue.ShouldBe(StateValue.OK);
     }
 
     // ── ListMetrics namespace filter ────────────────────────────────────────
@@ -654,8 +654,8 @@ public sealed class CloudWatchTests : IClassFixture<MicroStackFixture>, IAsyncLi
 
         var resp = await _cw.ListMetricsAsync(new ListMetricsRequest { Namespace = "qa/ns-a" });
         var names = resp.Metrics.ConvertAll(m => m.MetricName);
-        Assert.Contains("MetA", names);
-        Assert.DoesNotContain("MetB", names);
+        names.ShouldContain("MetA");
+        names.ShouldNotContain("MetB");
     }
 
     // ── PutMetricData with Values/Counts array ──────────────────────────────
@@ -679,7 +679,7 @@ public sealed class CloudWatchTests : IClassFixture<MicroStackFixture>, IAsyncLi
         });
 
         var resp = await _cw.ListMetricsAsync(new ListMetricsRequest { Namespace = "qa/cw-multi" });
-        Assert.Contains(resp.Metrics, m => m.MetricName == "Latency");
+        resp.Metrics.ShouldContain(m => m.MetricName == "Latency");
     }
 
     // ── EnableAlarmActions / DisableAlarmActions ─────────────────────────────
@@ -708,7 +708,7 @@ public sealed class CloudWatchTests : IClassFixture<MicroStackFixture>, IAsyncLi
         {
             AlarmNames = ["cw-en-dis"],
         })).MetricAlarms[0];
-        Assert.False(disabled.ActionsEnabled);
+        disabled.ActionsEnabled.ShouldBe(false);
 
         await _cw.EnableAlarmActionsAsync(new EnableAlarmActionsRequest
         {
@@ -719,7 +719,7 @@ public sealed class CloudWatchTests : IClassFixture<MicroStackFixture>, IAsyncLi
         {
             AlarmNames = ["cw-en-dis"],
         })).MetricAlarms[0];
-        Assert.True(enabled.ActionsEnabled);
+        enabled.ActionsEnabled.ShouldBe(true);
     }
 
     // ── SetAlarmState returns error for non-existent alarm ──────────────────
@@ -727,7 +727,7 @@ public sealed class CloudWatchTests : IClassFixture<MicroStackFixture>, IAsyncLi
     [Fact]
     public async Task SetAlarmStateNotFoundReturnsError()
     {
-        var ex = await Assert.ThrowsAsync<Amazon.CloudWatch.Model.ResourceNotFoundException>(
+        var ex = await Should.ThrowAsync<Amazon.CloudWatch.Model.ResourceNotFoundException>(
             () => _cw.SetAlarmStateAsync(new SetAlarmStateRequest
             {
                 AlarmName = "nonexistent-alarm-xyz",
@@ -735,7 +735,7 @@ public sealed class CloudWatchTests : IClassFixture<MicroStackFixture>, IAsyncLi
                 StateReason = "test",
             }));
 
-        Assert.Contains("nonexistent-alarm-xyz", ex.Message);
+        ex.Message.ShouldContain("nonexistent-alarm-xyz");
     }
 
     // ── Dashboard not found ─────────────────────────────────────────────────
@@ -743,7 +743,7 @@ public sealed class CloudWatchTests : IClassFixture<MicroStackFixture>, IAsyncLi
     [Fact]
     public async Task GetDashboardNotFound()
     {
-        await Assert.ThrowsAsync<Amazon.CloudWatch.Model.DashboardNotFoundErrorException>(
+        await Should.ThrowAsync<Amazon.CloudWatch.Model.DashboardNotFoundErrorException>(
             () => _cw.GetDashboardAsync(new GetDashboardRequest
             {
                 DashboardName = "no-such-dashboard",
@@ -777,9 +777,9 @@ public sealed class CloudWatchTests : IClassFixture<MicroStackFixture>, IAsyncLi
         });
 
         var names = resp.DashboardEntries.ConvertAll(d => d.DashboardName);
-        Assert.Contains("prefix-a-dash", names);
-        Assert.Contains("prefix-b-dash", names);
-        Assert.DoesNotContain("other-dash", names);
+        names.ShouldContain("prefix-a-dash");
+        names.ShouldContain("prefix-b-dash");
+        names.ShouldNotContain("other-dash");
     }
 
     // ── GetMetricStatistics returns empty for unknown metric ────────────────
@@ -798,7 +798,7 @@ public sealed class CloudWatchTests : IClassFixture<MicroStackFixture>, IAsyncLi
             Statistics = [Statistic.Average],
         });
 
-        Assert.Empty(resp.Datapoints);
+        resp.Datapoints.ShouldBeEmpty();
     }
 
     // ── DescribeAlarms with StateValue filter ───────────────────────────────
@@ -823,7 +823,7 @@ public sealed class CloudWatchTests : IClassFixture<MicroStackFixture>, IAsyncLi
         {
             StateValue = StateValue.INSUFFICIENT_DATA,
         });
-        Assert.Contains(resp.MetricAlarms, a => a.AlarmName == "cw-state-filter-alarm");
+        resp.MetricAlarms.ShouldContain(a => a.AlarmName == "cw-state-filter-alarm");
 
         // Set to ALARM
         await _cw.SetAlarmStateAsync(new SetAlarmStateRequest
@@ -837,12 +837,12 @@ public sealed class CloudWatchTests : IClassFixture<MicroStackFixture>, IAsyncLi
         {
             StateValue = StateValue.ALARM,
         });
-        Assert.Contains(respAlarm.MetricAlarms, a => a.AlarmName == "cw-state-filter-alarm");
+        respAlarm.MetricAlarms.ShouldContain(a => a.AlarmName == "cw-state-filter-alarm");
 
         var respInsufficient = await _cw.DescribeAlarmsAsync(new DescribeAlarmsRequest
         {
             StateValue = StateValue.INSUFFICIENT_DATA,
         });
-        Assert.DoesNotContain(respInsufficient.MetricAlarms, a => a.AlarmName == "cw-state-filter-alarm");
+        respInsufficient.MetricAlarms.ShouldNotContain(a => a.AlarmName == "cw-state-filter-alarm");
     }
 }

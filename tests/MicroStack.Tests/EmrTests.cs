@@ -77,7 +77,7 @@ public sealed class EmrTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         });
 
         var clusterId = resp.JobFlowId;
-        Assert.StartsWith("j-", clusterId);
+        clusterId.ShouldStartWith("j-");
 
         var descResp = await _emr.DescribeClusterAsync(new DescribeClusterRequest
         {
@@ -85,9 +85,9 @@ public sealed class EmrTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         });
 
         var cluster = descResp.Cluster;
-        Assert.Equal("test-cluster", cluster.Name);
-        Assert.Equal("emr-6.10.0", cluster.ReleaseLabel);
-        Assert.Contains(cluster.Tags, t => t.Key == "env" && t.Value == "test");
+        cluster.Name.ShouldBe("test-cluster");
+        cluster.ReleaseLabel.ShouldBe("emr-6.10.0");
+        cluster.Tags.ShouldContain(t => t.Key == "env" && t.Value == "test");
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -120,7 +120,7 @@ public sealed class EmrTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         });
 
         var listResp = await _emr.ListClustersAsync(new ListClustersRequest());
-        Assert.True(listResp.Clusters.Count >= 2);
+        (listResp.Clusters.Count >= 2).ShouldBe(true);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -151,7 +151,7 @@ public sealed class EmrTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             ClusterId = resp.JobFlowId,
         });
 
-        Assert.Equal("TERMINATED", descResp.Cluster.Status.State.Value);
+        descResp.Cluster.Status.State.Value.ShouldBe("TERMINATED");
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -191,15 +191,15 @@ public sealed class EmrTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             ],
         });
 
-        Assert.Single(addResp.StepIds);
+        addResp.StepIds.ShouldHaveSingleItem();
 
         var listResp = await _emr.ListStepsAsync(new ListStepsRequest
         {
             ClusterId = clusterId,
         });
 
-        Assert.Single(listResp.Steps);
-        Assert.Equal("step-1", listResp.Steps[0].Name);
+        listResp.Steps.ShouldHaveSingleItem();
+        listResp.Steps[0].Name.ShouldBe("step-1");
 
         var descResp = await _emr.DescribeStepAsync(new DescribeStepRequest
         {
@@ -207,7 +207,7 @@ public sealed class EmrTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             StepId = addResp.StepIds[0],
         });
 
-        Assert.Equal("step-1", descResp.Step.Name);
+        descResp.Step.Name.ShouldBe("step-1");
 
         await _emr.CancelStepsAsync(new CancelStepsRequest
         {
@@ -246,7 +246,7 @@ public sealed class EmrTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             ClusterId = clusterId,
         });
 
-        Assert.Contains(descResp.Cluster.Tags, t => t.Key == "Owner" && t.Value == "TeamA");
+        descResp.Cluster.Tags.ShouldContain(t => t.Key == "Owner" && t.Value == "TeamA");
 
         await _emr.RemoveTagsAsync(new RemoveTagsRequest
         {
@@ -259,7 +259,7 @@ public sealed class EmrTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             ClusterId = clusterId,
         });
 
-        Assert.DoesNotContain(descResp2.Cluster.Tags, t => t.Key == "Owner");
+        descResp2.Cluster.Tags.ShouldNotContain(t => t.Key == "Owner");
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -291,7 +291,7 @@ public sealed class EmrTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             ClusterId = runResp.JobFlowId,
         });
 
-        Assert.True(descResp.Cluster.TerminationProtected);
+        descResp.Cluster.TerminationProtected.ShouldBe(true);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -323,7 +323,7 @@ public sealed class EmrTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             ClusterId = runResp.JobFlowId,
         });
 
-        Assert.True(descResp.Cluster.VisibleToAllUsers);
+        descResp.Cluster.VisibleToAllUsers.ShouldBe(true);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -350,7 +350,7 @@ public sealed class EmrTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             StepConcurrencyLevel = 5,
         });
 
-        Assert.Equal(5, modResp.StepConcurrencyLevel);
+        modResp.StepConcurrencyLevel.ShouldBe(5);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -388,14 +388,14 @@ public sealed class EmrTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             },
         });
 
-        Assert.NotEmpty(addResp.InstanceFleetId);
+        addResp.InstanceFleetId.ShouldNotBeEmpty();
 
         var listResp = await _emr.ListInstanceFleetsAsync(new ListInstanceFleetsRequest
         {
             ClusterId = clusterId,
         });
 
-        Assert.Contains(listResp.InstanceFleets, f => f.Id == addResp.InstanceFleetId);
+        listResp.InstanceFleets.ShouldContain(f => f.Id == addResp.InstanceFleetId);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -432,14 +432,14 @@ public sealed class EmrTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             ],
         });
 
-        Assert.Single(addResp.InstanceGroupIds);
+        addResp.InstanceGroupIds.ShouldHaveSingleItem();
 
         var listResp = await _emr.ListInstanceGroupsAsync(new ListInstanceGroupsRequest
         {
             ClusterId = clusterId,
         });
 
-        Assert.Contains(listResp.InstanceGroups, g => g.Id == addResp.InstanceGroupIds[0]);
+        listResp.InstanceGroups.ShouldContain(g => g.Id == addResp.InstanceGroupIds[0]);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -477,8 +477,8 @@ public sealed class EmrTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             ClusterId = runResp.JobFlowId,
         });
 
-        Assert.Single(listResp.BootstrapActions);
-        Assert.Equal("install-libs", listResp.BootstrapActions[0].Name);
+        listResp.BootstrapActions.ShouldHaveSingleItem();
+        listResp.BootstrapActions[0].Name.ShouldBe("install-libs");
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -491,7 +491,7 @@ public sealed class EmrTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         var getResp = await _emr.GetBlockPublicAccessConfigurationAsync(
             new GetBlockPublicAccessConfigurationRequest());
 
-        Assert.NotNull(getResp.BlockPublicAccessConfiguration);
+        getResp.BlockPublicAccessConfiguration.ShouldNotBeNull();
 
         await _emr.PutBlockPublicAccessConfigurationAsync(
             new PutBlockPublicAccessConfigurationRequest
@@ -505,6 +505,6 @@ public sealed class EmrTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         var getResp2 = await _emr.GetBlockPublicAccessConfigurationAsync(
             new GetBlockPublicAccessConfigurationRequest());
 
-        Assert.False(getResp2.BlockPublicAccessConfiguration.BlockPublicSecurityGroupRules);
+        getResp2.BlockPublicAccessConfiguration.BlockPublicSecurityGroupRules.ShouldBe(false);
     }
 }

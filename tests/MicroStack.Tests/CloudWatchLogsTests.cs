@@ -82,7 +82,7 @@ public sealed class CloudWatchLogsTests : IClassFixture<MicroStackFixture>, IAsy
             LogStreamName = "stream1",
         });
 
-        Assert.Equal(2, resp.Events.Count);
+        resp.Events.Count.ShouldBe(2);
     }
 
     // -- FilterLogEvents ------------------------------------------------------
@@ -116,10 +116,10 @@ public sealed class CloudWatchLogsTests : IClassFixture<MicroStackFixture>, IAsy
             FilterPattern = "ERROR",
         });
 
-        Assert.Equal(2, resp.Events.Count);
+        resp.Events.Count.ShouldBe(2);
         var msgs = resp.Events.ConvertAll(e => e.Message);
-        Assert.Contains("ERROR disk full", msgs);
-        Assert.Contains("ERROR timeout", msgs);
+        msgs.ShouldContain("ERROR disk full");
+        msgs.ShouldContain("ERROR timeout");
     }
 
     // -- CreateLogGroup -------------------------------------------------------
@@ -133,7 +133,7 @@ public sealed class CloudWatchLogsTests : IClassFixture<MicroStackFixture>, IAsy
             LogGroupNamePrefix = "/cwl/cg-v2",
         });
 
-        Assert.Contains(resp.LogGroups, g => g.LogGroupName == "/cwl/cg-v2");
+        resp.LogGroups.ShouldContain(g => g.LogGroupName == "/cwl/cg-v2");
     }
 
     // -- CreateLogGroup duplicate ---------------------------------------------
@@ -143,10 +143,10 @@ public sealed class CloudWatchLogsTests : IClassFixture<MicroStackFixture>, IAsy
     {
         await _logs.CreateLogGroupAsync(new CreateLogGroupRequest { LogGroupName = "/cwl/dup-v2" });
 
-        var ex = await Assert.ThrowsAsync<ResourceAlreadyExistsException>(() =>
+        var ex = await Should.ThrowAsync<ResourceAlreadyExistsException>(() =>
             _logs.CreateLogGroupAsync(new CreateLogGroupRequest { LogGroupName = "/cwl/dup-v2" }));
 
-        Assert.Equal("ResourceAlreadyExistsException", ex.ErrorCode);
+        ex.ErrorCode.ShouldBe("ResourceAlreadyExistsException");
     }
 
     // -- DeleteLogGroup -------------------------------------------------------
@@ -162,7 +162,7 @@ public sealed class CloudWatchLogsTests : IClassFixture<MicroStackFixture>, IAsy
             LogGroupNamePrefix = "/cwl/del-v2",
         });
 
-        Assert.DoesNotContain(resp.LogGroups, g => g.LogGroupName == "/cwl/del-v2");
+        resp.LogGroups.ShouldNotContain(g => g.LogGroupName == "/cwl/del-v2");
     }
 
     // -- DescribeLogGroups ----------------------------------------------------
@@ -179,8 +179,8 @@ public sealed class CloudWatchLogsTests : IClassFixture<MicroStackFixture>, IAsy
         });
 
         var names = resp.LogGroups.ConvertAll(g => g.LogGroupName);
-        Assert.Contains("/cwl/dg-a", names);
-        Assert.Contains("/cwl/dg-b", names);
+        names.ShouldContain("/cwl/dg-a");
+        names.ShouldContain("/cwl/dg-b");
     }
 
     // -- CreateLogStream ------------------------------------------------------
@@ -206,8 +206,8 @@ public sealed class CloudWatchLogsTests : IClassFixture<MicroStackFixture>, IAsy
         });
 
         var names = resp.LogStreams.ConvertAll(s => s.LogStreamName);
-        Assert.Contains("stream-a", names);
-        Assert.Contains("stream-b", names);
+        names.ShouldContain("stream-a");
+        names.ShouldContain("stream-b");
     }
 
     // -- PutLogEvents / GetLogEvents (v2) -------------------------------------
@@ -241,9 +241,9 @@ public sealed class CloudWatchLogsTests : IClassFixture<MicroStackFixture>, IAsy
             LogStreamName = "s1",
         });
 
-        Assert.Equal(3, resp.Events.Count);
-        Assert.Equal("first line", resp.Events[0].Message);
-        Assert.Equal("third line", resp.Events[2].Message);
+        resp.Events.Count.ShouldBe(3);
+        resp.Events[0].Message.ShouldBe("first line");
+        resp.Events[2].Message.ShouldBe("third line");
     }
 
     // -- Retention policy -----------------------------------------------------
@@ -264,8 +264,8 @@ public sealed class CloudWatchLogsTests : IClassFixture<MicroStackFixture>, IAsy
         });
 
         var grp = resp.LogGroups.Find(g => g.LogGroupName == "/cwl/ret-v2");
-        Assert.NotNull(grp);
-        Assert.Equal(30, grp.RetentionInDays);
+        grp.ShouldNotBeNull();
+        grp.RetentionInDays.ShouldBe(30);
 
         await _logs.DeleteRetentionPolicyAsync(new DeleteRetentionPolicyRequest
         {
@@ -278,10 +278,10 @@ public sealed class CloudWatchLogsTests : IClassFixture<MicroStackFixture>, IAsy
         });
 
         var grp2 = resp2.LogGroups.Find(g => g.LogGroupName == "/cwl/ret-v2");
-        Assert.NotNull(grp2);
+        grp2.ShouldNotBeNull();
         // After deleting retention policy, retentionInDays is not present in JSON,
         // which the SDK maps as null (default for nullable int)
-        Assert.Null(grp2.RetentionInDays);
+        grp2.RetentionInDays.ShouldBeNull();
     }
 
     // -- Invalid retention policy value ---------------------------------------
@@ -294,14 +294,14 @@ public sealed class CloudWatchLogsTests : IClassFixture<MicroStackFixture>, IAsy
             LogGroupName = "/cwl/retention-invalid",
         });
 
-        var ex = await Assert.ThrowsAsync<InvalidParameterException>(() =>
+        var ex = await Should.ThrowAsync<InvalidParameterException>(() =>
             _logs.PutRetentionPolicyAsync(new PutRetentionPolicyRequest
             {
                 LogGroupName = "/cwl/retention-invalid",
                 RetentionInDays = 999,
             }));
 
-        Assert.Equal("InvalidParameterException", ex.ErrorCode);
+        ex.ErrorCode.ShouldBe("InvalidParameterException");
     }
 
     // -- Tags (legacy) --------------------------------------------------------
@@ -321,7 +321,7 @@ public sealed class CloudWatchLogsTests : IClassFixture<MicroStackFixture>, IAsy
             LogGroupName = "/cwl/tag-v2",
         });
 
-        Assert.Equal("prod", resp.Tags["env"]);
+        resp.Tags["env"].ShouldBe("prod");
 
         await _logs.TagLogGroupAsync(new TagLogGroupRequest
         {
@@ -334,8 +334,8 @@ public sealed class CloudWatchLogsTests : IClassFixture<MicroStackFixture>, IAsy
             LogGroupName = "/cwl/tag-v2",
         });
 
-        Assert.Equal("prod", resp2.Tags["env"]);
-        Assert.Equal("infra", resp2.Tags["team"]);
+        resp2.Tags["env"].ShouldBe("prod");
+        resp2.Tags["team"].ShouldBe("infra");
 
         await _logs.UntagLogGroupAsync(new UntagLogGroupRequest
         {
@@ -348,8 +348,8 @@ public sealed class CloudWatchLogsTests : IClassFixture<MicroStackFixture>, IAsy
             LogGroupName = "/cwl/tag-v2",
         });
 
-        Assert.DoesNotContain("env", (IDictionary<string, string>)resp3.Tags);
-        Assert.Equal("infra", resp3.Tags["team"]);
+        resp3.Tags.ShouldNotContainKey("env");
+        resp3.Tags["team"].ShouldBe("infra");
 #pragma warning restore CS0618
     }
 
@@ -358,7 +358,7 @@ public sealed class CloudWatchLogsTests : IClassFixture<MicroStackFixture>, IAsy
     [Fact]
     public async Task PutRequiresGroup()
     {
-        var ex = await Assert.ThrowsAsync<ResourceNotFoundException>(() =>
+        var ex = await Should.ThrowAsync<ResourceNotFoundException>(() =>
             _logs.PutLogEventsAsync(new PutLogEventsRequest
             {
                 LogGroupName = "/cwl/nonexistent-xyz",
@@ -366,7 +366,7 @@ public sealed class CloudWatchLogsTests : IClassFixture<MicroStackFixture>, IAsy
                 LogEvents = [new InputLogEvent { Timestamp = DateTime.UtcNow, Message = "fail" }],
             }));
 
-        Assert.Equal("ResourceNotFoundException", ex.ErrorCode);
+        ex.ErrorCode.ShouldBe("ResourceNotFoundException");
     }
 
     // -- Subscription filter --------------------------------------------------
@@ -390,7 +390,7 @@ public sealed class CloudWatchLogsTests : IClassFixture<MicroStackFixture>, IAsy
             LogGroupName = group,
         });
 
-        Assert.Contains(resp.SubscriptionFilters, f => f.FilterName == "my-filter");
+        resp.SubscriptionFilters.ShouldContain(f => f.FilterName == "my-filter");
 
         await _logs.DeleteSubscriptionFilterAsync(new DeleteSubscriptionFilterRequest
         {
@@ -403,7 +403,7 @@ public sealed class CloudWatchLogsTests : IClassFixture<MicroStackFixture>, IAsy
             LogGroupName = group,
         });
 
-        Assert.DoesNotContain(resp2.SubscriptionFilters, f => f.FilterName == "my-filter");
+        resp2.SubscriptionFilters.ShouldNotContain(f => f.FilterName == "my-filter");
     }
 
     // -- Metric filter --------------------------------------------------------
@@ -435,7 +435,7 @@ public sealed class CloudWatchLogsTests : IClassFixture<MicroStackFixture>, IAsy
             LogGroupName = group,
         });
 
-        Assert.Contains(resp.MetricFilters, f => f.FilterName == "error-count");
+        resp.MetricFilters.ShouldContain(f => f.FilterName == "error-count");
 
         await _logs.DeleteMetricFilterAsync(new DeleteMetricFilterRequest
         {
@@ -448,7 +448,7 @@ public sealed class CloudWatchLogsTests : IClassFixture<MicroStackFixture>, IAsy
             LogGroupName = group,
         });
 
-        Assert.DoesNotContain(resp2.MetricFilters, f => f.FilterName == "error-count");
+        resp2.MetricFilters.ShouldNotContain(f => f.FilterName == "error-count");
     }
 
     // -- Insights start query -------------------------------------------------
@@ -467,14 +467,14 @@ public sealed class CloudWatchLogsTests : IClassFixture<MicroStackFixture>, IAsy
             QueryString = "fields @timestamp, @message | limit 10",
         });
 
-        Assert.NotNull(resp.QueryId);
+        resp.QueryId.ShouldNotBeNull();
 
         var results = await _logs.GetQueryResultsAsync(new GetQueryResultsRequest
         {
             QueryId = resp.QueryId,
         });
 
-        Assert.Contains(results.Status.Value, new[] { "Complete", "Running", "Scheduled" });
+        new[] { "Complete", "Running", "Scheduled" }.ShouldContain(results.Status.Value);
     }
 
     // -- DescribeLogGroups prefix filter ---------------------------------------
@@ -492,9 +492,9 @@ public sealed class CloudWatchLogsTests : IClassFixture<MicroStackFixture>, IAsy
         });
 
         var names = resp.LogGroups.ConvertAll(g => g.LogGroupName);
-        Assert.Contains("/qa/logs/prefix/alpha", names);
-        Assert.Contains("/qa/logs/prefix/beta", names);
-        Assert.DoesNotContain("/qa/logs/other/gamma", names);
+        names.ShouldContain("/qa/logs/prefix/alpha");
+        names.ShouldContain("/qa/logs/prefix/beta");
+        names.ShouldNotContain("/qa/logs/other/gamma");
     }
 
     // -- ListTagsForResource ARN without star ---------------------------------
@@ -515,7 +515,7 @@ public sealed class CloudWatchLogsTests : IClassFixture<MicroStackFixture>, IAsy
         });
 
         var storedArn = groups.LogGroups[0].Arn;
-        Assert.EndsWith(":*", storedArn);
+        storedArn.ShouldEndWith(":*");
 
         // Terraform sends the ARN without :* — must not raise
         var arnNoStar = storedArn[..^2];
@@ -524,7 +524,7 @@ public sealed class CloudWatchLogsTests : IClassFixture<MicroStackFixture>, IAsy
             ResourceArn = arnNoStar,
         });
 
-        Assert.Equal("test", resp.Tags["env"]);
+        resp.Tags["env"].ShouldBe("test");
     }
 
     // -- GetLogEvents pagination stops ----------------------------------------
@@ -561,7 +561,7 @@ public sealed class CloudWatchLogsTests : IClassFixture<MicroStackFixture>, IAsy
             StartFromHead = true,
         });
 
-        Assert.Equal(2, resp.Events.Count);
+        resp.Events.Count.ShouldBe(2);
         var fwdToken = resp.NextForwardToken;
 
         // Second call with forward token — no more events, token must match
@@ -572,8 +572,8 @@ public sealed class CloudWatchLogsTests : IClassFixture<MicroStackFixture>, IAsy
             NextToken = fwdToken,
         });
 
-        Assert.Empty(resp2.Events);
-        Assert.Equal(fwdToken, resp2.NextForwardToken);
+        resp2.Events.ShouldBeEmpty();
+        resp2.NextForwardToken.ShouldBe(fwdToken);
     }
 
     // -- FilterLogEvents with wildcard pattern --------------------------------
@@ -609,8 +609,8 @@ public sealed class CloudWatchLogsTests : IClassFixture<MicroStackFixture>, IAsy
         });
 
         var messages = resp.Events.ConvertAll(e => e.Message);
-        Assert.All(messages, m => Assert.Contains("ERROR", m));
-        Assert.Equal(2, messages.Count);
+        messages.ShouldAllBe(m => m.Contains("ERROR"));
+        messages.Count.ShouldBe(2);
     }
 
     // -- Tag / Untag resource (modern ARN-based) ------------------------------
@@ -639,7 +639,7 @@ public sealed class CloudWatchLogsTests : IClassFixture<MicroStackFixture>, IAsy
             ResourceArn = arn,
         });
 
-        Assert.Equal("microstack", tags.Tags["project"]);
+        tags.Tags["project"].ShouldBe("microstack");
 
         await _logs.UntagResourceAsync(new UntagResourceRequest
         {
@@ -652,7 +652,7 @@ public sealed class CloudWatchLogsTests : IClassFixture<MicroStackFixture>, IAsy
             ResourceArn = arn,
         });
 
-        Assert.DoesNotContain("project", (IDictionary<string, string>)tags2.Tags);
+        tags2.Tags.ShouldNotContainKey("project");
     }
 
     // -- Destination CRUD -----------------------------------------------------
@@ -668,7 +668,7 @@ public sealed class CloudWatchLogsTests : IClassFixture<MicroStackFixture>, IAsy
         });
 
         var resp = await _logs.DescribeDestinationsAsync(new DescribeDestinationsRequest());
-        Assert.Contains(resp.Destinations, d => d.DestinationName == "my-dest");
+        resp.Destinations.ShouldContain(d => d.DestinationName == "my-dest");
 
         await _logs.PutDestinationPolicyAsync(new PutDestinationPolicyRequest
         {
@@ -682,6 +682,6 @@ public sealed class CloudWatchLogsTests : IClassFixture<MicroStackFixture>, IAsy
         });
 
         var resp2 = await _logs.DescribeDestinationsAsync(new DescribeDestinationsRequest());
-        Assert.DoesNotContain(resp2.Destinations, d => d.DestinationName == "my-dest");
+        resp2.Destinations.ShouldNotContain(d => d.DestinationName == "my-dest");
     }
 }

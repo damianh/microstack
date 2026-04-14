@@ -119,7 +119,7 @@ public sealed class MultiTenancyTests : IClassFixture<MicroStackFixture>, IAsync
     {
         using var sts = CreateStsClient("test");
         var resp = await sts.GetCallerIdentityAsync(new GetCallerIdentityRequest());
-        Assert.Equal("000000000000", resp.Account);
+        resp.Account.ShouldBe("000000000000");
     }
 
     [Fact]
@@ -127,7 +127,7 @@ public sealed class MultiTenancyTests : IClassFixture<MicroStackFixture>, IAsync
     {
         using var sts = CreateStsClient("123456789012");
         var resp = await sts.GetCallerIdentityAsync(new GetCallerIdentityRequest());
-        Assert.Equal("123456789012", resp.Account);
+        resp.Account.ShouldBe("123456789012");
     }
 
     [Fact]
@@ -135,8 +135,8 @@ public sealed class MultiTenancyTests : IClassFixture<MicroStackFixture>, IAsync
     {
         using var stsA = CreateStsClient("111111111111");
         using var stsB = CreateStsClient("222222222222");
-        Assert.Equal("111111111111", (await stsA.GetCallerIdentityAsync(new GetCallerIdentityRequest())).Account);
-        Assert.Equal("222222222222", (await stsB.GetCallerIdentityAsync(new GetCallerIdentityRequest())).Account);
+        (await stsA.GetCallerIdentityAsync(new GetCallerIdentityRequest())).Account.ShouldBe("111111111111");
+        (await stsB.GetCallerIdentityAsync(new GetCallerIdentityRequest())).Account.ShouldBe("222222222222");
     }
 
     [Fact]
@@ -144,7 +144,7 @@ public sealed class MultiTenancyTests : IClassFixture<MicroStackFixture>, IAsync
     {
         using var sts = CreateStsClient("12345");
         var resp = await sts.GetCallerIdentityAsync(new GetCallerIdentityRequest());
-        Assert.Equal("000000000000", resp.Account);
+        resp.Account.ShouldBe("000000000000");
     }
 
     // ── SQS: queue ARN uses dynamic account ──────────────────────────────────
@@ -162,7 +162,7 @@ public sealed class MultiTenancyTests : IClassFixture<MicroStackFixture>, IAsync
                 AttributeNames = ["QueueArn"],
             });
             var arn = attrs.Attributes["QueueArn"];
-            Assert.Contains("048408301323", arn);
+            arn.ShouldContain("048408301323");
         }
         finally
         {
@@ -196,8 +196,8 @@ public sealed class MultiTenancyTests : IClassFixture<MicroStackFixture>, IAsync
                     AttributeNames = ["QueueArn"],
                 });
 
-                Assert.Contains("111111111111", attrsA.Attributes["QueueArn"]);
-                Assert.Contains("222222222222", attrsB.Attributes["QueueArn"]);
+                attrsA.Attributes["QueueArn"].ShouldContain("111111111111");
+                attrsB.Attributes["QueueArn"].ShouldContain("222222222222");
             }
             finally
             {
@@ -224,12 +224,12 @@ public sealed class MultiTenancyTests : IClassFixture<MicroStackFixture>, IAsync
             // Account B should not see Account A's bucket
             var listB = await s3B.ListBucketsAsync();
             var bucketsB = listB.Buckets ?? [];
-            Assert.DoesNotContain(bucketsB, b => b.BucketName == "mt-bucket-test");
+            bucketsB.ShouldNotContain(b => b.BucketName == "mt-bucket-test");
 
             // Account A should see its own bucket
             var listA = await s3A.ListBucketsAsync();
             var bucketsA = listA.Buckets ?? [];
-            Assert.Contains(bucketsA, b => b.BucketName == "mt-bucket-test");
+            bucketsA.ShouldContain(b => b.BucketName == "mt-bucket-test");
         }
         finally
         {
@@ -257,11 +257,11 @@ public sealed class MultiTenancyTests : IClassFixture<MicroStackFixture>, IAsync
         {
             // Account B should not see Account A's table
             var listB = await ddbB.ListTablesAsync();
-            Assert.DoesNotContain(listB.TableNames, t => t == "mt-table-test");
+            listB.TableNames.ShouldNotContain(t => t == "mt-table-test");
 
             // Account A should see its own table
             var listA = await ddbA.ListTablesAsync();
-            Assert.Contains("mt-table-test", listA.TableNames);
+            listA.TableNames.ShouldContain("mt-table-test");
         }
         finally
         {
@@ -283,8 +283,8 @@ public sealed class MultiTenancyTests : IClassFixture<MicroStackFixture>, IAsync
         // Verify both queues exist
         var listA = await sqsA.ListQueuesAsync(new ListQueuesRequest());
         var listB = await sqsB.ListQueuesAsync(new ListQueuesRequest());
-        Assert.Contains(listA.QueueUrls, u => u.Contains("reset-test-a"));
-        Assert.Contains(listB.QueueUrls, u => u.Contains("reset-test-b"));
+        listA.QueueUrls.ShouldContain(u => u.Contains("reset-test-a"));
+        listB.QueueUrls.ShouldContain(u => u.Contains("reset-test-b"));
 
         // Reset
         await _fixture.HttpClient.PostAsync("/_ministack/reset", null);
@@ -292,7 +292,7 @@ public sealed class MultiTenancyTests : IClassFixture<MicroStackFixture>, IAsync
         // Both should be empty after reset
         listA = await sqsA.ListQueuesAsync(new ListQueuesRequest());
         listB = await sqsB.ListQueuesAsync(new ListQueuesRequest());
-        Assert.DoesNotContain(listA.QueueUrls, u => u.Contains("reset-test-a"));
-        Assert.DoesNotContain(listB.QueueUrls, u => u.Contains("reset-test-b"));
+        listA.QueueUrls.ShouldNotContain(u => u.Contains("reset-test-a"));
+        listB.QueueUrls.ShouldNotContain(u => u.Contains("reset-test-b"));
     }
 }

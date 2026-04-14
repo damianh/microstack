@@ -63,9 +63,9 @@ public sealed class EcsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             ClusterName = "test-cluster",
         });
 
-        Assert.Equal("test-cluster", resp.Cluster.ClusterName);
-        Assert.Equal("ACTIVE", resp.Cluster.Status);
-        Assert.Contains("test-cluster", resp.Cluster.ClusterArn);
+        resp.Cluster.ClusterName.ShouldBe("test-cluster");
+        resp.Cluster.Status.ShouldBe("ACTIVE");
+        resp.Cluster.ClusterArn.ShouldContain("test-cluster");
     }
 
     [Fact]
@@ -74,8 +74,8 @@ public sealed class EcsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         await _ecs.CreateClusterAsync(new CreateClusterRequest { ClusterName = "idem-cluster" });
         var resp2 = await _ecs.CreateClusterAsync(new CreateClusterRequest { ClusterName = "idem-cluster" });
 
-        Assert.Equal("idem-cluster", resp2.Cluster.ClusterName);
-        Assert.Equal("ACTIVE", resp2.Cluster.Status);
+        resp2.Cluster.ClusterName.ShouldBe("idem-cluster");
+        resp2.Cluster.Status.ShouldBe("ACTIVE");
     }
 
     [Fact]
@@ -86,8 +86,8 @@ public sealed class EcsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
 
         var resp = await _ecs.ListClustersAsync(new ListClustersRequest());
 
-        Assert.Contains(resp.ClusterArns, a => a.Contains("lc-a"));
-        Assert.Contains(resp.ClusterArns, a => a.Contains("lc-b"));
+        resp.ClusterArns.ShouldContain(a => a.Contains("lc-a"));
+        resp.ClusterArns.ShouldContain(a => a.Contains("lc-b"));
     }
 
     [Fact]
@@ -100,9 +100,9 @@ public sealed class EcsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             Clusters = ["desc-cluster"],
         });
 
-        Assert.Single(resp.Clusters);
-        Assert.Equal("desc-cluster", resp.Clusters[0].ClusterName);
-        Assert.Empty(resp.Failures);
+        resp.Clusters.ShouldHaveSingleItem();
+        resp.Clusters[0].ClusterName.ShouldBe("desc-cluster");
+        resp.Failures.ShouldBeEmpty();
     }
 
     [Fact]
@@ -113,9 +113,9 @@ public sealed class EcsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             Clusters = ["nonexistent"],
         });
 
-        Assert.Empty(resp.Clusters);
-        Assert.Single(resp.Failures);
-        Assert.Equal("MISSING", resp.Failures[0].Reason);
+        resp.Clusters.ShouldBeEmpty();
+        resp.Failures.ShouldHaveSingleItem();
+        resp.Failures[0].Reason.ShouldBe("MISSING");
     }
 
     [Fact]
@@ -124,18 +124,18 @@ public sealed class EcsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         await _ecs.CreateClusterAsync(new CreateClusterRequest { ClusterName = "del-cluster" });
 
         var resp = await _ecs.DeleteClusterAsync(new DeleteClusterRequest { Cluster = "del-cluster" });
-        Assert.Equal("INACTIVE", resp.Cluster.Status);
+        resp.Cluster.Status.ShouldBe("INACTIVE");
 
         var listResp = await _ecs.ListClustersAsync(new ListClustersRequest());
-        Assert.DoesNotContain(listResp.ClusterArns, a => a.Contains("del-cluster"));
+        listResp.ClusterArns.ShouldNotContain(a => a.Contains("del-cluster"));
     }
 
     [Fact]
     public async Task DeleteClusterNotFound()
     {
-        var ex = await Assert.ThrowsAsync<ClusterNotFoundException>(() =>
+        var ex = await Should.ThrowAsync<ClusterNotFoundException>(() =>
             _ecs.DeleteClusterAsync(new DeleteClusterRequest { Cluster = "no-such-cluster" }));
-        Assert.Contains("not found", ex.Message, StringComparison.OrdinalIgnoreCase);
+        ex.Message.ShouldContain("not found", Case.Insensitive);
     }
 
     [Fact]
@@ -149,7 +149,7 @@ public sealed class EcsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             Settings = [new ClusterSetting { Name = ClusterSettingName.ContainerInsights, Value = "enabled" }],
         });
 
-        Assert.Equal("upd-cl", resp.Cluster.ClusterName);
+        resp.Cluster.ClusterName.ShouldBe("upd-cl");
     }
 
     [Fact]
@@ -167,8 +167,8 @@ public sealed class EcsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             ],
         });
 
-        Assert.Equal("cp-cluster", resp.Cluster.ClusterName);
-        Assert.Contains("FARGATE", resp.Cluster.CapacityProviders);
+        resp.Cluster.ClusterName.ShouldBe("cp-cluster");
+        resp.Cluster.CapacityProviders.ShouldContain("FARGATE");
     }
 
     // -- Task Definition tests -------------------------------------------------
@@ -195,9 +195,9 @@ public sealed class EcsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             Memory = "512",
         });
 
-        Assert.Equal("test-task", resp.TaskDefinition.Family);
-        Assert.Equal(1, resp.TaskDefinition.Revision);
-        Assert.Equal("ACTIVE", resp.TaskDefinition.Status.Value);
+        resp.TaskDefinition.Family.ShouldBe("test-task");
+        resp.TaskDefinition.Revision.ShouldBe(1);
+        resp.TaskDefinition.Status.Value.ShouldBe("ACTIVE");
     }
 
     [Fact]
@@ -221,7 +221,7 @@ public sealed class EcsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             ],
         });
 
-        Assert.Equal(2, resp2.TaskDefinition.Revision);
+        resp2.TaskDefinition.Revision.ShouldBe(2);
     }
 
     [Fact]
@@ -239,7 +239,7 @@ public sealed class EcsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             Memory = "1024",
         });
 
-        Assert.Equal(2, resp.TaskDefinition.ContainerDefinitions.Count);
+        resp.TaskDefinition.ContainerDefinitions.Count.ShouldBe(2);
     }
 
     [Fact]
@@ -259,8 +259,8 @@ public sealed class EcsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             TaskDefinition = "desc-td",
         });
 
-        Assert.Equal("desc-td", resp.TaskDefinition.Family);
-        Assert.Equal(1, resp.TaskDefinition.Revision);
+        resp.TaskDefinition.Family.ShouldBe("desc-td");
+        resp.TaskDefinition.Revision.ShouldBe(1);
     }
 
     [Fact]
@@ -280,7 +280,7 @@ public sealed class EcsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             TaskDefinition = "dereg-td:1",
         });
 
-        Assert.Equal("INACTIVE", resp.TaskDefinition.Status.Value);
+        resp.TaskDefinition.Status.Value.ShouldBe("INACTIVE");
     }
 
     [Fact]
@@ -300,8 +300,8 @@ public sealed class EcsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             FamilyPrefix = "ltd-task",
         });
 
-        Assert.True(resp.TaskDefinitionArns.Count >= 1);
-        Assert.All(resp.TaskDefinitionArns, a => Assert.Contains("ltd-task", a));
+        (resp.TaskDefinitionArns.Count >= 1).ShouldBe(true);
+        resp.TaskDefinitionArns.ShouldAllBe(a => a.Contains("ltd-task"));
     }
 
     [Fact]
@@ -330,8 +330,8 @@ public sealed class EcsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             FamilyPrefix = "fam-",
         });
 
-        Assert.Contains("fam-a", resp.Families);
-        Assert.Contains("fam-b", resp.Families);
+        resp.Families.ShouldContain("fam-a");
+        resp.Families.ShouldContain("fam-b");
     }
 
     // -- Service tests ---------------------------------------------------------
@@ -357,9 +357,9 @@ public sealed class EcsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             DesiredCount = 2,
         });
 
-        Assert.Equal("test-svc", resp.Service.ServiceName);
-        Assert.Equal("ACTIVE", resp.Service.Status);
-        Assert.Equal(2, resp.Service.DesiredCount);
+        resp.Service.ServiceName.ShouldBe("test-svc");
+        resp.Service.Status.ShouldBe("ACTIVE");
+        resp.Service.DesiredCount.ShouldBe(2);
     }
 
     [Fact]
@@ -383,7 +383,7 @@ public sealed class EcsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             DesiredCount = 1,
         });
 
-        await Assert.ThrowsAsync<InvalidParameterException>(() =>
+        await Should.ThrowAsync<InvalidParameterException>(() =>
             _ecs.CreateServiceAsync(new CreateServiceRequest
             {
                 Cluster = "dup-svc-c",
@@ -428,10 +428,10 @@ public sealed class EcsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             Services = ["ds-svc-a", "ds-svc-b"],
         });
 
-        Assert.Equal(2, resp.Services.Count);
+        resp.Services.Count.ShouldBe(2);
         var svcMap = resp.Services.ToDictionary(s => s.ServiceName);
-        Assert.Equal(1, svcMap["ds-svc-a"].DesiredCount);
-        Assert.Equal(3, svcMap["ds-svc-b"].DesiredCount);
+        svcMap["ds-svc-a"].DesiredCount.ShouldBe(1);
+        svcMap["ds-svc-b"].DesiredCount.ShouldBe(3);
     }
 
     [Fact]
@@ -445,9 +445,9 @@ public sealed class EcsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             Services = ["nonexistent"],
         });
 
-        Assert.Empty(resp.Services);
-        Assert.Single(resp.Failures);
-        Assert.Equal("MISSING", resp.Failures[0].Reason);
+        resp.Services.ShouldBeEmpty();
+        resp.Failures.ShouldHaveSingleItem();
+        resp.Failures[0].Reason.ShouldBe("MISSING");
     }
 
     [Fact]
@@ -484,7 +484,7 @@ public sealed class EcsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             Services = ["us-svc"],
         });
 
-        Assert.Equal(5, desc.Services[0].DesiredCount);
+        desc.Services[0].DesiredCount.ShouldBe(5);
     }
 
     [Fact]
@@ -524,8 +524,8 @@ public sealed class EcsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             TaskDefinition = "us-td-v2",
         });
 
-        Assert.Contains("us-td-v2", updateResp.Service.TaskDefinition);
-        Assert.True(updateResp.Service.Deployments.Count >= 2);
+        updateResp.Service.TaskDefinition.ShouldContain("us-td-v2");
+        (updateResp.Service.Deployments.Count >= 2).ShouldBe(true);
     }
 
     [Fact]
@@ -556,7 +556,7 @@ public sealed class EcsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             Force = true,
         });
 
-        Assert.Equal("DRAINING", resp.Service.Status);
+        resp.Service.Status.ShouldBe("DRAINING");
     }
 
     [Fact]
@@ -580,7 +580,7 @@ public sealed class EcsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             DesiredCount = 1,
         });
 
-        await Assert.ThrowsAsync<InvalidParameterException>(() =>
+        await Should.ThrowAsync<InvalidParameterException>(() =>
             _ecs.DeleteServiceAsync(new DeleteServiceRequest
             {
                 Cluster = "del-nof-c",
@@ -622,7 +622,7 @@ public sealed class EcsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             Cluster = "ls-cluster",
         });
 
-        Assert.Equal(2, resp.ServiceArns.Count);
+        resp.ServiceArns.Count.ShouldBe(2);
     }
 
     // -- Task tests ------------------------------------------------------------
@@ -654,10 +654,10 @@ public sealed class EcsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             Count = 1,
         });
 
-        Assert.Single(resp.Tasks);
-        Assert.Equal("RUNNING", resp.Tasks[0].LastStatus);
-        Assert.NotEmpty(resp.Tasks[0].TaskArn);
-        Assert.NotEmpty(resp.Tasks[0].Containers);
+        resp.Tasks.ShouldHaveSingleItem();
+        resp.Tasks[0].LastStatus.ShouldBe("RUNNING");
+        resp.Tasks[0].TaskArn.ShouldNotBeEmpty();
+        resp.Tasks[0].Containers.ShouldNotBeEmpty();
 
         // Describe the task
         var desc = await _ecs.DescribeTasksAsync(new DescribeTasksRequest
@@ -666,8 +666,8 @@ public sealed class EcsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             Tasks = [resp.Tasks[0].TaskArn],
         });
 
-        Assert.Single(desc.Tasks);
-        Assert.Equal(resp.Tasks[0].TaskArn, desc.Tasks[0].TaskArn);
+        desc.Tasks.ShouldHaveSingleItem();
+        desc.Tasks[0].TaskArn.ShouldBe(resp.Tasks[0].TaskArn);
     }
 
     [Fact]
@@ -690,7 +690,7 @@ public sealed class EcsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             Count = 3,
         });
 
-        Assert.Equal(3, resp.Tasks.Count);
+        resp.Tasks.Count.ShouldBe(3);
     }
 
     [Fact]
@@ -720,10 +720,10 @@ public sealed class EcsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             Reason = "Unit test",
         });
 
-        Assert.Equal("STOPPED", resp.Task.LastStatus);
-        Assert.Equal("STOPPED", resp.Task.DesiredStatus);
-        Assert.Equal("UserInitiated", resp.Task.StopCode.Value);
-        Assert.All(resp.Task.Containers, c => Assert.Equal("STOPPED", c.LastStatus));
+        resp.Task.LastStatus.ShouldBe("STOPPED");
+        resp.Task.DesiredStatus.ShouldBe("STOPPED");
+        resp.Task.StopCode.Value.ShouldBe("UserInitiated");
+        resp.Task.Containers.ShouldAllBe(c => c.LastStatus == "STOPPED");
     }
 
     [Fact]
@@ -750,7 +750,7 @@ public sealed class EcsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
 
         // Stop again should return STOPPED without error
         var resp = await _ecs.StopTaskAsync(new StopTaskRequest { Cluster = "ss-cluster", Task = taskArn });
-        Assert.Equal("STOPPED", resp.Task.LastStatus);
+        resp.Task.LastStatus.ShouldBe("STOPPED");
     }
 
     [Fact]
@@ -778,7 +778,7 @@ public sealed class EcsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             Cluster = "lt-cluster",
         });
 
-        Assert.Equal(2, resp.TaskArns.Count);
+        resp.TaskArns.Count.ShouldBe(2);
     }
 
     [Fact]
@@ -820,8 +820,8 @@ public sealed class EcsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             DesiredStatus = DesiredStatus.STOPPED,
         });
 
-        Assert.Single(running.TaskArns);
-        Assert.Single(stopped.TaskArns);
+        running.TaskArns.ShouldHaveSingleItem();
+        stopped.TaskArns.ShouldHaveSingleItem();
     }
 
     [Fact]
@@ -835,9 +835,9 @@ public sealed class EcsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             Tasks = ["nonexistent-task-id"],
         });
 
-        Assert.Empty(resp.Tasks);
-        Assert.Single(resp.Failures);
-        Assert.Equal("MISSING", resp.Failures[0].Reason);
+        resp.Tasks.ShouldBeEmpty();
+        resp.Failures.ShouldHaveSingleItem();
+        resp.Failures[0].Reason.ShouldBe("MISSING");
     }
 
     [Fact]
@@ -858,11 +858,11 @@ public sealed class EcsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             TaskDefinition = "auto-cluster-td",
         });
 
-        Assert.Single(resp.Tasks);
+        resp.Tasks.ShouldHaveSingleItem();
 
         // Cluster should have been auto-created
         var clusters = await _ecs.ListClustersAsync(new ListClustersRequest());
-        Assert.Contains(clusters.ClusterArns, a => a.Contains("auto-created-cluster"));
+        clusters.ClusterArns.ShouldContain(a => a.Contains("auto-created-cluster"));
     }
 
     // -- Tag tests -------------------------------------------------------------
@@ -883,7 +883,7 @@ public sealed class EcsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             ResourceArn = arn,
         });
 
-        Assert.Contains(tags.Tags, t => t.Key == "env" && t.Value == "staging");
+        tags.Tags.ShouldContain(t => t.Key == "env" && t.Value == "staging");
     }
 
     [Fact]
@@ -904,7 +904,7 @@ public sealed class EcsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         });
 
         var tags2 = await _ecs.ListTagsForResourceAsync(new ListTagsForResourceRequest { ResourceArn = arn });
-        Assert.Equal(2, tags2.Tags.Count);
+        tags2.Tags.Count.ShouldBe(2);
 
         await _ecs.UntagResourceAsync(new UntagResourceRequest
         {
@@ -913,8 +913,8 @@ public sealed class EcsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         });
 
         var tags3 = await _ecs.ListTagsForResourceAsync(new ListTagsForResourceRequest { ResourceArn = arn });
-        Assert.Single(tags3.Tags);
-        Assert.Equal("team", tags3.Tags[0].Key);
+        tags3.Tags.ShouldHaveSingleItem();
+        tags3.Tags[0].Key.ShouldBe("team");
     }
 
     [Fact]
@@ -935,8 +935,8 @@ public sealed class EcsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         });
 
         var tags = await _ecs.ListTagsForResourceAsync(new ListTagsForResourceRequest { ResourceArn = arn });
-        Assert.Single(tags.Tags);
-        Assert.Equal("production", tags.Tags[0].Value);
+        tags.Tags.ShouldHaveSingleItem();
+        tags.Tags[0].Value.ShouldBe("production");
     }
 
     // -- Capacity Provider tests -----------------------------------------------
@@ -954,14 +954,14 @@ public sealed class EcsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             },
         });
 
-        Assert.Equal("test-cp", resp.CapacityProvider.Name);
+        resp.CapacityProvider.Name.ShouldBe("test-cp");
 
         var desc = await _ecs.DescribeCapacityProvidersAsync(new DescribeCapacityProvidersRequest
         {
             CapacityProviders = ["test-cp"],
         });
 
-        Assert.Contains(desc.CapacityProviders, cp => cp.Name == "test-cp");
+        desc.CapacityProviders.ShouldContain(cp => cp.Name == "test-cp");
     }
 
     [Fact]
@@ -969,8 +969,8 @@ public sealed class EcsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
     {
         var resp = await _ecs.DescribeCapacityProvidersAsync(new DescribeCapacityProvidersRequest());
 
-        Assert.Contains(resp.CapacityProviders, cp => cp.Name == "FARGATE");
-        Assert.Contains(resp.CapacityProviders, cp => cp.Name == "FARGATE_SPOT");
+        resp.CapacityProviders.ShouldContain(cp => cp.Name == "FARGATE");
+        resp.CapacityProviders.ShouldContain(cp => cp.Name == "FARGATE_SPOT");
     }
 
     [Fact]
@@ -990,7 +990,7 @@ public sealed class EcsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             CapacityProvider = "del-cp",
         });
 
-        Assert.Equal("INACTIVE", resp.CapacityProvider.Status);
+        resp.CapacityProvider.Status.Value.ShouldBe("INACTIVE");
     }
 
     [Fact]
@@ -1005,7 +1005,7 @@ public sealed class EcsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             },
         });
 
-        await Assert.ThrowsAsync<InvalidParameterException>(() =>
+        await Should.ThrowAsync<InvalidParameterException>(() =>
             _ecs.CreateCapacityProviderAsync(new CreateCapacityProviderRequest
             {
                 Name = "dup-cp",
@@ -1023,8 +1023,8 @@ public sealed class EcsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
     {
         var resp = await _ecs.ListAccountSettingsAsync(new ListAccountSettingsRequest());
 
-        Assert.NotEmpty(resp.Settings);
-        Assert.Contains(resp.Settings, s => s.Name.Value == "serviceLongArnFormat");
+        resp.Settings.ShouldNotBeEmpty();
+        resp.Settings.ShouldContain(s => s.Name.Value == "serviceLongArnFormat");
     }
 
     [Fact]
@@ -1036,8 +1036,8 @@ public sealed class EcsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             Value = "enhanced",
         });
 
-        Assert.Equal("containerInsights", resp.Setting.Name.Value);
-        Assert.Equal("enhanced", resp.Setting.Value);
+        resp.Setting.Name.Value.ShouldBe("containerInsights");
+        resp.Setting.Value.ShouldBe("enhanced");
     }
 
     // -- Cluster recount tests -------------------------------------------------
@@ -1075,8 +1075,8 @@ public sealed class EcsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             Clusters = ["recount-c"],
         });
 
-        Assert.Equal(2, desc.Clusters[0].RunningTasksCount);
-        Assert.Equal(1, desc.Clusters[0].ActiveServicesCount);
+        desc.Clusters[0].RunningTasksCount.ShouldBe(2);
+        desc.Clusters[0].ActiveServicesCount.ShouldBe(1);
     }
 
     // -- RunTask with task definition not found ---------------------------------
@@ -1086,14 +1086,14 @@ public sealed class EcsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
     {
         await _ecs.CreateClusterAsync(new CreateClusterRequest { ClusterName = "rt-invalid-c" });
 
-        var ex = await Assert.ThrowsAsync<ClientException>(() =>
+        var ex = await Should.ThrowAsync<ClientException>(() =>
             _ecs.RunTaskAsync(new RunTaskRequest
             {
                 Cluster = "rt-invalid-c",
                 TaskDefinition = "nonexistent-td",
             }));
 
-        Assert.Contains("Unable to find task definition", ex.Message);
+        ex.Message.ShouldContain("Unable to find task definition");
     }
 
     // -- Task ARN format tests -------------------------------------------------
@@ -1118,8 +1118,8 @@ public sealed class EcsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         });
 
         var arn = run.Tasks[0].TaskArn;
-        Assert.StartsWith("arn:aws:ecs:", arn);
-        Assert.Contains("task/arn-fmt-c/", arn);
+        arn.ShouldStartWith("arn:aws:ecs:");
+        arn.ShouldContain("task/arn-fmt-c/");
     }
 
     // -- Service ARN format tests ----------------------------------------------
@@ -1146,8 +1146,8 @@ public sealed class EcsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         });
 
         var arn = resp.Service.ServiceArn;
-        Assert.StartsWith("arn:aws:ecs:", arn);
-        Assert.Contains("service/sarn-c/sarn-svc", arn);
+        arn.ShouldStartWith("arn:aws:ecs:");
+        arn.ShouldContain("service/sarn-c/sarn-svc");
     }
 
     // -- RunTask with overrides ------------------------------------------------
@@ -1189,8 +1189,8 @@ public sealed class EcsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             },
         });
 
-        Assert.Single(resp.Tasks);
-        Assert.Equal("RUNNING", resp.Tasks[0].LastStatus);
+        resp.Tasks.ShouldHaveSingleItem();
+        resp.Tasks[0].LastStatus.ShouldBe("RUNNING");
     }
 
     // -- RunTask with startedBy ------------------------------------------------
@@ -1228,7 +1228,7 @@ public sealed class EcsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             StartedBy = "my-deployment",
         });
 
-        Assert.Single(resp.TaskArns);
+        resp.TaskArns.ShouldHaveSingleItem();
     }
 
     // -- Task container details ------------------------------------------------
@@ -1259,10 +1259,10 @@ public sealed class EcsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         });
 
         var container = run.Tasks[0].Containers[0];
-        Assert.Equal("web", container.Name);
-        Assert.Equal("nginx:latest", container.Image);
-        Assert.Equal("RUNNING", container.LastStatus);
-        Assert.NotEmpty(container.ContainerArn);
+        container.Name.ShouldBe("web");
+        container.Image.ShouldBe("nginx:latest");
+        container.LastStatus.ShouldBe("RUNNING");
+        container.ContainerArn.ShouldNotBeEmpty();
     }
 
     // -- Delete service then list confirms removed ----------------------------
@@ -1295,7 +1295,7 @@ public sealed class EcsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         });
 
         var list = await _ecs.ListServicesAsync(new ListServicesRequest { Cluster = "del-list-c" });
-        Assert.Empty(list.ServiceArns);
+        list.ServiceArns.ShouldBeEmpty();
     }
 
     // -- Task Definition registration with no family fails --------------------
@@ -1303,7 +1303,7 @@ public sealed class EcsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
     [Fact]
     public async Task RegisterTaskDefinitionNoFamilyFails()
     {
-        var ex = await Assert.ThrowsAsync<ClientException>(() =>
+        var ex = await Should.ThrowAsync<ClientException>(() =>
             _ecs.RegisterTaskDefinitionAsync(new RegisterTaskDefinitionRequest
             {
                 ContainerDefinitions =
@@ -1312,7 +1312,7 @@ public sealed class EcsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
                 ],
             }));
 
-        Assert.Contains("family is required", ex.Message, StringComparison.OrdinalIgnoreCase);
+        ex.Message.ShouldContain("family is required", Case.Insensitive);
     }
 
     // -- Task Definition registration with no container definitions fails -----
@@ -1320,14 +1320,14 @@ public sealed class EcsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
     [Fact]
     public async Task RegisterTaskDefinitionNoContainersFails()
     {
-        var ex = await Assert.ThrowsAsync<ClientException>(() =>
+        var ex = await Should.ThrowAsync<ClientException>(() =>
             _ecs.RegisterTaskDefinitionAsync(new RegisterTaskDefinitionRequest
             {
                 Family = "no-containers",
                 ContainerDefinitions = [],
             }));
 
-        Assert.Contains("at least one container definition", ex.Message, StringComparison.OrdinalIgnoreCase);
+        ex.Message.ShouldContain("at least one container definition", Case.Insensitive);
     }
 
     // -- Cluster cleanup: delete removes tags ---------------------------------
@@ -1345,13 +1345,13 @@ public sealed class EcsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
 
         // Tags should exist before delete
         var tags1 = await _ecs.ListTagsForResourceAsync(new ListTagsForResourceRequest { ResourceArn = arn });
-        Assert.Single(tags1.Tags);
+        tags1.Tags.ShouldHaveSingleItem();
 
         await _ecs.DeleteClusterAsync(new DeleteClusterRequest { Cluster = "tag-del-c" });
 
         // Tags should be gone after delete
         var tags2 = await _ecs.ListTagsForResourceAsync(new ListTagsForResourceRequest { ResourceArn = arn });
-        Assert.Empty(tags2.Tags);
+        tags2.Tags.ShouldBeEmpty();
     }
 
     // -- Update service not found fails ---------------------------------------
@@ -1361,7 +1361,7 @@ public sealed class EcsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
     {
         await _ecs.CreateClusterAsync(new CreateClusterRequest { ClusterName = "us-nf-c" });
 
-        var ex = await Assert.ThrowsAsync<ServiceNotFoundException>(() =>
+        var ex = await Should.ThrowAsync<ServiceNotFoundException>(() =>
             _ecs.UpdateServiceAsync(new UpdateServiceRequest
             {
                 Cluster = "us-nf-c",
@@ -1369,7 +1369,7 @@ public sealed class EcsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
                 DesiredCount = 1,
             }));
 
-        Assert.Contains("not found", ex.Message, StringComparison.OrdinalIgnoreCase);
+        ex.Message.ShouldContain("not found", Case.Insensitive);
     }
 
     // -- Service not found on delete fails ------------------------------------
@@ -1379,7 +1379,7 @@ public sealed class EcsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
     {
         await _ecs.CreateClusterAsync(new CreateClusterRequest { ClusterName = "ds-nf-c" });
 
-        var ex = await Assert.ThrowsAsync<ServiceNotFoundException>(() =>
+        var ex = await Should.ThrowAsync<ServiceNotFoundException>(() =>
             _ecs.DeleteServiceAsync(new DeleteServiceRequest
             {
                 Cluster = "ds-nf-c",
@@ -1387,7 +1387,7 @@ public sealed class EcsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
                 Force = true,
             }));
 
-        Assert.Contains("not found", ex.Message, StringComparison.OrdinalIgnoreCase);
+        ex.Message.ShouldContain("not found", Case.Insensitive);
     }
 
     // -- Deregister task definition not found fails ----------------------------
@@ -1395,13 +1395,13 @@ public sealed class EcsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
     [Fact]
     public async Task DeregisterTaskDefinitionNotFoundFails()
     {
-        var ex = await Assert.ThrowsAsync<ClientException>(() =>
+        var ex = await Should.ThrowAsync<ClientException>(() =>
             _ecs.DeregisterTaskDefinitionAsync(new DeregisterTaskDefinitionRequest
             {
                 TaskDefinition = "nonexistent:1",
             }));
 
-        Assert.Contains("Unable to describe task definition", ex.Message);
+        ex.Message.ShouldContain("Unable to describe task definition");
     }
 
     // -- Describe task definition not found fails -----------------------------
@@ -1409,13 +1409,13 @@ public sealed class EcsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
     [Fact]
     public async Task DescribeTaskDefinitionNotFoundFails()
     {
-        var ex = await Assert.ThrowsAsync<ClientException>(() =>
+        var ex = await Should.ThrowAsync<ClientException>(() =>
             _ecs.DescribeTaskDefinitionAsync(new DescribeTaskDefinitionRequest
             {
                 TaskDefinition = "nonexistent:1",
             }));
 
-        Assert.Contains("Unable to describe task definition", ex.Message);
+        ex.Message.ShouldContain("Unable to describe task definition");
     }
 
     // -- RunTask with tags ----------------------------------------------------
@@ -1446,7 +1446,7 @@ public sealed class EcsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             ResourceArn = taskArn,
         });
 
-        Assert.Contains(tags.Tags, t => t.Key == "batch" && t.Value == "123");
+        tags.Tags.ShouldContain(t => t.Key == "batch" && t.Value == "123");
     }
 
     // -- StopTask not found fails ---------------------------------------------
@@ -1456,14 +1456,14 @@ public sealed class EcsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
     {
         await _ecs.CreateClusterAsync(new CreateClusterRequest { ClusterName = "st-nf-c" });
 
-        var ex = await Assert.ThrowsAsync<InvalidParameterException>(() =>
+        var ex = await Should.ThrowAsync<InvalidParameterException>(() =>
             _ecs.StopTaskAsync(new StopTaskRequest
             {
                 Cluster = "st-nf-c",
                 Task = "nonexistent-task",
             }));
 
-        Assert.Contains("not found", ex.Message, StringComparison.OrdinalIgnoreCase);
+        ex.Message.ShouldContain("not found", Case.Insensitive);
     }
 
     // -- DeleteTaskDefinitions ------------------------------------------------
@@ -1486,8 +1486,8 @@ public sealed class EcsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             TaskDefinitions = [arn],
         });
 
-        Assert.Single(resp.TaskDefinitions);
-        Assert.Empty(resp.Failures);
+        resp.TaskDefinitions.ShouldHaveSingleItem();
+        resp.Failures.ShouldBeEmpty();
     }
 
     // -- Describe services with include TAGS ----------------------------------
@@ -1521,8 +1521,8 @@ public sealed class EcsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             Include = ["TAGS"],
         });
 
-        Assert.Single(resp.Services);
-        Assert.Contains(resp.Services[0].Tags, t => t.Key == "env" && t.Value == "prod");
+        resp.Services.ShouldHaveSingleItem();
+        resp.Services[0].Tags.ShouldContain(t => t.Key == "env" && t.Value == "prod");
     }
 
     // -- UpdateClusterSettings ------------------------------------------------
@@ -1538,7 +1538,7 @@ public sealed class EcsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             Settings = [new ClusterSetting { Name = ClusterSettingName.ContainerInsights, Value = "enabled" }],
         });
 
-        Assert.Equal("ucs-c", resp.Cluster.ClusterName);
+        resp.Cluster.ClusterName.ShouldBe("ucs-c");
     }
 
     // -- Service create with cluster auto-creation ----------------------------
@@ -1563,10 +1563,10 @@ public sealed class EcsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             DesiredCount = 1,
         });
 
-        Assert.Equal("ACTIVE", resp.Service.Status);
+        resp.Service.Status.ShouldBe("ACTIVE");
 
         var clusters = await _ecs.ListClustersAsync(new ListClustersRequest());
-        Assert.Contains(clusters.ClusterArns, a => a.Contains("auto-created-c"));
+        clusters.ClusterArns.ShouldContain(a => a.Contains("auto-created-c"));
     }
 
     // -- Register task def with tags ------------------------------------------
@@ -1584,8 +1584,8 @@ public sealed class EcsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             Tags = [new Tag { Key = "team", Value = "infra" }],
         });
 
-        Assert.Single(resp.Tags);
-        Assert.Equal("team", resp.Tags[0].Key);
+        resp.Tags.ShouldHaveSingleItem();
+        resp.Tags[0].Key.ShouldBe("team");
     }
 
     // -- Describe task definition with tags -----------------------------------
@@ -1609,7 +1609,7 @@ public sealed class EcsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             Include = ["TAGS"],
         });
 
-        Assert.Contains(resp.Tags, t => t.Key == "dept" && t.Value == "eng");
+        resp.Tags.ShouldContain(t => t.Key == "dept" && t.Value == "eng");
     }
 
     // -- Fargate compatibility ------------------------------------------------
@@ -1629,9 +1629,9 @@ public sealed class EcsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             Memory = "512",
         });
 
-        Assert.Equal(NetworkMode.Awsvpc, resp.TaskDefinition.NetworkMode);
-        Assert.Contains("FARGATE", resp.TaskDefinition.Compatibilities);
-        Assert.Contains("EC2", resp.TaskDefinition.Compatibilities);
+        resp.TaskDefinition.NetworkMode.ShouldBe(NetworkMode.Awsvpc);
+        resp.TaskDefinition.Compatibilities.ShouldContain("FARGATE");
+        resp.TaskDefinition.Compatibilities.ShouldContain("EC2");
     }
 
     // -- RunTask with FARGATE launch type ------------------------------------
@@ -1659,8 +1659,8 @@ public sealed class EcsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             LaunchType = LaunchType.FARGATE,
         });
 
-        Assert.Single(resp.Tasks);
-        Assert.Equal(LaunchType.FARGATE, resp.Tasks[0].LaunchType);
+        resp.Tasks.ShouldHaveSingleItem();
+        resp.Tasks[0].LaunchType.ShouldBe(LaunchType.FARGATE);
     }
 
     // -- Service deployment details -------------------------------------------
@@ -1692,9 +1692,9 @@ public sealed class EcsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             Services = ["dep-svc"],
         });
 
-        Assert.Single(desc.Services[0].Deployments);
-        Assert.Equal("PRIMARY", desc.Services[0].Deployments[0].Status);
-        Assert.Equal(2, desc.Services[0].Deployments[0].DesiredCount);
+        desc.Services[0].Deployments.ShouldHaveSingleItem();
+        desc.Services[0].Deployments[0].Status.ShouldBe("PRIMARY");
+        desc.Services[0].Deployments[0].DesiredCount.ShouldBe(2);
     }
 
     // -- Cluster with capacity providers on create ----------------------------
@@ -1712,7 +1712,7 @@ public sealed class EcsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             ],
         });
 
-        Assert.Equal(2, resp.Cluster.CapacityProviders.Count);
+        resp.Cluster.CapacityProviders.Count.ShouldBe(2);
     }
 
     // -- ListTaskDefinitions with status filter --------------------------------
@@ -1746,7 +1746,7 @@ public sealed class EcsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             Status = TaskDefinitionStatus.INACTIVE,
         });
 
-        Assert.Empty(active.TaskDefinitionArns);
-        Assert.Single(inactive.TaskDefinitionArns);
+        active.TaskDefinitionArns.ShouldBeEmpty();
+        inactive.TaskDefinitionArns.ShouldHaveSingleItem();
     }
 }

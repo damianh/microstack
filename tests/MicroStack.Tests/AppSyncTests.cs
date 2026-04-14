@@ -67,12 +67,12 @@ public sealed class AppSyncTests : IClassFixture<MicroStackFixture>, IAsyncLifet
         });
 
         var api = resp.GraphqlApi;
-        Assert.Equal("test-api", api.Name);
-        Assert.NotEmpty(api.ApiId);
-        Assert.Equal(AuthenticationType.API_KEY, api.AuthenticationType);
+        api.Name.ShouldBe("test-api");
+        api.ApiId.ShouldNotBeEmpty();
+        api.AuthenticationType.ShouldBe(AuthenticationType.API_KEY);
 
         var listResp = await _appsync.ListGraphqlApisAsync(new ListGraphqlApisRequest());
-        Assert.Contains(listResp.GraphqlApis, a => a.ApiId == api.ApiId);
+        listResp.GraphqlApis.ShouldContain(a => a.ApiId == api.ApiId);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -93,14 +93,14 @@ public sealed class AppSyncTests : IClassFixture<MicroStackFixture>, IAsyncLifet
         {
             ApiId = apiId,
         });
-        Assert.Equal("del-api", getResp.GraphqlApi.Name);
+        getResp.GraphqlApi.Name.ShouldBe("del-api");
 
         await _appsync.DeleteGraphqlApiAsync(new DeleteGraphqlApiRequest
         {
             ApiId = apiId,
         });
 
-        await Assert.ThrowsAsync<NotFoundException>(() =>
+        await Should.ThrowAsync<NotFoundException>(() =>
             _appsync.GetGraphqlApiAsync(new GetGraphqlApiRequest { ApiId = apiId }));
     }
 
@@ -130,8 +130,8 @@ public sealed class AppSyncTests : IClassFixture<MicroStackFixture>, IAsyncLifet
             ApiId = apiId,
         });
 
-        Assert.Equal("updated-api", getResp.GraphqlApi.Name);
-        Assert.Equal(AuthenticationType.AWS_IAM, getResp.GraphqlApi.AuthenticationType);
+        getResp.GraphqlApi.Name.ShouldBe("updated-api");
+        getResp.GraphqlApi.AuthenticationType.ShouldBe(AuthenticationType.AWS_IAM);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -151,13 +151,13 @@ public sealed class AppSyncTests : IClassFixture<MicroStackFixture>, IAsyncLifet
         {
             ApiId = api.ApiId,
         });
-        Assert.NotEmpty(keyResp.ApiKey.Id);
+        keyResp.ApiKey.Id.ShouldNotBeEmpty();
 
         var listResp = await _appsync.ListApiKeysAsync(new ListApiKeysRequest
         {
             ApiId = api.ApiId,
         });
-        Assert.Contains(listResp.ApiKeys, k => k.Id == keyResp.ApiKey.Id);
+        listResp.ApiKeys.ShouldContain(k => k.Id == keyResp.ApiKey.Id);
 
         await _appsync.DeleteApiKeyAsync(new DeleteApiKeyRequest
         {
@@ -169,7 +169,7 @@ public sealed class AppSyncTests : IClassFixture<MicroStackFixture>, IAsyncLifet
         {
             ApiId = api.ApiId,
         });
-        Assert.DoesNotContain(listResp2.ApiKeys, k => k.Id == keyResp.ApiKey.Id);
+        listResp2.ApiKeys.ShouldNotContain(k => k.Id == keyResp.ApiKey.Id);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -196,20 +196,20 @@ public sealed class AppSyncTests : IClassFixture<MicroStackFixture>, IAsyncLifet
                 AwsRegion = "us-east-1",
             },
         });
-        Assert.Equal("myds", dsResp.DataSource.Name);
+        dsResp.DataSource.Name.ShouldBe("myds");
 
         var getResp = await _appsync.GetDataSourceAsync(new GetDataSourceRequest
         {
             ApiId = api.ApiId,
             Name = "myds",
         });
-        Assert.Equal("myds", getResp.DataSource.Name);
+        getResp.DataSource.Name.ShouldBe("myds");
 
         var listResp = await _appsync.ListDataSourcesAsync(new ListDataSourcesRequest
         {
             ApiId = api.ApiId,
         });
-        Assert.Contains(listResp.DataSources, d => d.Name == "myds");
+        listResp.DataSources.ShouldContain(d => d.Name == "myds");
 
         await _appsync.DeleteDataSourceAsync(new DeleteDataSourceRequest
         {
@@ -221,7 +221,7 @@ public sealed class AppSyncTests : IClassFixture<MicroStackFixture>, IAsyncLifet
         {
             ApiId = api.ApiId,
         });
-        Assert.DoesNotContain(listResp2.DataSources, d => d.Name == "myds");
+        listResp2.DataSources.ShouldNotContain(d => d.Name == "myds");
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -251,7 +251,7 @@ public sealed class AppSyncTests : IClassFixture<MicroStackFixture>, IAsyncLifet
             FieldName = "getItem",
             DataSourceName = "ds",
         });
-        Assert.Equal("getItem", resResp.Resolver.FieldName);
+        resResp.Resolver.FieldName.ShouldBe("getItem");
 
         var getResp = await _appsync.GetResolverAsync(new GetResolverRequest
         {
@@ -259,14 +259,14 @@ public sealed class AppSyncTests : IClassFixture<MicroStackFixture>, IAsyncLifet
             TypeName = "Query",
             FieldName = "getItem",
         });
-        Assert.Equal("getItem", getResp.Resolver.FieldName);
+        getResp.Resolver.FieldName.ShouldBe("getItem");
 
         var listResp = await _appsync.ListResolversAsync(new ListResolversRequest
         {
             ApiId = api.ApiId,
             TypeName = "Query",
         });
-        Assert.Contains(listResp.Resolvers, r => r.FieldName == "getItem");
+        listResp.Resolvers.ShouldContain(r => r.FieldName == "getItem");
 
         await _appsync.DeleteResolverAsync(new DeleteResolverRequest
         {
@@ -280,7 +280,7 @@ public sealed class AppSyncTests : IClassFixture<MicroStackFixture>, IAsyncLifet
             ApiId = api.ApiId,
             TypeName = "Query",
         });
-        Assert.DoesNotContain(listResp2.Resolvers, r => r.FieldName == "getItem");
+        listResp2.Resolvers.ShouldNotContain(r => r.FieldName == "getItem");
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -302,14 +302,14 @@ public sealed class AppSyncTests : IClassFixture<MicroStackFixture>, IAsyncLifet
             Definition = "type User { id: ID! name: String }",
             Format = TypeDefinitionFormat.SDL,
         });
-        Assert.NotEmpty(typeResp.Type.Name);
+        typeResp.Type.Name.ShouldNotBeEmpty();
 
         var listResp = await _appsync.ListTypesAsync(new ListTypesRequest
         {
             ApiId = api.ApiId,
             Format = TypeDefinitionFormat.SDL,
         });
-        Assert.True(listResp.Types.Count >= 1);
+        (listResp.Types.Count >= 1).ShouldBe(true);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -331,7 +331,7 @@ public sealed class AppSyncTests : IClassFixture<MicroStackFixture>, IAsyncLifet
         {
             ResourceArn = arn,
         });
-        Assert.True(listResp.Tags.ContainsKey("env"));
+        listResp.Tags.ContainsKey("env").ShouldBe(true);
 
         await _appsync.TagResourceAsync(new TagResourceRequest
         {
@@ -343,7 +343,7 @@ public sealed class AppSyncTests : IClassFixture<MicroStackFixture>, IAsyncLifet
         {
             ResourceArn = arn,
         });
-        Assert.Equal(2, listResp2.Tags.Count);
+        listResp2.Tags.Count.ShouldBe(2);
 
         await _appsync.UntagResourceAsync(new UntagResourceRequest
         {
@@ -355,7 +355,7 @@ public sealed class AppSyncTests : IClassFixture<MicroStackFixture>, IAsyncLifet
         {
             ResourceArn = arn,
         });
-        Assert.Single(listResp3.Tags);
-        Assert.True(listResp3.Tags.ContainsKey("team"));
+        listResp3.Tags.ShouldHaveSingleItem();
+        listResp3.Tags.ContainsKey("team").ShouldBe(true);
     }
 }

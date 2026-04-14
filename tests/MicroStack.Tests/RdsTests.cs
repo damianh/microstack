@@ -60,12 +60,12 @@ public sealed class RdsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         });
 
         var inst = resp.DBInstance;
-        Assert.Equal("test-db", inst.DBInstanceIdentifier);
-        Assert.Equal("available", inst.DBInstanceStatus);
-        Assert.Equal("postgres", inst.Engine);
-        Assert.NotNull(inst.Endpoint);
-        Assert.NotEmpty(inst.Endpoint.Address);
-        Assert.True(inst.Endpoint.Port > 0);
+        inst.DBInstanceIdentifier.ShouldBe("test-db");
+        inst.DBInstanceStatus.ShouldBe("available");
+        inst.Engine.ShouldBe("postgres");
+        inst.Endpoint.ShouldNotBeNull();
+        inst.Endpoint.Address.ShouldNotBeEmpty();
+        (inst.Endpoint.Port > 0).ShouldBe(true);
     }
 
     [Fact]
@@ -92,15 +92,15 @@ public sealed class RdsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
 
         var resp = await _rds.DescribeDBInstancesAsync(new DescribeDBInstancesRequest());
         var ids = resp.DBInstances.Select(i => i.DBInstanceIdentifier).ToList();
-        Assert.Contains("rds-di-v2a", ids);
-        Assert.Contains("rds-di-v2b", ids);
+        ids.ShouldContain("rds-di-v2a");
+        ids.ShouldContain("rds-di-v2b");
 
         var resp2 = await _rds.DescribeDBInstancesAsync(new DescribeDBInstancesRequest
         {
             DBInstanceIdentifier = "rds-di-v2a",
         });
-        Assert.Single(resp2.DBInstances);
-        Assert.Equal("mysql", resp2.DBInstances[0].Engine);
+        resp2.DBInstances.ShouldHaveSingleItem();
+        resp2.DBInstances[0].Engine.ShouldBe("mysql");
     }
 
     [Fact]
@@ -129,8 +129,8 @@ public sealed class RdsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             DBInstanceIdentifier = "rds-mod-v2",
         });
         var inst = resp.DBInstances[0];
-        Assert.Equal("db.t3.small", inst.DBInstanceClass);
-        Assert.Equal(50, inst.AllocatedStorage);
+        inst.DBInstanceClass.ShouldBe("db.t3.small");
+        inst.AllocatedStorage.ShouldBe(50);
     }
 
     [Fact]
@@ -152,12 +152,12 @@ public sealed class RdsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             SkipFinalSnapshot = true,
         });
 
-        var ex = await Assert.ThrowsAsync<Amazon.RDS.Model.DBInstanceNotFoundException>(() =>
+        var ex = await Should.ThrowAsync<Amazon.RDS.Model.DBInstanceNotFoundException>(() =>
             _rds.DescribeDBInstancesAsync(new DescribeDBInstancesRequest
             {
                 DBInstanceIdentifier = "rds-del-v2",
             }));
-        Assert.Contains("rds-del-v2", ex.Message);
+        ex.Message.ShouldContain("rds-del-v2");
     }
 
     [Fact]
@@ -177,7 +177,7 @@ public sealed class RdsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             DBInstanceIdentifier = "rds-reboot",
         });
-        Assert.Equal("available", resp.DBInstance.DBInstanceStatus);
+        resp.DBInstance.DBInstanceStatus.ShouldBe("available");
     }
 
     [Fact]
@@ -197,13 +197,13 @@ public sealed class RdsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             DBInstanceIdentifier = "rds-stop-start",
         });
-        Assert.Equal("stopped", stopResp.DBInstance.DBInstanceStatus);
+        stopResp.DBInstance.DBInstanceStatus.ShouldBe("stopped");
 
         var startResp = await _rds.StartDBInstanceAsync(new StartDBInstanceRequest
         {
             DBInstanceIdentifier = "rds-stop-start",
         });
-        Assert.Equal("available", startResp.DBInstance.DBInstanceStatus);
+        startResp.DBInstance.DBInstanceStatus.ShouldBe("available");
     }
 
     [Fact]
@@ -219,7 +219,7 @@ public sealed class RdsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             AllocatedStorage = 10,
         });
 
-        await Assert.ThrowsAsync<AmazonRDSException>(() =>
+        await Should.ThrowAsync<AmazonRDSException>(() =>
             _rds.CreateDBInstanceAsync(new CreateDBInstanceRequest
             {
                 DBInstanceIdentifier = "dup-inst",
@@ -234,7 +234,7 @@ public sealed class RdsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
     [Fact]
     public async Task DescribeDbInstanceNotFoundThrows()
     {
-        await Assert.ThrowsAsync<Amazon.RDS.Model.DBInstanceNotFoundException>(() =>
+        await Should.ThrowAsync<Amazon.RDS.Model.DBInstanceNotFoundException>(() =>
             _rds.DescribeDBInstancesAsync(new DescribeDBInstancesRequest
             {
                 DBInstanceIdentifier = "nonexistent",
@@ -255,12 +255,12 @@ public sealed class RdsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             DeletionProtection = true,
         });
 
-        var ex = await Assert.ThrowsAsync<AmazonRDSException>(() =>
+        var ex = await Should.ThrowAsync<AmazonRDSException>(() =>
             _rds.DeleteDBInstanceAsync(new DeleteDBInstanceRequest
             {
                 DBInstanceIdentifier = "qa-rds-protected",
             }));
-        Assert.Equal("InvalidParameterCombination", ex.ErrorCode);
+        ex.ErrorCode.ShouldBe("InvalidParameterCombination");
 
         // Disable protection then delete
         await _rds.ModifyDBInstanceAsync(new ModifyDBInstanceRequest
@@ -290,22 +290,22 @@ public sealed class RdsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         });
 
         var cluster = resp.DBCluster;
-        Assert.Equal("rds-cc-v2", cluster.DBClusterIdentifier);
-        Assert.Equal("available", cluster.Status);
-        Assert.Equal("aurora-postgresql", cluster.Engine);
-        Assert.NotEmpty(cluster.DBClusterArn);
+        cluster.DBClusterIdentifier.ShouldBe("rds-cc-v2");
+        cluster.Status.ShouldBe("available");
+        cluster.Engine.ShouldBe("aurora-postgresql");
+        cluster.DBClusterArn.ShouldNotBeEmpty();
 
         var desc = await _rds.DescribeDBClustersAsync(new DescribeDBClustersRequest
         {
             DBClusterIdentifier = "rds-cc-v2",
         });
-        Assert.Equal("rds-cc-v2", desc.DBClusters[0].DBClusterIdentifier);
+        desc.DBClusters[0].DBClusterIdentifier.ShouldBe("rds-cc-v2");
     }
 
     [Fact]
     public async Task DescribeDbClusterNotFoundThrows()
     {
-        await Assert.ThrowsAsync<Amazon.RDS.Model.DBClusterNotFoundException>(() =>
+        await Should.ThrowAsync<Amazon.RDS.Model.DBClusterNotFoundException>(() =>
             _rds.DescribeDBClustersAsync(new DescribeDBClustersRequest
             {
                 DBClusterIdentifier = "nonexistent-cluster",
@@ -333,7 +333,7 @@ public sealed class RdsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             DBClusterIdentifier = "mod-cluster",
         });
-        Assert.True(resp.DBClusters[0].DeletionProtection);
+        resp.DBClusters[0].DeletionProtection.ShouldBe(true);
     }
 
     [Fact]
@@ -353,7 +353,7 @@ public sealed class RdsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             SkipFinalSnapshot = true,
         });
 
-        await Assert.ThrowsAsync<Amazon.RDS.Model.DBClusterNotFoundException>(() =>
+        await Should.ThrowAsync<Amazon.RDS.Model.DBClusterNotFoundException>(() =>
             _rds.DescribeDBClustersAsync(new DescribeDBClustersRequest
             {
                 DBClusterIdentifier = "del-cluster",
@@ -379,7 +379,7 @@ public sealed class RdsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             DBClusterIdentifier = "ss-cl",
         });
-        Assert.Equal("stopped", resp.DBClusters[0].Status);
+        resp.DBClusters[0].Status.ShouldBe("stopped");
 
         await _rds.StartDBClusterAsync(new StartDBClusterRequest
         {
@@ -389,7 +389,7 @@ public sealed class RdsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             DBClusterIdentifier = "ss-cl",
         });
-        Assert.Equal("available", resp2.DBClusters[0].Status);
+        resp2.DBClusters[0].Status.ShouldBe("available");
     }
 
     // ── DB Subnet Group CRUD ────────────────────────────────────────────────────
@@ -408,9 +408,9 @@ public sealed class RdsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             DBSubnetGroupName = "test-sg",
         });
-        Assert.Single(resp.DBSubnetGroups);
-        Assert.Equal("test-sg", resp.DBSubnetGroups[0].DBSubnetGroupName);
-        Assert.Equal("Test SG", resp.DBSubnetGroups[0].DBSubnetGroupDescription);
+        resp.DBSubnetGroups.ShouldHaveSingleItem();
+        resp.DBSubnetGroups[0].DBSubnetGroupName.ShouldBe("test-sg");
+        resp.DBSubnetGroups[0].DBSubnetGroupDescription.ShouldBe("Test SG");
     }
 
     [Fact]
@@ -434,7 +434,7 @@ public sealed class RdsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             DBSubnetGroupName = "test-mod-sg",
         });
-        Assert.Equal("Updated SG", resp.DBSubnetGroups[0].DBSubnetGroupDescription);
+        resp.DBSubnetGroups[0].DBSubnetGroupDescription.ShouldBe("Updated SG");
     }
 
     [Fact]
@@ -452,7 +452,7 @@ public sealed class RdsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             DBSubnetGroupName = "del-sg",
         });
 
-        await Assert.ThrowsAsync<Amazon.RDS.Model.DBSubnetGroupNotFoundException>(() =>
+        await Should.ThrowAsync<Amazon.RDS.Model.DBSubnetGroupNotFoundException>(() =>
             _rds.DescribeDBSubnetGroupsAsync(new DescribeDBSubnetGroupsRequest
             {
                 DBSubnetGroupName = "del-sg",
@@ -475,8 +475,8 @@ public sealed class RdsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             DBParameterGroupName = "test-pg",
         });
-        Assert.Single(resp.DBParameterGroups);
-        Assert.Equal("test-pg", resp.DBParameterGroups[0].DBParameterGroupName);
+        resp.DBParameterGroups.ShouldHaveSingleItem();
+        resp.DBParameterGroups[0].DBParameterGroupName.ShouldBe("test-pg");
     }
 
     [Fact]
@@ -502,7 +502,7 @@ public sealed class RdsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
                 },
             ],
         });
-        Assert.Equal("test-mpg", resp.DBParameterGroupName);
+        resp.DBParameterGroupName.ShouldBe("test-mpg");
     }
 
     [Fact]
@@ -520,7 +520,7 @@ public sealed class RdsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             DBParameterGroupName = "del-pg",
         });
 
-        await Assert.ThrowsAsync<AmazonRDSException>(() =>
+        await Should.ThrowAsync<AmazonRDSException>(() =>
             _rds.DescribeDBParameterGroupsAsync(new DescribeDBParameterGroupsRequest
             {
                 DBParameterGroupName = "del-pg",
@@ -543,8 +543,8 @@ public sealed class RdsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             DBClusterParameterGroupName = "test-cpg",
         });
-        Assert.True(resp.DBClusterParameterGroups.Count >= 1);
-        Assert.Equal("test-cpg", resp.DBClusterParameterGroups[0].DBClusterParameterGroupName);
+        (resp.DBClusterParameterGroups.Count >= 1).ShouldBe(true);
+        resp.DBClusterParameterGroups[0].DBClusterParameterGroupName.ShouldBe("test-cpg");
     }
 
     [Fact]
@@ -562,7 +562,7 @@ public sealed class RdsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             DBClusterParameterGroupName = "del-cpg",
         });
 
-        await Assert.ThrowsAsync<AmazonRDSException>(() =>
+        await Should.ThrowAsync<AmazonRDSException>(() =>
             _rds.DescribeDBClusterParameterGroupsAsync(new DescribeDBClusterParameterGroupsRequest
             {
                 DBClusterParameterGroupName = "del-cpg",
@@ -589,14 +589,14 @@ public sealed class RdsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             DBSnapshotIdentifier = "rds-snap-v2-s1",
             DBInstanceIdentifier = "rds-snap-v2",
         });
-        Assert.Equal("rds-snap-v2-s1", resp.DBSnapshot.DBSnapshotIdentifier);
-        Assert.Equal("available", resp.DBSnapshot.Status);
+        resp.DBSnapshot.DBSnapshotIdentifier.ShouldBe("rds-snap-v2-s1");
+        resp.DBSnapshot.Status.ShouldBe("available");
 
         var desc = await _rds.DescribeDBSnapshotsAsync(new DescribeDBSnapshotsRequest
         {
             DBSnapshotIdentifier = "rds-snap-v2-s1",
         });
-        Assert.Single(desc.DBSnapshots);
+        desc.DBSnapshots.ShouldHaveSingleItem();
     }
 
     [Fact]
@@ -623,7 +623,7 @@ public sealed class RdsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             DBSnapshotIdentifier = "snap-del",
         });
 
-        await Assert.ThrowsAsync<Amazon.RDS.Model.DBSnapshotNotFoundException>(() =>
+        await Should.ThrowAsync<Amazon.RDS.Model.DBSnapshotNotFoundException>(() =>
             _rds.DescribeDBSnapshotsAsync(new DescribeDBSnapshotsRequest
             {
                 DBSnapshotIdentifier = "snap-del",
@@ -653,9 +653,9 @@ public sealed class RdsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             DBSnapshotIdentifier = "qa-rds-snap-1",
         });
-        Assert.Single(snaps.DBSnapshots);
-        Assert.Equal("qa-rds-snap-1", snaps.DBSnapshots[0].DBSnapshotIdentifier);
-        Assert.Equal("available", snaps.DBSnapshots[0].Status);
+        snaps.DBSnapshots.ShouldHaveSingleItem();
+        snaps.DBSnapshots[0].DBSnapshotIdentifier.ShouldBe("qa-rds-snap-1");
+        snaps.DBSnapshots[0].Status.ShouldBe("available");
 
         await _rds.DeleteDBSnapshotAsync(new DeleteDBSnapshotRequest
         {
@@ -663,7 +663,7 @@ public sealed class RdsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         });
 
         var snaps2 = await _rds.DescribeDBSnapshotsAsync(new DescribeDBSnapshotsRequest());
-        Assert.DoesNotContain(snaps2.DBSnapshots ?? [], s => s.DBSnapshotIdentifier == "qa-rds-snap-1");
+        snaps2.DBSnapshots.ShouldNotContain(s => s.DBSnapshotIdentifier == "qa-rds-snap-1");
 
         await _rds.DeleteDBInstanceAsync(new DeleteDBInstanceRequest
         {
@@ -696,14 +696,14 @@ public sealed class RdsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             SourceDBSnapshotIdentifier = "orig-snap",
             TargetDBSnapshotIdentifier = "copied-snap",
         });
-        Assert.Equal("copied-snap", copyResp.DBSnapshot.DBSnapshotIdentifier);
-        Assert.Equal("available", copyResp.DBSnapshot.Status);
+        copyResp.DBSnapshot.DBSnapshotIdentifier.ShouldBe("copied-snap");
+        copyResp.DBSnapshot.Status.ShouldBe("available");
 
         var desc = await _rds.DescribeDBSnapshotsAsync(new DescribeDBSnapshotsRequest
         {
             DBSnapshotIdentifier = "copied-snap",
         });
-        Assert.Single(desc.DBSnapshots);
+        desc.DBSnapshots.ShouldHaveSingleItem();
     }
 
     // ── DB Cluster Snapshot CRUD ────────────────────────────────────────────────
@@ -729,8 +729,8 @@ public sealed class RdsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             DBClusterSnapshotIdentifier = "snap-cl-snap",
         });
-        Assert.True(resp.DBClusterSnapshots.Count >= 1);
-        Assert.Equal("snap-cl-snap", resp.DBClusterSnapshots[0].DBClusterSnapshotIdentifier);
+        (resp.DBClusterSnapshots.Count >= 1).ShouldBe(true);
+        resp.DBClusterSnapshots[0].DBClusterSnapshotIdentifier.ShouldBe("snap-cl-snap");
     }
 
     [Fact]
@@ -755,7 +755,7 @@ public sealed class RdsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             DBClusterSnapshotIdentifier = "snap-cl-del-snap",
         });
 
-        await Assert.ThrowsAsync<Amazon.RDS.Model.DBClusterSnapshotNotFoundException>(() =>
+        await Should.ThrowAsync<Amazon.RDS.Model.DBClusterSnapshotNotFoundException>(() =>
             _rds.DescribeDBClusterSnapshotsAsync(new DescribeDBClusterSnapshotsRequest
             {
                 DBClusterSnapshotIdentifier = "snap-cl-del-snap",
@@ -788,7 +788,7 @@ public sealed class RdsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             ResourceName = arn,
         });
-        Assert.Contains(tags.TagList, t => t.Key == "env" && t.Value == "dev");
+        tags.TagList.ShouldContain(t => t.Key == "env" && t.Value == "dev");
 
         await _rds.AddTagsToResourceAsync(new AddTagsToResourceRequest
         {
@@ -800,7 +800,7 @@ public sealed class RdsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             ResourceName = arn,
         });
-        Assert.Contains(tags2.TagList, t => t.Key == "team" && t.Value == "dba");
+        tags2.TagList.ShouldContain(t => t.Key == "team" && t.Value == "dba");
 
         await _rds.RemoveTagsFromResourceAsync(new RemoveTagsFromResourceRequest
         {
@@ -812,8 +812,8 @@ public sealed class RdsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             ResourceName = arn,
         });
-        Assert.DoesNotContain(tags3.TagList, t => t.Key == "env");
-        Assert.Contains(tags3.TagList, t => t.Key == "team");
+        tags3.TagList.ShouldNotContain(t => t.Key == "env");
+        tags3.TagList.ShouldContain(t => t.Key == "team");
     }
 
     // ── Event Subscriptions ─────────────────────────────────────────────────────
@@ -828,26 +828,26 @@ public sealed class RdsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             SourceType = "db-instance",
             Enabled = true,
         });
-        Assert.Equal("test-sub", createResp.EventSubscription.CustSubscriptionId);
-        Assert.Equal("active", createResp.EventSubscription.Status);
+        createResp.EventSubscription.CustSubscriptionId.ShouldBe("test-sub");
+        createResp.EventSubscription.Status.ShouldBe("active");
 
         var descResp = await _rds.DescribeEventSubscriptionsAsync(new DescribeEventSubscriptionsRequest
         {
             SubscriptionName = "test-sub",
         });
-        Assert.Single(descResp.EventSubscriptionsList);
+        descResp.EventSubscriptionsList.ShouldHaveSingleItem();
 
         await _rds.DeleteEventSubscriptionAsync(new DeleteEventSubscriptionRequest
         {
             SubscriptionName = "test-sub",
         });
 
-        var ex = await Assert.ThrowsAsync<AmazonRDSException>(() =>
+        var ex = await Should.ThrowAsync<AmazonRDSException>(() =>
             _rds.DescribeEventSubscriptionsAsync(new DescribeEventSubscriptionsRequest
             {
                 SubscriptionName = "test-sub",
             }));
-        Assert.Equal("SubscriptionNotFoundFault", ex.ErrorCode);
+        ex.ErrorCode.ShouldBe("SubscriptionNotFoundFault");
     }
 
     // ── DB Proxy ────────────────────────────────────────────────────────────────
@@ -870,21 +870,21 @@ public sealed class RdsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             ],
             VpcSubnetIds = ["subnet-111"],
         });
-        Assert.Equal("test-proxy", createResp.DBProxy.DBProxyName);
-        Assert.Equal(DBProxyStatus.Available, createResp.DBProxy.Status);
+        createResp.DBProxy.DBProxyName.ShouldBe("test-proxy");
+        createResp.DBProxy.Status.ShouldBe(DBProxyStatus.Available);
 
         var descResp = await _rds.DescribeDBProxiesAsync(new DescribeDBProxiesRequest
         {
             DBProxyName = "test-proxy",
         });
-        Assert.Single(descResp.DBProxies);
+        descResp.DBProxies.ShouldHaveSingleItem();
 
         await _rds.DeleteDBProxyAsync(new DeleteDBProxyRequest
         {
             DBProxyName = "test-proxy",
         });
 
-        await Assert.ThrowsAsync<Amazon.RDS.Model.DBProxyNotFoundException>(() =>
+        await Should.ThrowAsync<Amazon.RDS.Model.DBProxyNotFoundException>(() =>
             _rds.DescribeDBProxiesAsync(new DescribeDBProxiesRequest
             {
                 DBProxyName = "test-proxy",
@@ -908,15 +908,15 @@ public sealed class RdsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             OptionGroupName = "test-og",
         });
-        Assert.True(resp.OptionGroupsList.Count >= 1);
-        Assert.Equal("test-og", resp.OptionGroupsList[0].OptionGroupName);
+        (resp.OptionGroupsList.Count >= 1).ShouldBe(true);
+        resp.OptionGroupsList[0].OptionGroupName.ShouldBe("test-og");
 
         await _rds.DeleteOptionGroupAsync(new DeleteOptionGroupRequest
         {
             OptionGroupName = "test-og",
         });
 
-        await Assert.ThrowsAsync<Amazon.RDS.Model.OptionGroupNotFoundException>(() =>
+        await Should.ThrowAsync<Amazon.RDS.Model.OptionGroupNotFoundException>(() =>
             _rds.DescribeOptionGroupsAsync(new DescribeOptionGroupsRequest
             {
                 OptionGroupName = "test-og",
@@ -932,8 +932,8 @@ public sealed class RdsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             Engine = "postgres",
         });
-        Assert.NotEmpty(resp.OrderableDBInstanceOptions);
-        Assert.All(resp.OrderableDBInstanceOptions, opt => Assert.Equal("postgres", opt.Engine));
+        resp.OrderableDBInstanceOptions.ShouldNotBeEmpty();
+        resp.OrderableDBInstanceOptions.ShouldAllBe(opt => opt.Engine == "postgres");
     }
 
     [Fact]
@@ -943,8 +943,8 @@ public sealed class RdsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             Engine = "postgres",
         });
-        Assert.NotEmpty(resp.DBEngineVersions);
-        Assert.All(resp.DBEngineVersions, v => Assert.Equal("postgres", v.Engine));
+        resp.DBEngineVersions.ShouldNotBeEmpty();
+        resp.DBEngineVersions.ShouldAllBe(v => v.Engine == "postgres");
     }
 
     [Fact]
@@ -954,8 +954,8 @@ public sealed class RdsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             Engine = "mysql",
         });
-        Assert.NotEmpty(resp.DBEngineVersions);
-        Assert.All(resp.DBEngineVersions, v => Assert.Equal("mysql", v.Engine));
+        resp.DBEngineVersions.ShouldNotBeEmpty();
+        resp.DBEngineVersions.ShouldAllBe(v => v.Engine == "mysql");
     }
 
     // ── Global Cluster Lifecycle ────────────────────────────────────────────────
@@ -974,20 +974,20 @@ public sealed class RdsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             GlobalClusterIdentifier = "test-global-1",
         });
-        Assert.Single(resp.GlobalClusters);
+        resp.GlobalClusters.ShouldHaveSingleItem();
         var gc = resp.GlobalClusters[0];
-        Assert.Equal("test-global-1", gc.GlobalClusterIdentifier);
-        Assert.Equal("aurora-postgresql", gc.Engine);
-        Assert.Equal("available", gc.Status);
-        Assert.NotEmpty(gc.GlobalClusterArn);
-        Assert.NotEmpty(gc.GlobalClusterResourceId);
+        gc.GlobalClusterIdentifier.ShouldBe("test-global-1");
+        gc.Engine.ShouldBe("aurora-postgresql");
+        gc.Status.ShouldBe("available");
+        gc.GlobalClusterArn.ShouldNotBeEmpty();
+        gc.GlobalClusterResourceId.ShouldNotBeEmpty();
 
         await _rds.DeleteGlobalClusterAsync(new DeleteGlobalClusterRequest
         {
             GlobalClusterIdentifier = "test-global-1",
         });
 
-        await Assert.ThrowsAsync<Amazon.RDS.Model.GlobalClusterNotFoundException>(() =>
+        await Should.ThrowAsync<Amazon.RDS.Model.GlobalClusterNotFoundException>(() =>
             _rds.DescribeGlobalClustersAsync(new DescribeGlobalClustersRequest
             {
                 GlobalClusterIdentifier = "test-global-1",
@@ -1016,9 +1016,9 @@ public sealed class RdsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             GlobalClusterIdentifier = "test-global-src",
         });
         var gc = resp.GlobalClusters[0];
-        Assert.Equal("aurora-postgresql", gc.Engine);
-        Assert.Single(gc.GlobalClusterMembers);
-        Assert.True(gc.GlobalClusterMembers[0].IsWriter);
+        gc.Engine.ShouldBe("aurora-postgresql");
+        gc.GlobalClusterMembers.ShouldHaveSingleItem();
+        gc.GlobalClusterMembers[0].IsWriter.ShouldBe(true);
 
         await _rds.RemoveFromGlobalClusterAsync(new RemoveFromGlobalClusterRequest
         {
@@ -1030,7 +1030,7 @@ public sealed class RdsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             GlobalClusterIdentifier = "test-global-src",
         });
-        Assert.Empty(resp2.GlobalClusters[0].GlobalClusterMembers ?? []);
+        resp2.GlobalClusters[0].GlobalClusterMembers.ShouldBeEmpty();
 
         await _rds.DeleteGlobalClusterAsync(new DeleteGlobalClusterRequest
         {
@@ -1061,7 +1061,7 @@ public sealed class RdsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             SourceDBClusterIdentifier = "gc-member-cluster",
         });
 
-        var ex = await Assert.ThrowsAsync<Amazon.RDS.Model.InvalidGlobalClusterStateException>(() =>
+        var ex = await Should.ThrowAsync<Amazon.RDS.Model.InvalidGlobalClusterStateException>(() =>
             _rds.DeleteGlobalClusterAsync(new DeleteGlobalClusterRequest
             {
                 GlobalClusterIdentifier = "test-global-members",
@@ -1103,15 +1103,15 @@ public sealed class RdsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             GlobalClusterIdentifier = "test-global-mod",
         })).GlobalClusters[0];
-        Assert.True(gc.DeletionProtection);
+        gc.DeletionProtection.ShouldBe(true);
 
         // Cannot delete while protected
-        var ex = await Assert.ThrowsAsync<AmazonRDSException>(() =>
+        var ex = await Should.ThrowAsync<AmazonRDSException>(() =>
             _rds.DeleteGlobalClusterAsync(new DeleteGlobalClusterRequest
             {
                 GlobalClusterIdentifier = "test-global-mod",
             }));
-        Assert.Equal("InvalidParameterCombination", ex.ErrorCode);
+        ex.ErrorCode.ShouldBe("InvalidParameterCombination");
 
         // Rename
         await _rds.ModifyGlobalClusterAsync(new ModifyGlobalClusterRequest
@@ -1125,9 +1125,9 @@ public sealed class RdsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             GlobalClusterIdentifier = "test-global-renamed",
         });
-        Assert.Equal("test-global-renamed", resp.GlobalClusters[0].GlobalClusterIdentifier);
+        resp.GlobalClusters[0].GlobalClusterIdentifier.ShouldBe("test-global-renamed");
 
-        await Assert.ThrowsAsync<Amazon.RDS.Model.GlobalClusterNotFoundException>(() =>
+        await Should.ThrowAsync<Amazon.RDS.Model.GlobalClusterNotFoundException>(() =>
             _rds.DescribeGlobalClustersAsync(new DescribeGlobalClustersRequest
             {
                 GlobalClusterIdentifier = "test-global-mod",

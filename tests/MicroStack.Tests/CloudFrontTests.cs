@@ -97,9 +97,9 @@ public sealed class CloudFrontTests : IClassFixture<MicroStackFixture>, IAsyncLi
         });
 
         var dist = resp.Distribution;
-        Assert.NotEmpty(dist.Id);
-        Assert.EndsWith(".cloudfront.net", dist.DomainName);
-        Assert.Equal("Deployed", dist.Status);
+        dist.Id.ShouldNotBeEmpty();
+        dist.DomainName.ShouldEndWith(".cloudfront.net");
+        dist.Status.ShouldBe("Deployed");
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -119,7 +119,7 @@ public sealed class CloudFrontTests : IClassFixture<MicroStackFixture>, IAsyncLi
         });
 
         var resp = await _cf.ListDistributionsAsync(new ListDistributionsRequest());
-        Assert.True(resp.DistributionList.Items.Count >= 2);
+        (resp.DistributionList.Items.Count >= 2).ShouldBe(true);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -136,9 +136,9 @@ public sealed class CloudFrontTests : IClassFixture<MicroStackFixture>, IAsyncLi
         var distId = createResp.Distribution.Id;
 
         var getResp = await _cf.GetDistributionAsync(new GetDistributionRequest { Id = distId });
-        Assert.Equal(distId, getResp.Distribution.Id);
-        Assert.Equal($"{distId}.cloudfront.net", getResp.Distribution.DomainName);
-        Assert.Equal("Deployed", getResp.Distribution.Status);
+        getResp.Distribution.Id.ShouldBe(distId);
+        getResp.Distribution.DomainName.ShouldBe($"{distId}.cloudfront.net");
+        getResp.Distribution.Status.ShouldBe("Deployed");
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -156,8 +156,8 @@ public sealed class CloudFrontTests : IClassFixture<MicroStackFixture>, IAsyncLi
         var etag = createResp.ETag;
 
         var resp = await _cf.GetDistributionConfigAsync(new GetDistributionConfigRequest { Id = distId });
-        Assert.Equal(etag, resp.ETag);
-        Assert.Equal("getcfg-test", resp.DistributionConfig.Comment);
+        resp.ETag.ShouldBe(etag);
+        resp.DistributionConfig.Comment.ShouldBe("getcfg-test");
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -182,11 +182,11 @@ public sealed class CloudFrontTests : IClassFixture<MicroStackFixture>, IAsyncLi
             IfMatch = etag,
         });
 
-        Assert.Equal(distId, updResp.Distribution.Id);
-        Assert.NotEqual(etag, updResp.ETag);
+        updResp.Distribution.Id.ShouldBe(distId);
+        updResp.ETag.ShouldNotBe(etag);
 
         var getResp = await _cf.GetDistributionConfigAsync(new GetDistributionConfigRequest { Id = distId });
-        Assert.Equal("after-update", getResp.DistributionConfig.Comment);
+        getResp.DistributionConfig.Comment.ShouldBe("after-update");
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -202,14 +202,14 @@ public sealed class CloudFrontTests : IClassFixture<MicroStackFixture>, IAsyncLi
         });
         var distId = createResp.Distribution.Id;
 
-        var ex = await Assert.ThrowsAsync<PreconditionFailedException>(() =>
+        var ex = await Should.ThrowAsync<PreconditionFailedException>(() =>
             _cf.UpdateDistributionAsync(new UpdateDistributionRequest
             {
                 DistributionConfig = MakeDistConfig("cf-etag-mismatch", "mismatch-test"),
                 Id = distId,
                 IfMatch = "wrong-etag-value",
             }));
-        Assert.Equal("PreconditionFailed", ex.ErrorCode);
+        ex.ErrorCode.ShouldBe("PreconditionFailed");
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -242,9 +242,9 @@ public sealed class CloudFrontTests : IClassFixture<MicroStackFixture>, IAsyncLi
             IfMatch = newEtag,
         });
 
-        var ex = await Assert.ThrowsAsync<NoSuchDistributionException>(() =>
+        var ex = await Should.ThrowAsync<NoSuchDistributionException>(() =>
             _cf.GetDistributionAsync(new GetDistributionRequest { Id = distId }));
-        Assert.Equal("NoSuchDistribution", ex.ErrorCode);
+        ex.ErrorCode.ShouldBe("NoSuchDistribution");
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -261,13 +261,13 @@ public sealed class CloudFrontTests : IClassFixture<MicroStackFixture>, IAsyncLi
         var distId = createResp.Distribution.Id;
         var etag = createResp.ETag;
 
-        var ex = await Assert.ThrowsAsync<DistributionNotDisabledException>(() =>
+        var ex = await Should.ThrowAsync<DistributionNotDisabledException>(() =>
             _cf.DeleteDistributionAsync(new DeleteDistributionRequest
             {
                 Id = distId,
                 IfMatch = etag,
             }));
-        Assert.Equal("DistributionNotDisabled", ex.ErrorCode);
+        ex.ErrorCode.ShouldBe("DistributionNotDisabled");
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -277,9 +277,9 @@ public sealed class CloudFrontTests : IClassFixture<MicroStackFixture>, IAsyncLi
     [Fact]
     public async Task GetNonexistent()
     {
-        var ex = await Assert.ThrowsAsync<NoSuchDistributionException>(() =>
+        var ex = await Should.ThrowAsync<NoSuchDistributionException>(() =>
             _cf.GetDistributionAsync(new GetDistributionRequest { Id = "ENONEXISTENT1234" }));
-        Assert.Equal("NoSuchDistribution", ex.ErrorCode);
+        ex.ErrorCode.ShouldBe("NoSuchDistribution");
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -309,8 +309,8 @@ public sealed class CloudFrontTests : IClassFixture<MicroStackFixture>, IAsyncLi
             },
         });
 
-        Assert.NotEmpty(invResp.Invalidation.Id);
-        Assert.Equal("Completed", invResp.Invalidation.Status);
+        invResp.Invalidation.Id.ShouldNotBeEmpty();
+        invResp.Invalidation.Status.ShouldBe("Completed");
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -350,8 +350,8 @@ public sealed class CloudFrontTests : IClassFixture<MicroStackFixture>, IAsyncLi
         {
             DistributionId = distId,
         });
-        Assert.Equal(2, resp.InvalidationList.Quantity);
-        Assert.Equal(2, resp.InvalidationList.Items.Count);
+        resp.InvalidationList.Quantity.ShouldBe(2);
+        resp.InvalidationList.Items.Count.ShouldBe(2);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -384,9 +384,9 @@ public sealed class CloudFrontTests : IClassFixture<MicroStackFixture>, IAsyncLi
             Id = invId,
         });
 
-        Assert.Equal(invId, getResp.Invalidation.Id);
-        Assert.Equal("Completed", getResp.Invalidation.Status);
-        Assert.Contains("/getinv-path", getResp.Invalidation.InvalidationBatch.Paths.Items);
+        getResp.Invalidation.Id.ShouldBe(invId);
+        getResp.Invalidation.Status.ShouldBe("Completed");
+        getResp.Invalidation.InvalidationBatch.Paths.Items.ShouldContain("/getinv-path");
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -420,8 +420,8 @@ public sealed class CloudFrontTests : IClassFixture<MicroStackFixture>, IAsyncLi
             Resource = distArn,
         });
         var tagMap = tagsResp.Tags.Items.ToDictionary(t => t.Key, t => t.Value);
-        Assert.Equal("test", tagMap["env"]);
-        Assert.Equal("platform", tagMap["team"]);
+        tagMap["env"].ShouldBe("test");
+        tagMap["team"].ShouldBe("platform");
 
         await _cf.UntagResourceAsync(new UntagResourceRequest
         {
@@ -434,7 +434,7 @@ public sealed class CloudFrontTests : IClassFixture<MicroStackFixture>, IAsyncLi
             Resource = distArn,
         });
         var keys = tags2.Tags.Items.Select(t => t.Key).ToList();
-        Assert.Contains("env", keys);
-        Assert.DoesNotContain("team", keys);
+        keys.ShouldContain("env");
+        keys.ShouldNotContain("team");
     }
 }

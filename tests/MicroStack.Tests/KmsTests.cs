@@ -67,23 +67,23 @@ public sealed class KmsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         });
 
         var meta = resp.KeyMetadata;
-        Assert.NotEmpty(meta.KeyId);
-        Assert.StartsWith("arn:aws:kms:", meta.Arn);
-        Assert.Equal(KeySpec.SYMMETRIC_DEFAULT, meta.KeySpec);
-        Assert.Equal(KeyUsageType.ENCRYPT_DECRYPT, meta.KeyUsage);
-        Assert.True(meta.Enabled);
-        Assert.Equal(KeyState.Enabled, meta.KeyState);
-        Assert.Equal("test symmetric key", meta.Description);
+        meta.KeyId.ShouldNotBeEmpty();
+        meta.Arn.ShouldStartWith("arn:aws:kms:");
+        meta.KeySpec.ShouldBe(KeySpec.SYMMETRIC_DEFAULT);
+        meta.KeyUsage.ShouldBe(KeyUsageType.ENCRYPT_DECRYPT);
+        meta.Enabled.ShouldBe(true);
+        meta.KeyState.ShouldBe(KeyState.Enabled);
+        meta.Description.ShouldBe("test symmetric key");
 
         var tags = await _kms.ListResourceTagsAsync(new ListResourceTagsRequest { KeyId = meta.KeyId });
-        Assert.Contains(tags.Tags, t => t.TagKey == "env" && t.TagValue == "test");
+        tags.Tags.ShouldContain(t => t.TagKey == "env" && t.TagValue == "test");
 
         var policy = await _kms.GetKeyPolicyAsync(new GetKeyPolicyRequest
         {
             KeyId = meta.KeyId,
             PolicyName = "default",
         });
-        Assert.Equal("{}", policy.Policy);
+        policy.Policy.ShouldBe("{}");
     }
 
     [Fact]
@@ -97,9 +97,9 @@ public sealed class KmsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         });
 
         var meta = resp.KeyMetadata;
-        Assert.Equal(KeySpec.RSA_2048, meta.KeySpec);
-        Assert.Equal(KeyUsageType.SIGN_VERIFY, meta.KeyUsage);
-        Assert.Contains("RSASSA_PKCS1_V1_5_SHA_256", meta.SigningAlgorithms);
+        meta.KeySpec.ShouldBe(KeySpec.RSA_2048);
+        meta.KeyUsage.ShouldBe(KeyUsageType.SIGN_VERIFY);
+        meta.SigningAlgorithms.ShouldContain("RSASSA_PKCS1_V1_5_SHA_256");
     }
 
     [Fact]
@@ -112,8 +112,8 @@ public sealed class KmsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         });
 
         var meta = resp.KeyMetadata;
-        Assert.Equal(KeySpec.RSA_4096, meta.KeySpec);
-        Assert.Contains("RSAES_OAEP_SHA_256", meta.EncryptionAlgorithms);
+        meta.KeySpec.ShouldBe(KeySpec.RSA_4096);
+        meta.EncryptionAlgorithms.ShouldContain("RSAES_OAEP_SHA_256");
     }
 
     // -- ListKeys --------------------------------------------------------------
@@ -129,7 +129,7 @@ public sealed class KmsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
 
         var resp = await _kms.ListKeysAsync(new ListKeysRequest());
         var keyIds = resp.Keys.Select(k => k.KeyId).ToList();
-        Assert.Contains(keyId, keyIds);
+        keyIds.ShouldContain(keyId);
     }
 
     // -- DescribeKey -----------------------------------------------------------
@@ -145,8 +145,8 @@ public sealed class KmsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         var keyId = created.KeyMetadata.KeyId;
 
         var resp = await _kms.DescribeKeyAsync(new DescribeKeyRequest { KeyId = keyId });
-        Assert.Equal("describe me", resp.KeyMetadata.Description);
-        Assert.Equal(keyId, resp.KeyMetadata.KeyId);
+        resp.KeyMetadata.Description.ShouldBe("describe me");
+        resp.KeyMetadata.KeyId.ShouldBe(keyId);
     }
 
     [Fact]
@@ -159,13 +159,13 @@ public sealed class KmsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         var arn = created.KeyMetadata.Arn;
 
         var resp = await _kms.DescribeKeyAsync(new DescribeKeyRequest { KeyId = arn });
-        Assert.Equal(arn, resp.KeyMetadata.Arn);
+        resp.KeyMetadata.Arn.ShouldBe(arn);
     }
 
     [Fact]
     public async Task DescribeNonexistentKey()
     {
-        await Assert.ThrowsAsync<NotFoundException>(() =>
+        await Should.ThrowAsync<NotFoundException>(() =>
             _kms.DescribeKeyAsync(new DescribeKeyRequest { KeyId = "nonexistent-key-id" }));
     }
 
@@ -190,9 +190,9 @@ public sealed class KmsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             SigningAlgorithm = SigningAlgorithmSpec.RSASSA_PKCS1_V1_5_SHA_256,
         });
 
-        Assert.Equal(keyId, signResp.KeyId);
-        Assert.Equal(SigningAlgorithmSpec.RSASSA_PKCS1_V1_5_SHA_256, signResp.SigningAlgorithm);
-        Assert.True(signResp.Signature.Length > 0);
+        signResp.KeyId.ShouldBe(keyId);
+        signResp.SigningAlgorithm.ShouldBe(SigningAlgorithmSpec.RSASSA_PKCS1_V1_5_SHA_256);
+        (signResp.Signature.Length > 0).ShouldBe(true);
 
         var verifyResp = await _kms.VerifyAsync(new VerifyRequest
         {
@@ -203,7 +203,7 @@ public sealed class KmsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             SigningAlgorithm = SigningAlgorithmSpec.RSASSA_PKCS1_V1_5_SHA_256,
         });
 
-        Assert.True(verifyResp.SignatureValid);
+        verifyResp.SignatureValid.ShouldBe(true);
     }
 
     [Fact]
@@ -234,7 +234,7 @@ public sealed class KmsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             SigningAlgorithm = SigningAlgorithmSpec.RSASSA_PSS_SHA_256,
         });
 
-        Assert.True(verifyResp.SignatureValid);
+        verifyResp.SignatureValid.ShouldBe(true);
     }
 
     [Fact]
@@ -264,7 +264,7 @@ public sealed class KmsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             SigningAlgorithm = SigningAlgorithmSpec.RSASSA_PKCS1_V1_5_SHA_256,
         });
 
-        Assert.False(verifyResp.SignatureValid);
+        verifyResp.SignatureValid.ShouldBe(false);
     }
 
     [Fact]
@@ -292,7 +292,7 @@ public sealed class KmsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             SigningAlgorithm = SigningAlgorithmSpec.RSASSA_PKCS1_V1_5_SHA_256,
         });
 
-        Assert.True(signResp.Signature.Length > 0);
+        (signResp.Signature.Length > 0).ShouldBe(true);
 
         var verifyResp = await _kms.VerifyAsync(new VerifyRequest
         {
@@ -303,7 +303,7 @@ public sealed class KmsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             SigningAlgorithm = SigningAlgorithmSpec.RSASSA_PKCS1_V1_5_SHA_256,
         });
 
-        Assert.True(verifyResp.SignatureValid);
+        verifyResp.SignatureValid.ShouldBe(true);
     }
 
     // -- Encrypt / Decrypt -----------------------------------------------------
@@ -324,13 +324,13 @@ public sealed class KmsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             KeyId = keyId,
             Plaintext = new MemoryStream(plaintext),
         });
-        Assert.Equal(keyId, encResp.KeyId);
+        encResp.KeyId.ShouldBe(keyId);
 
         var decResp = await _kms.DecryptAsync(new DecryptRequest
         {
             CiphertextBlob = new MemoryStream(encResp.CiphertextBlob.ToArray()),
         });
-        Assert.Equal(plaintext, decResp.Plaintext.ToArray());
+        decResp.Plaintext.ToArray().ShouldBe(plaintext);
     }
 
     [Fact]
@@ -355,7 +355,7 @@ public sealed class KmsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             KeyId = keyId,
             CiphertextBlob = new MemoryStream(encResp.CiphertextBlob.ToArray()),
         });
-        Assert.Equal(plaintext, decResp.Plaintext.ToArray());
+        decResp.Plaintext.ToArray().ShouldBe(plaintext);
     }
 
     // -- GenerateDataKey -------------------------------------------------------
@@ -376,9 +376,9 @@ public sealed class KmsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             KeySpec = DataKeySpec.AES_256,
         });
 
-        Assert.Equal(keyId, resp.KeyId);
-        Assert.Equal(32, resp.Plaintext.Length);
-        Assert.True(resp.CiphertextBlob.Length > 0);
+        resp.KeyId.ShouldBe(keyId);
+        resp.Plaintext.Length.ShouldBe(32);
+        (resp.CiphertextBlob.Length > 0).ShouldBe(true);
     }
 
     [Fact]
@@ -397,7 +397,7 @@ public sealed class KmsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             KeySpec = DataKeySpec.AES_128,
         });
 
-        Assert.Equal(16, resp.Plaintext.Length);
+        resp.Plaintext.Length.ShouldBe(16);
     }
 
     [Fact]
@@ -421,7 +421,7 @@ public sealed class KmsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             CiphertextBlob = new MemoryStream(genResp.CiphertextBlob.ToArray()),
         });
 
-        Assert.Equal(genResp.Plaintext.ToArray(), decResp.Plaintext.ToArray());
+        decResp.Plaintext.ToArray().ShouldBe(genResp.Plaintext.ToArray());
     }
 
     [Fact]
@@ -441,8 +441,8 @@ public sealed class KmsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
                 KeySpec = DataKeySpec.AES_256,
             });
 
-        Assert.Equal(keyId, resp.KeyId);
-        Assert.True(resp.CiphertextBlob.Length > 0);
+        resp.KeyId.ShouldBe(keyId);
+        (resp.CiphertextBlob.Length > 0).ShouldBe(true);
     }
 
     // -- GetPublicKey ----------------------------------------------------------
@@ -458,9 +458,9 @@ public sealed class KmsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         var keyId = key.KeyMetadata.KeyId;
 
         var resp = await _kms.GetPublicKeyAsync(new GetPublicKeyRequest { KeyId = keyId });
-        Assert.Equal(keyId, resp.KeyId);
-        Assert.Equal(KeySpec.RSA_2048, resp.KeySpec);
-        Assert.True(resp.PublicKey.Length > 0);
+        resp.KeyId.ShouldBe(keyId);
+        resp.KeySpec.ShouldBe(KeySpec.RSA_2048);
+        (resp.PublicKey.Length > 0).ShouldBe(true);
     }
 
     // -- EncryptionContext ------------------------------------------------------
@@ -494,7 +494,7 @@ public sealed class KmsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             EncryptionContext = context,
         });
 
-        Assert.Equal(plaintext, decResp.Plaintext.ToArray());
+        decResp.Plaintext.ToArray().ShouldBe(plaintext);
     }
 
     [Fact]
@@ -514,14 +514,14 @@ public sealed class KmsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             EncryptionContext = new Dictionary<string, string> { ["env"] = "prod" },
         });
 
-        var ex = await Assert.ThrowsAsync<InvalidCiphertextException>(() =>
+        var ex = await Should.ThrowAsync<InvalidCiphertextException>(() =>
             _kms.DecryptAsync(new DecryptRequest
             {
                 CiphertextBlob = new MemoryStream(encResp.CiphertextBlob.ToArray()),
                 EncryptionContext = new Dictionary<string, string> { ["env"] = "dev" },
             }));
 
-        Assert.Contains("EncryptionContext", ex.Message);
+        ex.Message.ShouldContain("EncryptionContext");
     }
 
     // -- Alias operations ------------------------------------------------------
@@ -543,7 +543,7 @@ public sealed class KmsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
 
         var resp = await _kms.ListAliasesAsync(new ListAliasesRequest());
         var aliasNames = resp.Aliases.Select(a => a.AliasName).ToList();
-        Assert.Contains("alias/test-alias", aliasNames);
+        aliasNames.ShouldContain("alias/test-alias");
     }
 
     [Fact]
@@ -573,7 +573,7 @@ public sealed class KmsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             CiphertextBlob = new MemoryStream(encResp.CiphertextBlob.ToArray()),
         });
 
-        Assert.Equal("via alias"u8.ToArray(), decResp.Plaintext.ToArray());
+        decResp.Plaintext.ToArray().ShouldBe("via alias"u8.ToArray());
     }
 
     [Fact]
@@ -595,7 +595,7 @@ public sealed class KmsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             KeyId = "alias/desc-alias",
         });
-        Assert.Equal(keyId, resp.KeyMetadata.KeyId);
+        resp.KeyMetadata.KeyId.ShouldBe(keyId);
     }
 
     [Fact]
@@ -620,7 +620,7 @@ public sealed class KmsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             KeyId = "alias/upd-alias",
         });
-        Assert.Equal(key2.KeyMetadata.KeyId, resp.KeyMetadata.KeyId);
+        resp.KeyMetadata.KeyId.ShouldBe(key2.KeyMetadata.KeyId);
     }
 
     [Fact]
@@ -642,7 +642,7 @@ public sealed class KmsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             AliasName = "alias/del-alias",
         });
 
-        await Assert.ThrowsAsync<NotFoundException>(() =>
+        await Should.ThrowAsync<NotFoundException>(() =>
             _kms.DescribeKeyAsync(new DescribeKeyRequest { KeyId = "alias/del-alias" }));
     }
 
@@ -658,15 +658,15 @@ public sealed class KmsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         var keyId = key.KeyMetadata.KeyId;
 
         var status = await _kms.GetKeyRotationStatusAsync(new GetKeyRotationStatusRequest { KeyId = keyId });
-        Assert.False(status.KeyRotationEnabled);
+        status.KeyRotationEnabled.ShouldBe(false);
 
         await _kms.EnableKeyRotationAsync(new EnableKeyRotationRequest { KeyId = keyId });
         status = await _kms.GetKeyRotationStatusAsync(new GetKeyRotationStatusRequest { KeyId = keyId });
-        Assert.True(status.KeyRotationEnabled);
+        status.KeyRotationEnabled.ShouldBe(true);
 
         await _kms.DisableKeyRotationAsync(new DisableKeyRotationRequest { KeyId = keyId });
         status = await _kms.GetKeyRotationStatusAsync(new GetKeyRotationStatusRequest { KeyId = keyId });
-        Assert.False(status.KeyRotationEnabled);
+        status.KeyRotationEnabled.ShouldBe(false);
 
         await _kms.ScheduleKeyDeletionAsync(new ScheduleKeyDeletionRequest
         {
@@ -688,7 +688,7 @@ public sealed class KmsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             KeyId = keyId,
             PolicyName = "default",
         });
-        Assert.Contains("Statement", policy.Policy);
+        policy.Policy.ShouldContain("Statement");
 
         var custom = "{\"Version\":\"2012-10-17\",\"Statement\":[]}";
         await _kms.PutKeyPolicyAsync(new PutKeyPolicyRequest
@@ -703,7 +703,7 @@ public sealed class KmsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             KeyId = keyId,
             PolicyName = "default",
         });
-        Assert.Equal(custom, got.Policy);
+        got.Policy.ShouldBe(custom);
 
         await _kms.ScheduleKeyDeletionAsync(new ScheduleKeyDeletionRequest
         {
@@ -732,8 +732,8 @@ public sealed class KmsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
 
         var tags = await _kms.ListResourceTagsAsync(new ListResourceTagsRequest { KeyId = keyId });
         var tagMap = tags.Tags.ToDictionary(t => t.TagKey, t => t.TagValue);
-        Assert.Equal("test", tagMap["env"]);
-        Assert.Equal("platform", tagMap["team"]);
+        tagMap["env"].ShouldBe("test");
+        tagMap["team"].ShouldBe("platform");
 
         await _kms.UntagResourceAsync(new UntagResourceRequest
         {
@@ -742,8 +742,8 @@ public sealed class KmsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         });
 
         tags = await _kms.ListResourceTagsAsync(new ListResourceTagsRequest { KeyId = keyId });
-        Assert.Single(tags.Tags);
-        Assert.Equal("env", tags.Tags[0].TagKey);
+        tags.Tags.ShouldHaveSingleItem();
+        tags.Tags[0].TagKey.ShouldBe("env");
 
         await _kms.ScheduleKeyDeletionAsync(new ScheduleKeyDeletionRequest
         {
@@ -759,15 +759,15 @@ public sealed class KmsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
     {
         var key = await _kms.CreateKeyAsync(new CreateKeyRequest());
         var keyId = key.KeyMetadata.KeyId;
-        Assert.Equal(KeyState.Enabled, key.KeyMetadata.KeyState);
+        key.KeyMetadata.KeyState.ShouldBe(KeyState.Enabled);
 
         await _kms.DisableKeyAsync(new DisableKeyRequest { KeyId = keyId });
         var desc = await _kms.DescribeKeyAsync(new DescribeKeyRequest { KeyId = keyId });
-        Assert.Equal(KeyState.Disabled, desc.KeyMetadata.KeyState);
+        desc.KeyMetadata.KeyState.ShouldBe(KeyState.Disabled);
 
         await _kms.EnableKeyAsync(new EnableKeyRequest { KeyId = keyId });
         desc = await _kms.DescribeKeyAsync(new DescribeKeyRequest { KeyId = keyId });
-        Assert.Equal(KeyState.Enabled, desc.KeyMetadata.KeyState);
+        desc.KeyMetadata.KeyState.ShouldBe(KeyState.Enabled);
 
         await _kms.ScheduleKeyDeletionAsync(new ScheduleKeyDeletionRequest
         {
@@ -789,12 +789,12 @@ public sealed class KmsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             KeyId = keyId,
             PendingWindowInDays = 7,
         });
-        Assert.Equal(KeyState.PendingDeletion, resp.KeyState);
+        resp.KeyState.ShouldBe(KeyState.PendingDeletion);
 
         await _kms.CancelKeyDeletionAsync(new CancelKeyDeletionRequest { KeyId = keyId });
 
         var desc = await _kms.DescribeKeyAsync(new DescribeKeyRequest { KeyId = keyId });
-        Assert.Equal(KeyState.Disabled, desc.KeyMetadata.KeyState);
+        desc.KeyMetadata.KeyState.ShouldBe(KeyState.Disabled);
     }
 
     // -- TerraformFullFlow -----------------------------------------------------
@@ -812,14 +812,14 @@ public sealed class KmsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
 
         await _kms.EnableKeyRotationAsync(new EnableKeyRotationRequest { KeyId = keyId });
         var status = await _kms.GetKeyRotationStatusAsync(new GetKeyRotationStatusRequest { KeyId = keyId });
-        Assert.True(status.KeyRotationEnabled);
+        status.KeyRotationEnabled.ShouldBe(true);
 
         var pol = await _kms.GetKeyPolicyAsync(new GetKeyPolicyRequest
         {
             KeyId = keyId,
             PolicyName = "default",
         });
-        Assert.True(pol.Policy.Length > 0);
+        (pol.Policy.Length > 0).ShouldBe(true);
 
         await _kms.TagResourceAsync(new TagResourceRequest
         {
@@ -828,10 +828,10 @@ public sealed class KmsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         });
 
         var tags = await _kms.ListResourceTagsAsync(new ListResourceTagsRequest { KeyId = keyId });
-        Assert.Equal("rds-key", tags.Tags[0].TagValue);
+        tags.Tags[0].TagValue.ShouldBe("rds-key");
 
         var desc = await _kms.DescribeKeyAsync(new DescribeKeyRequest { KeyId = keyId });
-        Assert.Equal("RDS key", desc.KeyMetadata.Description);
+        desc.KeyMetadata.Description.ShouldBe("RDS key");
 
         await _kms.ScheduleKeyDeletionAsync(new ScheduleKeyDeletionRequest
         {
@@ -849,7 +849,7 @@ public sealed class KmsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         var keyId = key.KeyMetadata.KeyId;
 
         var resp = await _kms.ListKeyPoliciesAsync(new ListKeyPoliciesRequest { KeyId = keyId });
-        Assert.Contains("default", resp.PolicyNames);
+        resp.PolicyNames.ShouldContain("default");
 
         await _kms.ScheduleKeyDeletionAsync(new ScheduleKeyDeletionRequest
         {
@@ -873,8 +873,8 @@ public sealed class KmsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         });
 
         var status = await _kms.GetKeyRotationStatusAsync(new GetKeyRotationStatusRequest { KeyId = keyId });
-        Assert.True(status.KeyRotationEnabled);
-        Assert.Equal(180, status.RotationPeriodInDays);
+        status.KeyRotationEnabled.ShouldBe(true);
+        status.RotationPeriodInDays.ShouldBe(180);
 
         await _kms.ScheduleKeyDeletionAsync(new ScheduleKeyDeletionRequest
         {

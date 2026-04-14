@@ -107,8 +107,8 @@ public sealed class SesTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             },
         });
 
-        Assert.NotNull(resp.MessageId);
-        Assert.Contains("@email.amazonses.com", resp.MessageId);
+        resp.MessageId.ShouldNotBeNull();
+        resp.MessageId.ShouldContain("@email.amazonses.com");
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -132,7 +132,7 @@ public sealed class SesTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             },
         });
 
-        Assert.NotNull(resp.MessageId);
+        resp.MessageId.ShouldNotBeNull();
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -148,7 +148,7 @@ public sealed class SesTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         });
 
         var resp = await _ses.ListIdentitiesAsync(new SesV1.Model.ListIdentitiesRequest());
-        Assert.Contains("test@example.com", resp.Identities);
+        resp.Identities.ShouldContain("test@example.com");
     }
 
     [Fact]
@@ -159,14 +159,14 @@ public sealed class SesTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             Domain = "example.com",
         });
 
-        Assert.NotNull(resp.VerificationToken);
-        Assert.True(resp.VerificationToken.Length > 0);
+        resp.VerificationToken.ShouldNotBeNull();
+        (resp.VerificationToken.Length > 0).ShouldBe(true);
 
         var ids = await _ses.ListIdentitiesAsync(new SesV1.Model.ListIdentitiesRequest
         {
             IdentityType = "Domain",
         });
-        Assert.Contains("example.com", ids.Identities);
+        ids.Identities.ShouldContain("example.com");
     }
 
     [Fact]
@@ -183,8 +183,8 @@ public sealed class SesTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
                 Identities = ["verify@example.com"],
             });
 
-        Assert.True(attrs.VerificationAttributes.ContainsKey("verify@example.com"));
-        Assert.Equal("Success", attrs.VerificationAttributes["verify@example.com"].VerificationStatus.Value);
+        attrs.VerificationAttributes.ContainsKey("verify@example.com").ShouldBe(true);
+        attrs.VerificationAttributes["verify@example.com"].VerificationStatus.Value.ShouldBe("Success");
     }
 
     [Fact]
@@ -201,7 +201,7 @@ public sealed class SesTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         });
 
         var resp = await _ses.ListIdentitiesAsync(new SesV1.Model.ListIdentitiesRequest());
-        Assert.DoesNotContain("delete@example.com", resp.Identities ?? []);
+        resp.Identities.ShouldNotContain("delete@example.com");
     }
 
     [Fact]
@@ -220,13 +220,13 @@ public sealed class SesTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             IdentityType = "EmailAddress",
         });
-        Assert.Contains("type@example.com", emailIds.Identities);
+        emailIds.Identities.ShouldContain("type@example.com");
 
         var domainIds = await _ses.ListIdentitiesAsync(new SesV1.Model.ListIdentitiesRequest
         {
             IdentityType = "Domain",
         });
-        Assert.Contains("type-domain.com", domainIds.Identities);
+        domainIds.Identities.ShouldContain("type-domain.com");
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -237,9 +237,9 @@ public sealed class SesTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
     public async Task GetSendQuota()
     {
         var resp = await _ses.GetSendQuotaAsync(new SesV1.Model.GetSendQuotaRequest());
-        Assert.Equal(50000.0, resp.Max24HourSend);
-        Assert.Equal(14.0, resp.MaxSendRate);
-        Assert.True(resp.SentLast24Hours >= 0);
+        resp.Max24HourSend.ShouldBe(50000.0);
+        resp.MaxSendRate.ShouldBe(14.0);
+        (resp.SentLast24Hours >= 0).ShouldBe(true);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -258,10 +258,10 @@ public sealed class SesTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             ConfigurationSetName = "test-config",
         });
-        Assert.Equal("test-config", desc.ConfigurationSet.Name);
+        desc.ConfigurationSet.Name.ShouldBe("test-config");
 
         var sets = await _ses.ListConfigurationSetsAsync(new SesV1.Model.ListConfigurationSetsRequest());
-        Assert.Contains(sets.ConfigurationSets, s => s.Name == "test-config");
+        sets.ConfigurationSets.ShouldContain(s => s.Name == "test-config");
 
         await _ses.DeleteConfigurationSetAsync(new SesV1.Model.DeleteConfigurationSetRequest
         {
@@ -269,7 +269,7 @@ public sealed class SesTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         });
 
         var sets2 = await _ses.ListConfigurationSetsAsync(new SesV1.Model.ListConfigurationSetsRequest());
-        Assert.DoesNotContain(sets2.ConfigurationSets ?? [], s => s.Name == "test-config");
+        sets2.ConfigurationSets.ShouldNotContain(s => s.Name == "test-config");
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -294,11 +294,11 @@ public sealed class SesTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             TemplateName = "test-tpl",
         });
-        Assert.Equal("test-tpl", resp.Template.TemplateName);
-        Assert.Contains("{{name}}", resp.Template.SubjectPart);
+        resp.Template.TemplateName.ShouldBe("test-tpl");
+        resp.Template.SubjectPart.ShouldContain("{{name}}");
 
         var listed = await _ses.ListTemplatesAsync(new SesV1.Model.ListTemplatesRequest());
-        Assert.Contains(listed.TemplatesMetadata, t => t.Name == "test-tpl");
+        listed.TemplatesMetadata.ShouldContain(t => t.Name == "test-tpl");
 
         await _ses.UpdateTemplateAsync(new SesV1.Model.UpdateTemplateRequest
         {
@@ -315,7 +315,7 @@ public sealed class SesTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             TemplateName = "test-tpl",
         });
-        Assert.Contains("Updated", resp2.Template.SubjectPart);
+        resp2.Template.SubjectPart.ShouldContain("Updated");
 
         await _ses.DeleteTemplateAsync(new SesV1.Model.DeleteTemplateRequest
         {
@@ -323,12 +323,12 @@ public sealed class SesTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         });
 
         // After deletion, get should throw
-        var ex = await Assert.ThrowsAsync<Amazon.SimpleEmail.Model.TemplateDoesNotExistException>(() =>
+        var ex = await Should.ThrowAsync<Amazon.SimpleEmail.Model.TemplateDoesNotExistException>(() =>
             _ses.GetTemplateAsync(new SesV1.Model.GetTemplateRequest
             {
                 TemplateName = "test-tpl",
             }));
-        Assert.NotNull(ex);
+        ex.ShouldNotBeNull();
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -364,7 +364,7 @@ public sealed class SesTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             TemplateData = System.Text.Json.JsonSerializer.Serialize(new { name = "Alice" }),
         });
 
-        Assert.NotNull(resp.MessageId);
+        resp.MessageId.ShouldNotBeNull();
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -379,8 +379,8 @@ public sealed class SesTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             Domain = "dkim.example.com",
         });
 
-        Assert.Equal(3, resp.DkimTokens.Count);
-        Assert.All(resp.DkimTokens, t => Assert.True(t.Length > 0));
+        resp.DkimTokens.Count.ShouldBe(3);
+        resp.DkimTokens.ShouldAllBe(t => t.Length > 0);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -407,9 +407,9 @@ public sealed class SesTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         });
 
         var resp = await _ses.GetSendStatisticsAsync(new SesV1.Model.GetSendStatisticsRequest());
-        Assert.NotNull(resp.SendDataPoints);
-        Assert.True(resp.SendDataPoints.Count >= 1);
-        Assert.True(resp.SendDataPoints[0].DeliveryAttempts >= 1);
+        resp.SendDataPoints.ShouldNotBeNull();
+        (resp.SendDataPoints.Count >= 1).ShouldBe(true);
+        (resp.SendDataPoints[0].DeliveryAttempts >= 1).ShouldBe(true);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -439,7 +439,7 @@ public sealed class SesTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             },
         });
 
-        Assert.StartsWith("ministack-", resp.MessageId);
+        resp.MessageId.ShouldStartWith("ministack-");
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -453,17 +453,17 @@ public sealed class SesTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             EmailIdentity = "test-domain.com",
         });
-        Assert.True(createResp.VerifiedForSendingStatus);
+        createResp.VerifiedForSendingStatus.ShouldBe(true);
 
         var getResp = await _sesV2.GetEmailIdentityAsync(new SesV2.Model.GetEmailIdentityRequest
         {
             EmailIdentity = "test-domain.com",
         });
-        Assert.True(getResp.VerifiedForSendingStatus);
+        getResp.VerifiedForSendingStatus.ShouldBe(true);
 
         var listResp = await _sesV2.ListEmailIdentitiesAsync(new SesV2.Model.ListEmailIdentitiesRequest());
         var names = listResp.EmailIdentities.ConvertAll(e => e.IdentityName);
-        Assert.Contains("test-domain.com", names);
+        names.ShouldContain("test-domain.com");
 
         await _sesV2.DeleteEmailIdentityAsync(new SesV2.Model.DeleteEmailIdentityRequest
         {
@@ -472,7 +472,7 @@ public sealed class SesTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
 
         var list2 = await _sesV2.ListEmailIdentitiesAsync(new SesV2.Model.ListEmailIdentitiesRequest());
         var names2 = list2.EmailIdentities.ConvertAll(e => e.IdentityName);
-        Assert.DoesNotContain("test-domain.com", names2);
+        names2.ShouldNotContain("test-domain.com");
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -491,10 +491,10 @@ public sealed class SesTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             ConfigurationSetName = "my-cfg-set",
         });
-        Assert.Equal("my-cfg-set", getResp.ConfigurationSetName);
+        getResp.ConfigurationSetName.ShouldBe("my-cfg-set");
 
         var listResp = await _sesV2.ListConfigurationSetsAsync(new SesV2.Model.ListConfigurationSetsRequest());
-        Assert.Contains("my-cfg-set", listResp.ConfigurationSets);
+        listResp.ConfigurationSets.ShouldContain("my-cfg-set");
 
         await _sesV2.DeleteConfigurationSetAsync(new SesV2.Model.DeleteConfigurationSetRequest
         {
@@ -502,7 +502,7 @@ public sealed class SesTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         });
 
         var list2 = await _sesV2.ListConfigurationSetsAsync(new SesV2.Model.ListConfigurationSetsRequest());
-        Assert.DoesNotContain("my-cfg-set", list2.ConfigurationSets);
+        list2.ConfigurationSets.ShouldNotContain("my-cfg-set");
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -513,8 +513,8 @@ public sealed class SesTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
     public async Task V2GetAccount()
     {
         var resp = await _sesV2.GetAccountAsync(new SesV2.Model.GetAccountRequest());
-        Assert.True(resp.SendingEnabled);
-        Assert.True(resp.ProductionAccessEnabled);
-        Assert.Equal(50000.0, resp.SendQuota.Max24HourSend);
+        resp.SendingEnabled.ShouldBe(true);
+        resp.ProductionAccessEnabled.ShouldBe(true);
+        resp.SendQuota.Max24HourSend.ShouldBe(50000.0);
     }
 }

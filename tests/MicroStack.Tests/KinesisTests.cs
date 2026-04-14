@@ -65,9 +65,9 @@ public sealed class KinesisTests : IClassFixture<MicroStackFixture>, IAsyncLifet
 
         var desc = await _kin.DescribeStreamAsync(new DescribeStreamRequest { StreamName = "kin-cs-v2" });
         var sd = desc.StreamDescription;
-        Assert.Equal("kin-cs-v2", sd.StreamName);
-        Assert.Equal(StreamStatus.ACTIVE, sd.StreamStatus);
-        Assert.Equal(2, sd.Shards.Count);
+        sd.StreamName.ShouldBe("kin-cs-v2");
+        sd.StreamStatus.ShouldBe(StreamStatus.ACTIVE);
+        sd.Shards.Count.ShouldBe(2);
     }
 
     [Fact]
@@ -76,9 +76,9 @@ public sealed class KinesisTests : IClassFixture<MicroStackFixture>, IAsyncLifet
         await _kin.CreateStreamAsync(new CreateStreamRequest { StreamName = "kin-del-v2", ShardCount = 1 });
         await _kin.DeleteStreamAsync(new DeleteStreamRequest { StreamName = "kin-del-v2" });
 
-        var ex = await Assert.ThrowsAsync<ResourceNotFoundException>(
+        var ex = await Should.ThrowAsync<ResourceNotFoundException>(
             () => _kin.DescribeStreamAsync(new DescribeStreamRequest { StreamName = "kin-del-v2" }));
-        Assert.Equal("ResourceNotFoundException", ex.ErrorCode);
+        ex.ErrorCode.ShouldBe("ResourceNotFoundException");
     }
 
     [Fact]
@@ -88,8 +88,8 @@ public sealed class KinesisTests : IClassFixture<MicroStackFixture>, IAsyncLifet
         await _kin.CreateStreamAsync(new CreateStreamRequest { StreamName = "kin-ls-v2b", ShardCount = 1 });
 
         var resp = await _kin.ListStreamsAsync(new ListStreamsRequest());
-        Assert.Contains("kin-ls-v2a", resp.StreamNames);
-        Assert.Contains("kin-ls-v2b", resp.StreamNames);
+        resp.StreamNames.ShouldContain("kin-ls-v2a");
+        resp.StreamNames.ShouldContain("kin-ls-v2b");
     }
 
     [Fact]
@@ -99,14 +99,14 @@ public sealed class KinesisTests : IClassFixture<MicroStackFixture>, IAsyncLifet
 
         var resp = await _kin.DescribeStreamAsync(new DescribeStreamRequest { StreamName = "kin-desc-v2" });
         var sd = resp.StreamDescription;
-        Assert.Equal("kin-desc-v2", sd.StreamName);
-        Assert.Equal(24, sd.RetentionPeriodHours);
-        Assert.NotEmpty(sd.StreamARN);
-        Assert.Single(sd.Shards);
+        sd.StreamName.ShouldBe("kin-desc-v2");
+        sd.RetentionPeriodHours.ShouldBe(24);
+        sd.StreamARN.ShouldNotBeEmpty();
+        sd.Shards.ShouldHaveSingleItem();
 
         var summary = await _kin.DescribeStreamSummaryAsync(
             new DescribeStreamSummaryRequest { StreamName = "kin-desc-v2" });
-        Assert.Equal("kin-desc-v2", summary.StreamDescriptionSummary.StreamName);
+        summary.StreamDescriptionSummary.StreamName.ShouldBe("kin-desc-v2");
     }
 
     [Fact]
@@ -115,12 +115,12 @@ public sealed class KinesisTests : IClassFixture<MicroStackFixture>, IAsyncLifet
         await _kin.CreateStreamAsync(new CreateStreamRequest { StreamName = "kin-lsh-v2", ShardCount = 3 });
 
         var resp = await _kin.ListShardsAsync(new ListShardsRequest { StreamName = "kin-lsh-v2" });
-        Assert.Equal(3, resp.Shards.Count);
-        Assert.All(resp.Shards, s =>
+        resp.Shards.Count.ShouldBe(3);
+        foreach (var s in resp.Shards)
         {
-            Assert.NotEmpty(s.ShardId);
-            Assert.NotNull(s.HashKeyRange);
-        });
+            s.ShardId.ShouldNotBeEmpty();
+            s.HashKeyRange.ShouldNotBeNull();
+        }
     }
 
     // ── PutRecord / GetRecords ──────────────────────────────────────────────────
@@ -163,12 +163,12 @@ public sealed class KinesisTests : IClassFixture<MicroStackFixture>, IAsyncLifet
         {
             ShardIterator = it.ShardIterator,
         });
-        Assert.Equal(3, records.Records.Count);
+        records.Records.Count.ShouldBe(3);
 
         // Verify first record data
         using var reader = new StreamReader(records.Records[0].Data);
         var data = await reader.ReadToEndAsync();
-        Assert.Equal("rec1", data);
+        data.ShouldBe("rec1");
     }
 
     [Fact]
@@ -188,13 +188,13 @@ public sealed class KinesisTests : IClassFixture<MicroStackFixture>, IAsyncLifet
             Records = entries,
         });
 
-        Assert.Equal(0, resp.FailedRecordCount);
-        Assert.Equal(7, resp.Records.Count);
-        Assert.All(resp.Records, r =>
+        resp.FailedRecordCount.ShouldBe(0);
+        resp.Records.Count.ShouldBe(7);
+        foreach (var r in resp.Records)
         {
-            Assert.NotEmpty(r.ShardId);
-            Assert.NotEmpty(r.SequenceNumber);
-        });
+            r.ShardId.ShouldNotBeEmpty();
+            r.SequenceNumber.ShouldNotBeEmpty();
+        }
     }
 
     // ── Tags ────────────────────────────────────────────────────────────────────
@@ -219,8 +219,8 @@ public sealed class KinesisTests : IClassFixture<MicroStackFixture>, IAsyncLifet
             StreamName = "kin-tag-v2",
         });
         var tagMap = resp.Tags.ToDictionary(t => t.Key, t => t.Value);
-        Assert.Equal("test", tagMap["env"]);
-        Assert.Equal("data", tagMap["team"]);
+        tagMap["env"].ShouldBe("test");
+        tagMap["team"].ShouldBe("data");
 
         await _kin.RemoveTagsFromStreamAsync(new RemoveTagsFromStreamRequest
         {
@@ -233,8 +233,8 @@ public sealed class KinesisTests : IClassFixture<MicroStackFixture>, IAsyncLifet
             StreamName = "kin-tag-v2",
         });
         var tagMap2 = resp2.Tags.ToDictionary(t => t.Key, t => t.Value);
-        Assert.DoesNotContain("team", tagMap2.Keys);
-        Assert.Equal("test", tagMap2["env"]);
+        tagMap2.Keys.ShouldNotContain("team");
+        tagMap2["env"].ShouldBe("test");
     }
 
     // ── Retention period ────────────────────────────────────────────────────────
@@ -250,7 +250,7 @@ public sealed class KinesisTests : IClassFixture<MicroStackFixture>, IAsyncLifet
             RetentionPeriodHours = 48,
         });
         var desc = await _kin.DescribeStreamAsync(new DescribeStreamRequest { StreamName = "kin-retention" });
-        Assert.Equal(48, desc.StreamDescription.RetentionPeriodHours);
+        desc.StreamDescription.RetentionPeriodHours.ShouldBe(48);
 
         await _kin.DecreaseStreamRetentionPeriodAsync(new DecreaseStreamRetentionPeriodRequest
         {
@@ -258,7 +258,7 @@ public sealed class KinesisTests : IClassFixture<MicroStackFixture>, IAsyncLifet
             RetentionPeriodHours = 24,
         });
         var desc2 = await _kin.DescribeStreamAsync(new DescribeStreamRequest { StreamName = "kin-retention" });
-        Assert.Equal(24, desc2.StreamDescription.RetentionPeriodHours);
+        desc2.StreamDescription.RetentionPeriodHours.ShouldBe(24);
     }
 
     // ── Encryption ──────────────────────────────────────────────────────────────
@@ -275,7 +275,7 @@ public sealed class KinesisTests : IClassFixture<MicroStackFixture>, IAsyncLifet
             KeyId = "alias/aws/kinesis",
         });
         var desc = await _kin.DescribeStreamAsync(new DescribeStreamRequest { StreamName = "kin-enc" });
-        Assert.Equal(EncryptionType.KMS, desc.StreamDescription.EncryptionType);
+        desc.StreamDescription.EncryptionType.ShouldBe(EncryptionType.KMS);
 
         await _kin.StopStreamEncryptionAsync(new StopStreamEncryptionRequest
         {
@@ -284,7 +284,7 @@ public sealed class KinesisTests : IClassFixture<MicroStackFixture>, IAsyncLifet
             KeyId = "alias/aws/kinesis",
         });
         var desc2 = await _kin.DescribeStreamAsync(new DescribeStreamRequest { StreamName = "kin-enc" });
-        Assert.Equal(EncryptionType.NONE, desc2.StreamDescription.EncryptionType);
+        desc2.StreamDescription.EncryptionType.ShouldBe(EncryptionType.NONE);
     }
 
     // ── Enhanced monitoring ─────────────────────────────────────────────────────
@@ -299,14 +299,14 @@ public sealed class KinesisTests : IClassFixture<MicroStackFixture>, IAsyncLifet
             StreamName = "kin-mon",
             ShardLevelMetrics = ["IncomingBytes", "OutgoingBytes"],
         });
-        Assert.Contains("IncomingBytes", enable.DesiredShardLevelMetrics);
+        enable.DesiredShardLevelMetrics.ShouldContain("IncomingBytes");
 
         var disable = await _kin.DisableEnhancedMonitoringAsync(new DisableEnhancedMonitoringRequest
         {
             StreamName = "kin-mon",
             ShardLevelMetrics = ["IncomingBytes"],
         });
-        Assert.DoesNotContain("IncomingBytes", disable.DesiredShardLevelMetrics);
+        disable.DesiredShardLevelMetrics.ShouldNotContain("IncomingBytes");
     }
 
     // ── Split / Merge / UpdateShardCount ────────────────────────────────────────
@@ -330,7 +330,7 @@ public sealed class KinesisTests : IClassFixture<MicroStackFixture>, IAsyncLifet
         });
 
         var desc2 = await _kin.DescribeStreamAsync(new DescribeStreamRequest { StreamName = "kin-split" });
-        Assert.Equal(2, desc2.StreamDescription.Shards.Count);
+        desc2.StreamDescription.Shards.Count.ShouldBe(2);
     }
 
     [Fact]
@@ -340,7 +340,7 @@ public sealed class KinesisTests : IClassFixture<MicroStackFixture>, IAsyncLifet
 
         var desc = await _kin.DescribeStreamAsync(new DescribeStreamRequest { StreamName = "kin-merge" });
         var shards = desc.StreamDescription.Shards;
-        Assert.Equal(2, shards.Count);
+        shards.Count.ShouldBe(2);
 
         var sorted = shards.OrderBy(s =>
             System.Numerics.BigInteger.Parse(s.HashKeyRange.StartingHashKey)).ToList();
@@ -353,7 +353,7 @@ public sealed class KinesisTests : IClassFixture<MicroStackFixture>, IAsyncLifet
         });
 
         var desc2 = await _kin.DescribeStreamAsync(new DescribeStreamRequest { StreamName = "kin-merge" });
-        Assert.Single(desc2.StreamDescription.Shards);
+        desc2.StreamDescription.Shards.ShouldHaveSingleItem();
     }
 
     [Fact]
@@ -367,7 +367,7 @@ public sealed class KinesisTests : IClassFixture<MicroStackFixture>, IAsyncLifet
             TargetShardCount = 2,
             ScalingType = ScalingType.UNIFORM_SCALING,
         });
-        Assert.Equal(2, resp.TargetShardCount);
+        resp.TargetShardCount.ShouldBe(2);
     }
 
     // ── Consumers ───────────────────────────────────────────────────────────────
@@ -384,21 +384,21 @@ public sealed class KinesisTests : IClassFixture<MicroStackFixture>, IAsyncLifet
             StreamARN = streamArn,
             ConsumerName = "my-consumer",
         });
-        Assert.Equal("my-consumer", reg.Consumer.ConsumerName);
-        Assert.Equal(ConsumerStatus.ACTIVE, reg.Consumer.ConsumerStatus);
+        reg.Consumer.ConsumerName.ShouldBe("my-consumer");
+        reg.Consumer.ConsumerStatus.ShouldBe(ConsumerStatus.ACTIVE);
         var consumerArn = reg.Consumer.ConsumerARN;
 
         var consumers = await _kin.ListStreamConsumersAsync(new ListStreamConsumersRequest
         {
             StreamARN = streamArn,
         });
-        Assert.Contains(consumers.Consumers, c => c.ConsumerName == "my-consumer");
+        consumers.Consumers.ShouldContain(c => c.ConsumerName == "my-consumer");
 
         var descC = await _kin.DescribeStreamConsumerAsync(new DescribeStreamConsumerRequest
         {
             ConsumerARN = consumerArn,
         });
-        Assert.Equal("my-consumer", descC.ConsumerDescription.ConsumerName);
+        descC.ConsumerDescription.ConsumerName.ShouldBe("my-consumer");
 
         await _kin.DeregisterStreamConsumerAsync(new DeregisterStreamConsumerRequest
         {
@@ -409,7 +409,7 @@ public sealed class KinesisTests : IClassFixture<MicroStackFixture>, IAsyncLifet
         {
             StreamARN = streamArn,
         });
-        Assert.DoesNotContain(consumers2.Consumers, c => c.ConsumerName == "my-consumer");
+        consumers2.Consumers.ShouldNotContain(c => c.ConsumerName == "my-consumer");
     }
 
     // ── AT_TIMESTAMP iterator ───────────────────────────────────────────────────
@@ -446,11 +446,11 @@ public sealed class KinesisTests : IClassFixture<MicroStackFixture>, IAsyncLifet
             ShardIterator = it.ShardIterator,
             Limit = 10,
         });
-        Assert.NotEmpty(records.Records);
+        records.Records.ShouldNotBeEmpty();
 
         using var reader = new StreamReader(records.Records[0].Data);
         var data = await reader.ReadToEndAsync();
-        Assert.Equal("after-ts", data);
+        data.ShouldBe("after-ts");
     }
 
     // ── Duplicate stream fails ──────────────────────────────────────────────────
@@ -460,9 +460,9 @@ public sealed class KinesisTests : IClassFixture<MicroStackFixture>, IAsyncLifet
     {
         await _kin.CreateStreamAsync(new CreateStreamRequest { StreamName = "kin-dup", ShardCount = 1 });
 
-        var ex = await Assert.ThrowsAsync<ResourceInUseException>(
+        var ex = await Should.ThrowAsync<ResourceInUseException>(
             () => _kin.CreateStreamAsync(new CreateStreamRequest { StreamName = "kin-dup", ShardCount = 1 }));
-        Assert.Equal("ResourceInUseException", ex.ErrorCode);
+        ex.ErrorCode.ShouldBe("ResourceInUseException");
     }
 
     // ── Stream not found ────────────────────────────────────────────────────────
@@ -470,9 +470,9 @@ public sealed class KinesisTests : IClassFixture<MicroStackFixture>, IAsyncLifet
     [Fact]
     public async Task DescribeNonexistentStreamFails()
     {
-        var ex = await Assert.ThrowsAsync<ResourceNotFoundException>(
+        var ex = await Should.ThrowAsync<ResourceNotFoundException>(
             () => _kin.DescribeStreamAsync(new DescribeStreamRequest { StreamName = "no-such-stream" }));
-        Assert.Equal("ResourceNotFoundException", ex.ErrorCode);
+        ex.ErrorCode.ShouldBe("ResourceNotFoundException");
     }
 
     // ── PutRecord to two records then get ────────────────────────────────────────
@@ -509,7 +509,7 @@ public sealed class KinesisTests : IClassFixture<MicroStackFixture>, IAsyncLifet
         {
             ShardIterator = it.ShardIterator,
         });
-        Assert.Equal(2, records.Records.Count);
+        records.Records.Count.ShouldBe(2);
     }
 
     // ── GetRecords returns NextShardIterator ─────────────────────────────────────
@@ -541,13 +541,13 @@ public sealed class KinesisTests : IClassFixture<MicroStackFixture>, IAsyncLifet
             ShardIterator = it.ShardIterator,
         });
 
-        Assert.NotEmpty(result.NextShardIterator);
+        result.NextShardIterator.ShouldNotBeEmpty();
 
         // Using next iterator should return 0 records (no new data)
         var result2 = await _kin.GetRecordsAsync(new GetRecordsRequest
         {
             ShardIterator = result.NextShardIterator,
         });
-        Assert.Empty(result2.Records);
+        result2.Records.ShouldBeEmpty();
     }
 }

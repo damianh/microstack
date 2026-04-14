@@ -62,10 +62,10 @@ public sealed class ElastiCacheTests : IClassFixture<MicroStackFixture>, IAsyncL
             NumCacheNodes = 1,
         });
 
-        Assert.Equal("test-redis", resp.CacheCluster.CacheClusterId);
-        Assert.Equal("redis", resp.CacheCluster.Engine);
-        Assert.Equal("available", resp.CacheCluster.CacheClusterStatus);
-        Assert.Single(resp.CacheCluster.CacheNodes);
+        resp.CacheCluster.CacheClusterId.ShouldBe("test-redis");
+        resp.CacheCluster.Engine.ShouldBe("redis");
+        resp.CacheCluster.CacheClusterStatus.ShouldBe("available");
+        resp.CacheCluster.CacheNodes.ShouldHaveSingleItem();
     }
 
     [Fact]
@@ -88,25 +88,25 @@ public sealed class ElastiCacheTests : IClassFixture<MicroStackFixture>, IAsyncL
 
         var resp = await _ec.DescribeCacheClustersAsync(new DescribeCacheClustersRequest());
         var ids = resp.CacheClusters.Select(c => c.CacheClusterId).ToList();
-        Assert.Contains("dc-a", ids);
-        Assert.Contains("dc-b", ids);
+        ids.ShouldContain("dc-a");
+        ids.ShouldContain("dc-b");
 
         var resp2 = await _ec.DescribeCacheClustersAsync(new DescribeCacheClustersRequest
         {
             CacheClusterId = "dc-b",
         });
-        Assert.Equal("memcached", resp2.CacheClusters[0].Engine);
+        resp2.CacheClusters[0].Engine.ShouldBe("memcached");
     }
 
     [Fact]
     public async Task DescribeCacheClusterNotFound()
     {
-        var ex = await Assert.ThrowsAsync<CacheClusterNotFoundException>(() =>
+        var ex = await Should.ThrowAsync<CacheClusterNotFoundException>(() =>
             _ec.DescribeCacheClustersAsync(new DescribeCacheClustersRequest
             {
                 CacheClusterId = "nonexistent",
             }));
-        Assert.Contains("nonexistent", ex.Message);
+        ex.Message.ShouldContain("nonexistent");
     }
 
     [Fact]
@@ -124,10 +124,10 @@ public sealed class ElastiCacheTests : IClassFixture<MicroStackFixture>, IAsyncL
         {
             CacheClusterId = "to-delete",
         });
-        Assert.Equal("to-delete", resp.CacheCluster.CacheClusterId);
-        Assert.Equal("deleting", resp.CacheCluster.CacheClusterStatus);
+        resp.CacheCluster.CacheClusterId.ShouldBe("to-delete");
+        resp.CacheCluster.CacheClusterStatus.ShouldBe("deleting");
 
-        await Assert.ThrowsAsync<CacheClusterNotFoundException>(() =>
+        await Should.ThrowAsync<CacheClusterNotFoundException>(() =>
             _ec.DescribeCacheClustersAsync(new DescribeCacheClustersRequest
             {
                 CacheClusterId = "to-delete",
@@ -155,7 +155,7 @@ public sealed class ElastiCacheTests : IClassFixture<MicroStackFixture>, IAsyncL
         {
             CacheClusterId = "mod-cluster",
         });
-        Assert.Equal("cache.m5.large", desc.CacheClusters[0].CacheNodeType);
+        desc.CacheClusters[0].CacheNodeType.ShouldBe("cache.m5.large");
     }
 
     [Fact]
@@ -169,7 +169,7 @@ public sealed class ElastiCacheTests : IClassFixture<MicroStackFixture>, IAsyncL
             NumCacheNodes = 1,
         });
 
-        await Assert.ThrowsAsync<CacheClusterAlreadyExistsException>(() =>
+        await Should.ThrowAsync<CacheClusterAlreadyExistsException>(() =>
             _ec.CreateCacheClusterAsync(new CreateCacheClusterRequest
             {
                 CacheClusterId = "dup-cluster",
@@ -193,9 +193,9 @@ public sealed class ElastiCacheTests : IClassFixture<MicroStackFixture>, IAsyncL
             ReplicasPerNodeGroup = 1,
         });
 
-        Assert.Equal("test-rg", resp.ReplicationGroup.ReplicationGroupId);
-        Assert.Equal("available", resp.ReplicationGroup.Status);
-        Assert.Single(resp.ReplicationGroup.NodeGroups);
+        resp.ReplicationGroup.ReplicationGroupId.ShouldBe("test-rg");
+        resp.ReplicationGroup.Status.ShouldBe("available");
+        resp.ReplicationGroup.NodeGroups.ShouldHaveSingleItem();
     }
 
     [Fact]
@@ -212,7 +212,7 @@ public sealed class ElastiCacheTests : IClassFixture<MicroStackFixture>, IAsyncL
         {
             ReplicationGroupId = "desc-rg",
         });
-        Assert.Equal("desc-rg", resp.ReplicationGroups[0].ReplicationGroupId);
+        resp.ReplicationGroups[0].ReplicationGroupId.ShouldBe("desc-rg");
     }
 
     [Fact]
@@ -230,7 +230,7 @@ public sealed class ElastiCacheTests : IClassFixture<MicroStackFixture>, IAsyncL
             ReplicationGroupId = "del-rg",
         });
 
-        await Assert.ThrowsAsync<ReplicationGroupNotFoundException>(() =>
+        await Should.ThrowAsync<ReplicationGroupNotFoundException>(() =>
             _ec.DescribeReplicationGroupsAsync(new DescribeReplicationGroupsRequest
             {
                 ReplicationGroupId = "del-rg",
@@ -257,7 +257,7 @@ public sealed class ElastiCacheTests : IClassFixture<MicroStackFixture>, IAsyncL
         {
             ReplicationGroupId = "mod-rg",
         });
-        Assert.Equal("Updated desc", desc.ReplicationGroups[0].Description);
+        desc.ReplicationGroups[0].Description.ShouldBe("Updated desc");
     }
 
     // ── Subnet Groups ─────────────────────────────────────────────────────────
@@ -276,8 +276,8 @@ public sealed class ElastiCacheTests : IClassFixture<MicroStackFixture>, IAsyncL
         {
             CacheSubnetGroupName = "test-sg",
         });
-        Assert.Single(resp.CacheSubnetGroups);
-        Assert.Equal("test-sg", resp.CacheSubnetGroups[0].CacheSubnetGroupName);
+        resp.CacheSubnetGroups.ShouldHaveSingleItem();
+        resp.CacheSubnetGroups[0].CacheSubnetGroupName.ShouldBe("test-sg");
     }
 
     [Fact]
@@ -301,7 +301,7 @@ public sealed class ElastiCacheTests : IClassFixture<MicroStackFixture>, IAsyncL
         {
             CacheSubnetGroupName = "mod-sg",
         });
-        Assert.Equal("Updated", resp.CacheSubnetGroups[0].CacheSubnetGroupDescription);
+        resp.CacheSubnetGroups[0].CacheSubnetGroupDescription.ShouldBe("Updated");
     }
 
     [Fact]
@@ -321,8 +321,7 @@ public sealed class ElastiCacheTests : IClassFixture<MicroStackFixture>, IAsyncL
 
         // After deletion, describe all should not contain it
         var resp = await _ec.DescribeCacheSubnetGroupsAsync(new DescribeCacheSubnetGroupsRequest());
-        Assert.True(
-            resp.CacheSubnetGroups is null || !resp.CacheSubnetGroups.Any(g => g.CacheSubnetGroupName == "del-sg"));
+        (resp.CacheSubnetGroups is null || !resp.CacheSubnetGroups.Any(g => g.CacheSubnetGroupName == "del-sg")).ShouldBe(true);
     }
 
     // ── Parameter Groups ──────────────────────────────────────────────────────
@@ -341,9 +340,9 @@ public sealed class ElastiCacheTests : IClassFixture<MicroStackFixture>, IAsyncL
         {
             CacheParameterGroupName = "test-pg",
         });
-        Assert.Single(resp.CacheParameterGroups);
-        Assert.Equal("test-pg", resp.CacheParameterGroups[0].CacheParameterGroupName);
-        Assert.Equal("redis7.0", resp.CacheParameterGroups[0].CacheParameterGroupFamily);
+        resp.CacheParameterGroups.ShouldHaveSingleItem();
+        resp.CacheParameterGroups[0].CacheParameterGroupName.ShouldBe("test-pg");
+        resp.CacheParameterGroups[0].CacheParameterGroupFamily.ShouldBe("redis7.0");
     }
 
     [Fact]
@@ -362,8 +361,7 @@ public sealed class ElastiCacheTests : IClassFixture<MicroStackFixture>, IAsyncL
         });
 
         var all = await _ec.DescribeCacheParameterGroupsAsync(new DescribeCacheParameterGroupsRequest());
-        Assert.True(
-            all.CacheParameterGroups is null || !all.CacheParameterGroups.Any(g => g.CacheParameterGroupName == "del-pg"));
+        (all.CacheParameterGroups is null || !all.CacheParameterGroups.Any(g => g.CacheParameterGroupName == "del-pg")).ShouldBe(true);
     }
 
     [Fact]
@@ -380,7 +378,7 @@ public sealed class ElastiCacheTests : IClassFixture<MicroStackFixture>, IAsyncL
         {
             CacheParameterGroupName = "params-pg",
         });
-        Assert.NotEmpty(resp.Parameters);
+        resp.Parameters.ShouldNotBeEmpty();
     }
 
     [Fact]
@@ -407,8 +405,8 @@ public sealed class ElastiCacheTests : IClassFixture<MicroStackFixture>, IAsyncL
             CacheParameterGroupName = "modify-pg",
         });
         var maxmem = resp.Parameters.FirstOrDefault(p => p.ParameterName == "maxmemory-policy");
-        Assert.NotNull(maxmem);
-        Assert.Equal("allkeys-lru", maxmem.ParameterValue);
+        maxmem.ShouldNotBeNull();
+        maxmem.ParameterValue.ShouldBe("allkeys-lru");
     }
 
     // ── Engine Versions ───────────────────────────────────────────────────────
@@ -420,8 +418,8 @@ public sealed class ElastiCacheTests : IClassFixture<MicroStackFixture>, IAsyncL
         {
             Engine = "redis",
         });
-        Assert.NotEmpty(resp.CacheEngineVersions);
-        Assert.All(resp.CacheEngineVersions, v => Assert.Equal("redis", v.Engine));
+        resp.CacheEngineVersions.ShouldNotBeEmpty();
+        resp.CacheEngineVersions.ShouldAllBe(v => v.Engine == "redis");
     }
 
     [Fact]
@@ -431,7 +429,7 @@ public sealed class ElastiCacheTests : IClassFixture<MicroStackFixture>, IAsyncL
         {
             Engine = "memcached",
         });
-        Assert.NotEmpty(resp.CacheEngineVersions);
+        resp.CacheEngineVersions.ShouldNotBeEmpty();
     }
 
     // ── Snapshots ─────────────────────────────────────────────────────────────
@@ -452,15 +450,15 @@ public sealed class ElastiCacheTests : IClassFixture<MicroStackFixture>, IAsyncL
             SnapshotName = "test-snap",
             CacheClusterId = "snap-cluster",
         });
-        Assert.Equal("test-snap", resp.Snapshot.SnapshotName);
-        Assert.Equal("available", resp.Snapshot.SnapshotStatus);
+        resp.Snapshot.SnapshotName.ShouldBe("test-snap");
+        resp.Snapshot.SnapshotStatus.ShouldBe("available");
 
         var desc = await _ec.DescribeSnapshotsAsync(new DescribeSnapshotsRequest
         {
             SnapshotName = "test-snap",
         });
-        Assert.Single(desc.Snapshots);
-        Assert.Equal("test-snap", desc.Snapshots[0].SnapshotName);
+        desc.Snapshots.ShouldHaveSingleItem();
+        desc.Snapshots[0].SnapshotName.ShouldBe("test-snap");
     }
 
     [Fact]
@@ -475,7 +473,7 @@ public sealed class ElastiCacheTests : IClassFixture<MicroStackFixture>, IAsyncL
         {
             SnapshotName = "del-snap",
         });
-        Assert.Equal("deleting", resp.Snapshot.SnapshotStatus);
+        resp.Snapshot.SnapshotStatus.ShouldBe("deleting");
     }
 
     // ── Tags ──────────────────────────────────────────────────────────────────
@@ -512,8 +510,8 @@ public sealed class ElastiCacheTests : IClassFixture<MicroStackFixture>, IAsyncL
             ResourceName = arn,
         });
         var tagMap = tagsResp.TagList.ToDictionary(t => t.Key, t => t.Value);
-        Assert.Equal("prod", tagMap["env"]);
-        Assert.Equal("cache", tagMap["tier"]);
+        tagMap["env"].ShouldBe("prod");
+        tagMap["tier"].ShouldBe("cache");
 
         await _ec.RemoveTagsFromResourceAsync(new RemoveTagsFromResourceRequest
         {
@@ -525,8 +523,8 @@ public sealed class ElastiCacheTests : IClassFixture<MicroStackFixture>, IAsyncL
         {
             ResourceName = arn,
         });
-        Assert.DoesNotContain(tags2.TagList, t => t.Key == "env");
-        Assert.Contains(tags2.TagList, t => t.Key == "tier");
+        tags2.TagList.ShouldNotContain(t => t.Key == "env");
+        tags2.TagList.ShouldContain(t => t.Key == "tier");
     }
 
     // ── Users ─────────────────────────────────────────────────────────────────
@@ -547,8 +545,8 @@ public sealed class ElastiCacheTests : IClassFixture<MicroStackFixture>, IAsyncL
         {
             UserId = "test-user",
         });
-        Assert.Single(desc.Users);
-        Assert.Equal("test-user", desc.Users[0].UserId);
+        desc.Users.ShouldHaveSingleItem();
+        desc.Users[0].UserId.ShouldBe("test-user");
 
         await _ec.ModifyUserAsync(new ModifyUserRequest
         {
@@ -561,7 +559,7 @@ public sealed class ElastiCacheTests : IClassFixture<MicroStackFixture>, IAsyncL
             UserId = "test-user",
         });
 
-        await Assert.ThrowsAsync<UserNotFoundException>(() =>
+        await Should.ThrowAsync<UserNotFoundException>(() =>
             _ec.DescribeUsersAsync(new DescribeUsersRequest { UserId = "test-user" }));
     }
 
@@ -590,8 +588,8 @@ public sealed class ElastiCacheTests : IClassFixture<MicroStackFixture>, IAsyncL
         {
             UserGroupId = "test-ug",
         });
-        Assert.Single(desc.UserGroups);
-        Assert.Equal("test-ug", desc.UserGroups[0].UserGroupId);
+        desc.UserGroups.ShouldHaveSingleItem();
+        desc.UserGroups[0].UserGroupId.ShouldBe("test-ug");
 
         await _ec.DeleteUserGroupAsync(new DeleteUserGroupRequest
         {
@@ -618,6 +616,6 @@ public sealed class ElastiCacheTests : IClassFixture<MicroStackFixture>, IAsyncL
             CacheClusterId = "reboot-cluster",
             CacheNodeIdsToReboot = ["0001"],
         });
-        Assert.Equal("reboot-cluster", resp.CacheCluster.CacheClusterId);
+        resp.CacheCluster.CacheClusterId.ShouldBe("reboot-cluster");
     }
 }

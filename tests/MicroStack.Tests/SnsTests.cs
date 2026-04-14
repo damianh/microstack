@@ -84,8 +84,8 @@ public sealed class SnsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
     public async Task CreateTopic()
     {
         var resp = await _sns.CreateTopicAsync("intg-sns-create");
-        Assert.NotEmpty(resp.TopicArn);
-        Assert.Contains("intg-sns-create", resp.TopicArn);
+        resp.TopicArn.ShouldNotBeEmpty();
+        resp.TopicArn.ShouldContain("intg-sns-create");
     }
 
     [Fact]
@@ -94,7 +94,7 @@ public sealed class SnsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         var arn = (await _sns.CreateTopicAsync("intg-sns-delete")).TopicArn;
         await _sns.DeleteTopicAsync(arn);
         var topics = (await _sns.ListTopicsAsync()).Topics ?? [];
-        Assert.DoesNotContain(topics, t => t.TopicArn == arn);
+        topics.ShouldNotContain(t => t.TopicArn == arn);
     }
 
     [Fact]
@@ -104,8 +104,8 @@ public sealed class SnsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         await _sns.CreateTopicAsync("intg-sns-list-2");
         var topics = (await _sns.ListTopicsAsync()).Topics;
         var arns = topics.Select(t => t.TopicArn).ToList();
-        Assert.Contains(arns, a => a.Contains("intg-sns-list-1"));
-        Assert.Contains(arns, a => a.Contains("intg-sns-list-2"));
+        arns.ShouldContain(a => a.Contains("intg-sns-list-1"));
+        arns.ShouldContain(a => a.Contains("intg-sns-list-2"));
     }
 
     [Fact]
@@ -113,8 +113,8 @@ public sealed class SnsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
     {
         var arn = (await _sns.CreateTopicAsync("intg-sns-getattr")).TopicArn;
         var resp = await _sns.GetTopicAttributesAsync(arn);
-        Assert.Equal(arn, resp.Attributes["TopicArn"]);
-        Assert.Equal("intg-sns-getattr", resp.Attributes["DisplayName"]);
+        resp.Attributes["TopicArn"].ShouldBe(arn);
+        resp.Attributes["DisplayName"].ShouldBe("intg-sns-getattr");
     }
 
     [Fact]
@@ -123,7 +123,7 @@ public sealed class SnsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         var arn = (await _sns.CreateTopicAsync("intg-sns-setattr")).TopicArn;
         await _sns.SetTopicAttributesAsync(arn, "DisplayName", "New Display Name");
         var resp = await _sns.GetTopicAttributesAsync(arn);
-        Assert.Equal("New Display Name", resp.Attributes["DisplayName"]);
+        resp.Attributes["DisplayName"].ShouldBe("New Display Name");
     }
 
     // ── Subscriptions ───────────────────────────────────────────────────────────
@@ -133,7 +133,7 @@ public sealed class SnsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
     {
         var arn = (await _sns.CreateTopicAsync("intg-sns-subemail")).TopicArn;
         var resp = await _sns.SubscribeAsync(arn, "email", "user@example.com");
-        Assert.NotEmpty(resp.SubscriptionArn);
+        resp.SubscriptionArn.ShouldNotBeEmpty();
     }
 
     [Fact]
@@ -144,7 +144,7 @@ public sealed class SnsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         var subArn = sub.SubscriptionArn;
         await _sns.UnsubscribeAsync(subArn);
         var subs = (await _sns.ListSubscriptionsByTopicAsync(arn)).Subscriptions ?? [];
-        Assert.DoesNotContain(subs, s => s.SubscriptionArn == subArn);
+        subs.ShouldNotContain(s => s.SubscriptionArn == subArn);
     }
 
     [Fact]
@@ -155,7 +155,7 @@ public sealed class SnsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         await _sns.SubscribeAsync(arn, "email", "ls2@example.com");
         var subs = (await _sns.ListSubscriptionsAsync()).Subscriptions;
         var topicSubs = subs.Where(s => s.TopicArn == arn).ToList();
-        Assert.True(topicSubs.Count >= 2);
+        (topicSubs.Count >= 2).ShouldBe(true);
     }
 
     [Fact]
@@ -164,8 +164,8 @@ public sealed class SnsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         var arn = (await _sns.CreateTopicAsync("intg-sns-listbytopic")).TopicArn;
         await _sns.SubscribeAsync(arn, "email", "bt@example.com");
         var subs = (await _sns.ListSubscriptionsByTopicAsync(arn)).Subscriptions;
-        Assert.True(subs.Count >= 1);
-        Assert.All(subs, s => Assert.Equal(arn, s.TopicArn));
+        (subs.Count >= 1).ShouldBe(true);
+        subs.ShouldAllBe(s => s.TopicArn == arn);
     }
 
     // ── Publish ─────────────────────────────────────────────────────────────────
@@ -180,16 +180,16 @@ public sealed class SnsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             Message = "hello sns",
             Subject = "Test Subject",
         });
-        Assert.NotEmpty(resp.MessageId);
+        resp.MessageId.ShouldNotBeEmpty();
     }
 
     [Fact]
     public async Task PublishNonexistentTopic()
     {
         var fakeArn = "arn:aws:sns:us-east-1:000000000000:intg-sns-nonexist";
-        var ex = await Assert.ThrowsAsync<AmazonSimpleNotificationServiceException>(
+        var ex = await Should.ThrowAsync<AmazonSimpleNotificationServiceException>(
             () => _sns.PublishAsync(fakeArn, "fail"));
-        Assert.Equal("NotFoundException", ex.ErrorCode);
+        ex.ErrorCode.ShouldBe("NotFoundException");
     }
 
     // ── SNS → SQS fanout ────────────────────────────────────────────────────────
@@ -220,10 +220,10 @@ public sealed class SnsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             WaitTimeSeconds = 1,
         });
 
-        Assert.Single(msgs.Messages);
+        msgs.Messages.ShouldHaveSingleItem();
         var body = JsonDocument.Parse(msgs.Messages[0].Body).RootElement;
-        Assert.Equal("fanout msg", body.GetProperty("Message").GetString());
-        Assert.Equal(topicArn, body.GetProperty("TopicArn").GetString());
+        body.GetProperty("Message").GetString().ShouldBe("fanout msg");
+        body.GetProperty("TopicArn").GetString().ShouldBe(topicArn);
     }
 
     [Fact]
@@ -246,8 +246,8 @@ public sealed class SnsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
 
         var sub1 = await _sns.SubscribeAsync(topicArn, "sqs", q1Arn);
         var sub2 = await _sns.SubscribeAsync(topicArn, "sqs", q2Arn);
-        Assert.NotEqual("PendingConfirmation", sub1.SubscriptionArn);
-        Assert.NotEqual("PendingConfirmation", sub2.SubscriptionArn);
+        sub1.SubscriptionArn.ShouldNotBe("PendingConfirmation");
+        sub2.SubscriptionArn.ShouldNotBe("PendingConfirmation");
 
         await _sns.PublishAsync(new PublishRequest
         {
@@ -266,12 +266,12 @@ public sealed class SnsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
                 WaitTimeSeconds = 2,
             });
 
-            Assert.Single(msgs.Messages);
+            msgs.Messages.ShouldHaveSingleItem();
             var body = JsonDocument.Parse(msgs.Messages[0].Body).RootElement;
-            Assert.Equal("fanout-test-msg", body.GetProperty("Message").GetString());
-            Assert.Equal(topicArn, body.GetProperty("TopicArn").GetString());
-            Assert.Equal("IntgTest", body.GetProperty("Subject").GetString());
-            Assert.Equal("Notification", body.GetProperty("Type").GetString());
+            body.GetProperty("Message").GetString().ShouldBe("fanout-test-msg");
+            body.GetProperty("TopicArn").GetString().ShouldBe(topicArn);
+            body.GetProperty("Subject").GetString().ShouldBe("IntgTest");
+            body.GetProperty("Type").GetString().ShouldBe("Notification");
         }
     }
 
@@ -295,8 +295,8 @@ public sealed class SnsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             ResourceArn = arn,
         });
         var tags = resp.Tags.ToDictionary(t => t.Key, t => t.Value);
-        Assert.Equal("staging", tags["env"]);
-        Assert.Equal("infra", tags["team"]);
+        tags["env"].ShouldBe("staging");
+        tags["team"].ShouldBe("infra");
 
         await _sns.UntagResourceAsync(new UntagResourceRequest
         {
@@ -309,8 +309,8 @@ public sealed class SnsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             ResourceArn = arn,
         });
         tags = resp.Tags.ToDictionary(t => t.Key, t => t.Value);
-        Assert.False(tags.ContainsKey("team"));
-        Assert.Equal("staging", tags["env"]);
+        tags.ContainsKey("team").ShouldBe(false);
+        tags["env"].ShouldBe("staging");
     }
 
     // ── Subscription attributes ─────────────────────────────────────────────────
@@ -323,8 +323,8 @@ public sealed class SnsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         var subArn = sub.SubscriptionArn;
 
         var resp = await _sns.GetSubscriptionAttributesAsync(subArn);
-        Assert.Equal("email", resp.Attributes["Protocol"]);
-        Assert.Equal(arn, resp.Attributes["TopicArn"]);
+        resp.Attributes["Protocol"].ShouldBe("email");
+        resp.Attributes["TopicArn"].ShouldBe(arn);
 
         await _sns.SetSubscriptionAttributesAsync(new SetSubscriptionAttributesRequest
         {
@@ -334,7 +334,7 @@ public sealed class SnsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         });
 
         resp = await _sns.GetSubscriptionAttributesAsync(subArn);
-        Assert.Equal("true", resp.Attributes["RawMessageDelivery"]);
+        resp.Attributes["RawMessageDelivery"].ShouldBe("true");
     }
 
     [Fact]
@@ -350,7 +350,7 @@ public sealed class SnsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         });
         var subArn = sub.SubscriptionArn;
         var attrs = (await _sns.GetSubscriptionAttributesAsync(subArn)).Attributes;
-        Assert.Equal("true", attrs["RawMessageDelivery"]);
+        attrs["RawMessageDelivery"].ShouldBe("true");
     }
 
     [Fact]
@@ -367,7 +367,7 @@ public sealed class SnsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         });
         var subArn = sub.SubscriptionArn;
         var attrs = (await _sns.GetSubscriptionAttributesAsync(subArn)).Attributes;
-        Assert.Equal(filterPolicy, attrs["FilterPolicy"]);
+        attrs["FilterPolicy"].ShouldBe(filterPolicy);
     }
 
     // ── Raw message delivery ────────────────────────────────────────────────────
@@ -400,8 +400,8 @@ public sealed class SnsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             WaitTimeSeconds = 1,
         });
 
-        Assert.Single(msgs.Messages);
-        Assert.Equal("raw fanout msg", msgs.Messages[0].Body);
+        msgs.Messages.ShouldHaveSingleItem();
+        msgs.Messages[0].Body.ShouldBe("raw fanout msg");
     }
 
     [Fact]
@@ -432,8 +432,8 @@ public sealed class SnsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             WaitTimeSeconds = 1,
         });
 
-        Assert.Single(msgs.Messages);
-        Assert.Equal("raw-body", msgs.Messages[0].Body);
+        msgs.Messages.ShouldHaveSingleItem();
+        msgs.Messages[0].Body.ShouldBe("raw-body");
     }
 
     // ── Batch publish ───────────────────────────────────────────────────────────
@@ -453,15 +453,15 @@ public sealed class SnsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             ],
         });
 
-        Assert.Equal(3, resp.Successful?.Count ?? 0);
-        Assert.Empty(resp.Failed ?? []);
+        (resp.Successful?.Count ?? 0).ShouldBe(3);
+        resp.Failed.ShouldBeEmpty();
     }
 
     [Fact]
     public async Task PublishBatchDistinctIds()
     {
         var arn = (await _sns.CreateTopicAsync("qa-sns-batch-dup")).TopicArn;
-        var ex = await Assert.ThrowsAsync<Amazon.SimpleNotificationService.Model.BatchEntryIdsNotDistinctException>(
+        var ex = await Should.ThrowAsync<Amazon.SimpleNotificationService.Model.BatchEntryIdsNotDistinctException>(
             () => _sns.PublishBatchAsync(new PublishBatchRequest
             {
                 TopicArn = arn,
@@ -471,7 +471,7 @@ public sealed class SnsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
                     new PublishBatchRequestEntry { Id = "same", Message = "msg2" },
                 ],
             }));
-        Assert.Contains("BatchEntryIdsNotDistinct", ex.ErrorCode);
+        ex.ErrorCode.ShouldContain("BatchEntryIdsNotDistinct");
     }
 
     // ── Filter policy ───────────────────────────────────────────────────────────
@@ -512,7 +512,7 @@ public sealed class SnsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             MaxNumberOfMessages = 1,
             WaitTimeSeconds = 0,
         });
-        Assert.Empty(msgs.Messages ?? []);
+        msgs.Messages.ShouldBeEmpty();
 
         // Publish matching message (blue)
         await _sns.PublishAsync(new PublishRequest
@@ -531,9 +531,9 @@ public sealed class SnsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             MaxNumberOfMessages = 1,
             WaitTimeSeconds = 1,
         });
-        Assert.Single(msgs2.Messages);
+        msgs2.Messages.ShouldHaveSingleItem();
         var body = JsonDocument.Parse(msgs2.Messages[0].Body).RootElement;
-        Assert.Equal("blue message", body.GetProperty("Message").GetString());
+        body.GetProperty("Message").GetString().ShouldBe("blue message");
     }
 
     // ── FIFO dedup passthrough ──────────────────────────────────────────────────
@@ -581,11 +581,11 @@ public sealed class SnsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             MessageSystemAttributeNames = ["All"],
         });
 
-        Assert.Single(msgs.Messages);
+        msgs.Messages.ShouldHaveSingleItem();
         var msg = msgs.Messages[0];
         var body = JsonDocument.Parse(msg.Body).RootElement;
-        Assert.Equal("fifo-dedup-test", body.GetProperty("Message").GetString());
-        Assert.Equal("grp-1", msg.Attributes["MessageGroupId"]);
+        body.GetProperty("Message").GetString().ShouldBe("fifo-dedup-test");
+        msg.Attributes["MessageGroupId"].ShouldBe("grp-1");
     }
 
     // ── Lambda fanout tests skipped ─────────────────────────────────────────────

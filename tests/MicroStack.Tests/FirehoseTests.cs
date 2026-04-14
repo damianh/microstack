@@ -69,8 +69,8 @@ public sealed class FirehoseTests : IClassFixture<MicroStackFixture>, IAsyncLife
             },
         });
 
-        Assert.Contains("firehose", create.DeliveryStreamARN);
-        Assert.Contains("test-fh-basic", create.DeliveryStreamARN);
+        create.DeliveryStreamARN.ShouldContain("firehose");
+        create.DeliveryStreamARN.ShouldContain("test-fh-basic");
 
         var desc = await _fh.DescribeDeliveryStreamAsync(new DescribeDeliveryStreamRequest
         {
@@ -78,12 +78,12 @@ public sealed class FirehoseTests : IClassFixture<MicroStackFixture>, IAsyncLife
         });
 
         var stream = desc.DeliveryStreamDescription;
-        Assert.Equal("test-fh-basic", stream.DeliveryStreamName);
-        Assert.Equal(DeliveryStreamStatus.ACTIVE, stream.DeliveryStreamStatus);
-        Assert.Equal(DeliveryStreamType.DirectPut, stream.DeliveryStreamType);
-        Assert.Single(stream.Destinations);
-        Assert.NotNull(stream.Destinations[0].ExtendedS3DestinationDescription);
-        Assert.Equal("1", stream.VersionId);
+        stream.DeliveryStreamName.ShouldBe("test-fh-basic");
+        stream.DeliveryStreamStatus.ShouldBe(DeliveryStreamStatus.ACTIVE);
+        stream.DeliveryStreamType.ShouldBe(DeliveryStreamType.DirectPut);
+        stream.Destinations.ShouldHaveSingleItem();
+        stream.Destinations[0].ExtendedS3DestinationDescription.ShouldNotBeNull();
+        stream.VersionId.ShouldBe("1");
     }
 
     // -- ListDeliveryStreams ---------------------------------------------------
@@ -103,9 +103,9 @@ public sealed class FirehoseTests : IClassFixture<MicroStackFixture>, IAsyncLife
         });
 
         var resp = await _fh.ListDeliveryStreamsAsync(new ListDeliveryStreamsRequest());
-        Assert.Contains("test-fh-list-a", resp.DeliveryStreamNames);
-        Assert.Contains("test-fh-list-b", resp.DeliveryStreamNames);
-        Assert.False(resp.HasMoreDeliveryStreams);
+        resp.DeliveryStreamNames.ShouldContain("test-fh-list-a");
+        resp.DeliveryStreamNames.ShouldContain("test-fh-list-b");
+        resp.HasMoreDeliveryStreams.ShouldBe(false);
     }
 
     // -- PutRecord ------------------------------------------------------------
@@ -126,8 +126,8 @@ public sealed class FirehoseTests : IClassFixture<MicroStackFixture>, IAsyncLife
             Record = new FirehoseRecord { Data = ms },
         });
 
-        Assert.NotEmpty(resp.RecordId);
-        Assert.False(resp.Encrypted);
+        resp.RecordId.ShouldNotBeEmpty();
+        resp.Encrypted.ShouldBe(false);
     }
 
     // -- PutRecordBatch -------------------------------------------------------
@@ -153,11 +153,11 @@ public sealed class FirehoseTests : IClassFixture<MicroStackFixture>, IAsyncLife
             Records = records,
         });
 
-        Assert.Equal(0, resp.FailedPutCount);
-        Assert.Equal(5, resp.RequestResponses.Count);
+        resp.FailedPutCount.ShouldBe(0);
+        resp.RequestResponses.Count.ShouldBe(5);
         foreach (var r in resp.RequestResponses)
         {
-            Assert.NotEmpty(r.RecordId);
+            r.RecordId.ShouldNotBeEmpty();
         }
     }
 
@@ -177,12 +177,12 @@ public sealed class FirehoseTests : IClassFixture<MicroStackFixture>, IAsyncLife
             DeliveryStreamName = "test-fh-delete",
         });
 
-        var ex = await Assert.ThrowsAsync<ResourceNotFoundException>(() =>
+        var ex = await Should.ThrowAsync<ResourceNotFoundException>(() =>
             _fh.DescribeDeliveryStreamAsync(new DescribeDeliveryStreamRequest
             {
                 DeliveryStreamName = "test-fh-delete",
             }));
-        Assert.Equal("ResourceNotFoundException", ex.ErrorCode);
+        ex.ErrorCode.ShouldBe("ResourceNotFoundException");
     }
 
     // -- Tags -----------------------------------------------------------------
@@ -211,8 +211,8 @@ public sealed class FirehoseTests : IClassFixture<MicroStackFixture>, IAsyncLife
             DeliveryStreamName = "test-fh-tags",
         });
         var tagMap = resp.Tags.ToDictionary(t => t.Key, t => t.Value);
-        Assert.Equal("test", tagMap["Env"]);
-        Assert.Equal("data", tagMap["Team"]);
+        tagMap["Env"].ShouldBe("test");
+        tagMap["Team"].ShouldBe("data");
 
         await _fh.UntagDeliveryStreamAsync(new UntagDeliveryStreamRequest
         {
@@ -225,8 +225,8 @@ public sealed class FirehoseTests : IClassFixture<MicroStackFixture>, IAsyncLife
             DeliveryStreamName = "test-fh-tags",
         });
         var keys = resp2.Tags.Select(t => t.Key).ToList();
-        Assert.DoesNotContain("Env", keys);
-        Assert.Contains("Team", keys);
+        keys.ShouldNotContain("Env");
+        keys.ShouldContain("Team");
     }
 
     // -- UpdateDestination ----------------------------------------------------
@@ -268,9 +268,8 @@ public sealed class FirehoseTests : IClassFixture<MicroStackFixture>, IAsyncLife
         {
             DeliveryStreamName = "test-fh-update-dest",
         });
-        Assert.Equal("2", desc2.DeliveryStreamDescription.VersionId);
-        Assert.Equal("arn:aws:s3:::updated-bucket",
-            desc2.DeliveryStreamDescription.Destinations[0].ExtendedS3DestinationDescription.BucketARN);
+        desc2.DeliveryStreamDescription.VersionId.ShouldBe("2");
+        desc2.DeliveryStreamDescription.Destinations[0].ExtendedS3DestinationDescription.BucketARN.ShouldBe("arn:aws:s3:::updated-bucket");
     }
 
     // -- Encryption -----------------------------------------------------------
@@ -297,8 +296,7 @@ public sealed class FirehoseTests : IClassFixture<MicroStackFixture>, IAsyncLife
         {
             DeliveryStreamName = "test-fh-enc",
         });
-        Assert.Equal(DeliveryStreamEncryptionStatus.ENABLED,
-            desc.DeliveryStreamDescription.DeliveryStreamEncryptionConfiguration.Status);
+        desc.DeliveryStreamDescription.DeliveryStreamEncryptionConfiguration.Status.ShouldBe(DeliveryStreamEncryptionStatus.ENABLED);
 
         await _fh.StopDeliveryStreamEncryptionAsync(new StopDeliveryStreamEncryptionRequest
         {
@@ -309,8 +307,7 @@ public sealed class FirehoseTests : IClassFixture<MicroStackFixture>, IAsyncLife
         {
             DeliveryStreamName = "test-fh-enc",
         });
-        Assert.Equal(DeliveryStreamEncryptionStatus.DISABLED,
-            desc2.DeliveryStreamDescription.DeliveryStreamEncryptionConfiguration.Status);
+        desc2.DeliveryStreamDescription.DeliveryStreamEncryptionConfiguration.Status.ShouldBe(DeliveryStreamEncryptionStatus.DISABLED);
     }
 
     // -- Duplicate create error -----------------------------------------------
@@ -324,13 +321,13 @@ public sealed class FirehoseTests : IClassFixture<MicroStackFixture>, IAsyncLife
             DeliveryStreamType = DeliveryStreamType.DirectPut,
         });
 
-        var ex = await Assert.ThrowsAsync<ResourceInUseException>(() =>
+        var ex = await Should.ThrowAsync<ResourceInUseException>(() =>
             _fh.CreateDeliveryStreamAsync(new CreateDeliveryStreamRequest
             {
                 DeliveryStreamName = "test-fh-dup",
                 DeliveryStreamType = DeliveryStreamType.DirectPut,
             }));
-        Assert.Equal("ResourceInUseException", ex.ErrorCode);
+        ex.ErrorCode.ShouldBe("ResourceInUseException");
     }
 
     // -- Not found error ------------------------------------------------------
@@ -338,12 +335,12 @@ public sealed class FirehoseTests : IClassFixture<MicroStackFixture>, IAsyncLife
     [Fact]
     public async Task DescribeNotFoundError()
     {
-        var ex = await Assert.ThrowsAsync<ResourceNotFoundException>(() =>
+        var ex = await Should.ThrowAsync<ResourceNotFoundException>(() =>
             _fh.DescribeDeliveryStreamAsync(new DescribeDeliveryStreamRequest
             {
                 DeliveryStreamName = "no-such-stream-xyz",
             }));
-        Assert.Equal("ResourceNotFoundException", ex.ErrorCode);
+        ex.ErrorCode.ShouldBe("ResourceNotFoundException");
     }
 
     // -- List with type filter ------------------------------------------------
@@ -361,7 +358,7 @@ public sealed class FirehoseTests : IClassFixture<MicroStackFixture>, IAsyncLife
         {
             DeliveryStreamType = DeliveryStreamType.DirectPut,
         });
-        Assert.Contains("test-fh-type-dp", resp.DeliveryStreamNames);
+        resp.DeliveryStreamNames.ShouldContain("test-fh-type-dp");
     }
 
     // -- S3 destination has encryption config ---------------------------------
@@ -385,8 +382,8 @@ public sealed class FirehoseTests : IClassFixture<MicroStackFixture>, IAsyncLife
             DeliveryStreamName = "test-fh-enc-cfg",
         });
         var s3Desc = desc.DeliveryStreamDescription.Destinations[0].ExtendedS3DestinationDescription;
-        Assert.NotNull(s3Desc.EncryptionConfiguration);
-        Assert.Equal("NoEncryption", s3Desc.EncryptionConfiguration.NoEncryptionConfig?.Value);
+        s3Desc.EncryptionConfiguration.ShouldNotBeNull();
+        s3Desc.EncryptionConfiguration.NoEncryptionConfig?.Value.ShouldBe("NoEncryption");
     }
 
     // -- No encryption config when not set ------------------------------------
@@ -404,7 +401,7 @@ public sealed class FirehoseTests : IClassFixture<MicroStackFixture>, IAsyncLife
         {
             DeliveryStreamName = "test-fh-no-enc",
         });
-        Assert.Null(desc.DeliveryStreamDescription.DeliveryStreamEncryptionConfiguration?.Status);
+        desc.DeliveryStreamDescription.DeliveryStreamEncryptionConfiguration?.Status.ShouldBeNull();
     }
 
     // -- Update destination merges same type -----------------------------------
@@ -446,9 +443,9 @@ public sealed class FirehoseTests : IClassFixture<MicroStackFixture>, IAsyncLife
             DeliveryStreamName = "test-fh-merge",
         });
         var s3Desc = desc2.DeliveryStreamDescription.Destinations[0].ExtendedS3DestinationDescription;
-        Assert.Equal("arn:aws:s3:::updated-bucket", s3Desc.BucketARN);
-        Assert.Equal("original/", s3Desc.Prefix);
-        Assert.Equal("arn:aws:iam::000000000000:role/firehose-role", s3Desc.RoleARN);
+        s3Desc.BucketARN.ShouldBe("arn:aws:s3:::updated-bucket");
+        s3Desc.Prefix.ShouldBe("original/");
+        s3Desc.RoleARN.ShouldBe("arn:aws:iam::000000000000:role/firehose-role");
     }
 
     // -- Update destination version mismatch error ----------------------------
@@ -473,7 +470,7 @@ public sealed class FirehoseTests : IClassFixture<MicroStackFixture>, IAsyncLife
         });
         var destId = desc.DeliveryStreamDescription.Destinations[0].DestinationId;
 
-        var ex = await Assert.ThrowsAsync<ConcurrentModificationException>(() =>
+        var ex = await Should.ThrowAsync<ConcurrentModificationException>(() =>
             _fh.UpdateDestinationAsync(new UpdateDestinationRequest
             {
                 DeliveryStreamName = "test-fh-version-check",
@@ -485,7 +482,7 @@ public sealed class FirehoseTests : IClassFixture<MicroStackFixture>, IAsyncLife
                     RoleARN = "arn:aws:iam::000000000000:role/r",
                 },
             }));
-        Assert.Equal("ConcurrentModificationException", ex.ErrorCode);
+        ex.ErrorCode.ShouldBe("ConcurrentModificationException");
     }
 
     // -- PutRecordBatch with valid records returns FailedPutCount 0 -----------
@@ -513,7 +510,7 @@ public sealed class FirehoseTests : IClassFixture<MicroStackFixture>, IAsyncLife
             ],
         });
 
-        Assert.Equal(0, resp.FailedPutCount);
-        Assert.Equal(2, resp.RequestResponses.Count);
+        resp.FailedPutCount.ShouldBe(0);
+        resp.RequestResponses.Count.ShouldBe(2);
     }
 }

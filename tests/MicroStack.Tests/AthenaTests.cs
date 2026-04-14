@@ -64,23 +64,23 @@ public sealed class AthenaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
         });
 
         var queryId = resp.QueryExecutionId;
-        Assert.NotEmpty(queryId);
+        queryId.ShouldNotBeEmpty();
 
         var status = await _athena.GetQueryExecutionAsync(new GetQueryExecutionRequest
         {
             QueryExecutionId = queryId,
         });
 
-        Assert.Equal(QueryExecutionState.SUCCEEDED, status.QueryExecution.Status.State);
+        status.QueryExecution.Status.State.ShouldBe(QueryExecutionState.SUCCEEDED);
 
         var results = await _athena.GetQueryResultsAsync(new GetQueryResultsRequest
         {
             QueryExecutionId = queryId,
         });
 
-        Assert.True(results.ResultSet.Rows.Count >= 2);
-        Assert.Equal("num", results.ResultSet.Rows[0].Data[0].VarCharValue);
-        Assert.Equal("1", results.ResultSet.Rows[1].Data[0].VarCharValue);
+        (results.ResultSet.Rows.Count >= 2).ShouldBe(true);
+        results.ResultSet.Rows[0].Data[0].VarCharValue.ShouldBe("num");
+        results.ResultSet.Rows[1].Data[0].VarCharValue.ShouldBe("1");
     }
 
     [Fact]
@@ -103,8 +103,7 @@ public sealed class AthenaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
         });
 
         // Query may have already completed, so accept both states
-        Assert.Contains(desc.QueryExecution.Status.State.Value,
-            new[] { QueryExecutionState.CANCELLED.Value, QueryExecutionState.SUCCEEDED.Value });
+        new[] { QueryExecutionState.CANCELLED.Value, QueryExecutionState.SUCCEEDED.Value }.ShouldContain(desc.QueryExecution.Status.State.Value);
     }
 
     [Fact]
@@ -121,7 +120,7 @@ public sealed class AthenaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
             WorkGroup = "primary",
         });
 
-        Assert.NotEmpty(resp.QueryExecutionIds);
+        resp.QueryExecutionIds.ShouldNotBeEmpty();
     }
 
     [Fact]
@@ -144,14 +143,14 @@ public sealed class AthenaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
             QueryExecutionIds = [q1.QueryExecutionId, q2.QueryExecutionId, "nonexistent-id"],
         });
 
-        Assert.Equal(2, resp.QueryExecutions.Count);
-        Assert.Single(resp.UnprocessedQueryExecutionIds);
+        resp.QueryExecutions.Count.ShouldBe(2);
+        resp.UnprocessedQueryExecutionIds.ShouldHaveSingleItem();
     }
 
     [Fact]
     public async Task QueryNotFoundReturnsError()
     {
-        await Assert.ThrowsAsync<InvalidRequestException>(() =>
+        await Should.ThrowAsync<InvalidRequestException>(() =>
             _athena.GetQueryExecutionAsync(new GetQueryExecutionRequest
             {
                 QueryExecutionId = "nonexistent",
@@ -174,16 +173,16 @@ public sealed class AthenaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
         });
 
         var resp = await _athena.GetWorkGroupAsync(new GetWorkGroupRequest { WorkGroup = "ath-wg-v2" });
-        Assert.Equal("ath-wg-v2", resp.WorkGroup.Name);
-        Assert.Equal("V2 workgroup", resp.WorkGroup.Description);
-        Assert.Equal(WorkGroupState.ENABLED, resp.WorkGroup.State);
+        resp.WorkGroup.Name.ShouldBe("ath-wg-v2");
+        resp.WorkGroup.Description.ShouldBe("V2 workgroup");
+        resp.WorkGroup.State.ShouldBe(WorkGroupState.ENABLED);
     }
 
     [Fact]
     public async Task ListWorkGroupsIncludesPrimary()
     {
         var resp = await _athena.ListWorkGroupsAsync(new ListWorkGroupsRequest());
-        Assert.Contains(resp.WorkGroups, wg => wg.Name == "primary");
+        resp.WorkGroups.ShouldContain(wg => wg.Name == "primary");
     }
 
     [Fact]
@@ -203,7 +202,7 @@ public sealed class AthenaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
         });
 
         var resp = await _athena.GetWorkGroupAsync(new GetWorkGroupRequest { WorkGroup = wgName });
-        Assert.Equal("after", resp.WorkGroup.Description);
+        resp.WorkGroup.Description.ShouldBe("after");
     }
 
     [Fact]
@@ -232,7 +231,7 @@ public sealed class AthenaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
 
         var resp = await _athena.GetWorkGroupAsync(new GetWorkGroupRequest { WorkGroup = "upd-cfg-wg" });
         var config = resp.WorkGroup.Configuration;
-        Assert.Contains("new", config.ResultConfiguration.OutputLocation);
+        config.ResultConfiguration.OutputLocation.ShouldContain("new");
     }
 
     [Fact]
@@ -249,14 +248,14 @@ public sealed class AthenaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
             RecursiveDeleteOption = true,
         });
 
-        await Assert.ThrowsAsync<InvalidRequestException>(() =>
+        await Should.ThrowAsync<InvalidRequestException>(() =>
             _athena.GetWorkGroupAsync(new GetWorkGroupRequest { WorkGroup = "del-wg" }));
     }
 
     [Fact]
     public async Task CannotDeletePrimaryWorkGroup()
     {
-        await Assert.ThrowsAsync<InvalidRequestException>(() =>
+        await Should.ThrowAsync<InvalidRequestException>(() =>
             _athena.DeleteWorkGroupAsync(new DeleteWorkGroupRequest
             {
                 WorkGroup = "primary",
@@ -279,9 +278,9 @@ public sealed class AthenaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
 
         var nqId = resp.NamedQueryId;
         var nq = await _athena.GetNamedQueryAsync(new GetNamedQueryRequest { NamedQueryId = nqId });
-        Assert.Equal("ath-nq-v2", nq.NamedQuery.Name);
-        Assert.Equal("default", nq.NamedQuery.Database);
-        Assert.Equal("SELECT * FROM t LIMIT 10", nq.NamedQuery.QueryString);
+        nq.NamedQuery.Name.ShouldBe("ath-nq-v2");
+        nq.NamedQuery.Database.ShouldBe("default");
+        nq.NamedQuery.QueryString.ShouldBe("SELECT * FROM t LIMIT 10");
     }
 
     [Fact]
@@ -296,7 +295,7 @@ public sealed class AthenaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
         });
 
         var listed = await _athena.ListNamedQueriesAsync(new ListNamedQueriesRequest());
-        Assert.Contains(resp.NamedQueryId, listed.NamedQueryIds);
+        listed.NamedQueryIds.ShouldContain(resp.NamedQueryId);
     }
 
     [Fact]
@@ -311,7 +310,7 @@ public sealed class AthenaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
 
         await _athena.DeleteNamedQueryAsync(new DeleteNamedQueryRequest { NamedQueryId = resp.NamedQueryId });
 
-        await Assert.ThrowsAsync<InvalidRequestException>(() =>
+        await Should.ThrowAsync<InvalidRequestException>(() =>
             _athena.GetNamedQueryAsync(new GetNamedQueryRequest { NamedQueryId = resp.NamedQueryId }));
     }
 
@@ -337,8 +336,8 @@ public sealed class AthenaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
             NamedQueryIds = [nq1.NamedQueryId, nq2.NamedQueryId, "nonexistent-id"],
         });
 
-        Assert.Equal(2, resp.NamedQueries.Count);
-        Assert.Single(resp.UnprocessedNamedQueryIds);
+        resp.NamedQueries.Count.ShouldBe(2);
+        resp.UnprocessedNamedQueryIds.ShouldHaveSingleItem();
     }
 
     // -- Data Catalog CRUD -----------------------------------------------------
@@ -355,8 +354,8 @@ public sealed class AthenaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
         });
 
         var resp = await _athena.GetDataCatalogAsync(new GetDataCatalogRequest { Name = "ath-cat-v2" });
-        Assert.Equal("ath-cat-v2", resp.DataCatalog.Name);
-        Assert.Equal(DataCatalogType.HIVE, resp.DataCatalog.Type);
+        resp.DataCatalog.Name.ShouldBe("ath-cat-v2");
+        resp.DataCatalog.Type.ShouldBe(DataCatalogType.HIVE);
     }
 
     [Fact]
@@ -369,7 +368,7 @@ public sealed class AthenaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
         });
 
         var resp = await _athena.ListDataCatalogsAsync(new ListDataCatalogsRequest());
-        Assert.Contains(resp.DataCatalogsSummary, c => c.CatalogName == "ldc-cat");
+        resp.DataCatalogsSummary.ShouldContain(c => c.CatalogName == "ldc-cat");
     }
 
     [Fact]
@@ -390,7 +389,7 @@ public sealed class AthenaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
         });
 
         var resp = await _athena.GetDataCatalogAsync(new GetDataCatalogRequest { Name = "udc-cat" });
-        Assert.Equal("Updated v2", resp.DataCatalog.Description);
+        resp.DataCatalog.Description.ShouldBe("Updated v2");
     }
 
     [Fact]
@@ -404,14 +403,14 @@ public sealed class AthenaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
 
         await _athena.DeleteDataCatalogAsync(new DeleteDataCatalogRequest { Name = "del-cat" });
 
-        await Assert.ThrowsAsync<InvalidRequestException>(() =>
+        await Should.ThrowAsync<InvalidRequestException>(() =>
             _athena.GetDataCatalogAsync(new GetDataCatalogRequest { Name = "del-cat" }));
     }
 
     [Fact]
     public async Task CannotDeleteDefaultDataCatalog()
     {
-        await Assert.ThrowsAsync<InvalidRequestException>(() =>
+        await Should.ThrowAsync<InvalidRequestException>(() =>
             _athena.DeleteDataCatalogAsync(new DeleteDataCatalogRequest { Name = "AwsDataCatalog" }));
     }
 
@@ -434,8 +433,8 @@ public sealed class AthenaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
             WorkGroup = "primary",
         });
 
-        Assert.Equal("ath_ps_v2", resp.PreparedStatement.StatementName);
-        Assert.Equal("SELECT ? AS val", resp.PreparedStatement.QueryStatement);
+        resp.PreparedStatement.StatementName.ShouldBe("ath_ps_v2");
+        resp.PreparedStatement.QueryStatement.ShouldBe("SELECT ? AS val");
     }
 
     [Fact]
@@ -453,7 +452,7 @@ public sealed class AthenaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
             WorkGroup = "primary",
         });
 
-        Assert.Contains(resp.PreparedStatements, s => s.StatementName == "lps_stmt");
+        resp.PreparedStatements.ShouldContain(s => s.StatementName == "lps_stmt");
     }
 
     [Fact]
@@ -472,7 +471,7 @@ public sealed class AthenaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
             WorkGroup = "primary",
         });
 
-        await Assert.ThrowsAsync<ResourceNotFoundException>(() =>
+        await Should.ThrowAsync<ResourceNotFoundException>(() =>
             _athena.GetPreparedStatementAsync(new GetPreparedStatementRequest
             {
                 StatementName = "del_ps",
@@ -505,7 +504,7 @@ public sealed class AthenaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
         });
 
         var tagMap = resp.Tags.ToDictionary(t => t.Key, t => t.Value);
-        Assert.Equal("dev", tagMap["env"]);
+        tagMap["env"].ShouldBe("dev");
 
         await _athena.UntagResourceAsync(new UntagResourceRequest
         {
@@ -518,7 +517,7 @@ public sealed class AthenaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
             ResourceARN = arn,
         });
 
-        Assert.DoesNotContain(resp2.Tags, t => t.Key == "env");
+        resp2.Tags.ShouldNotContain(t => t.Key == "env");
     }
 
     // -- Table Metadata (stubs) ------------------------------------------------
@@ -533,7 +532,7 @@ public sealed class AthenaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
             TableName = "test_table",
         });
 
-        Assert.Equal("test_table", resp.TableMetadata.Name);
+        resp.TableMetadata.Name.ShouldBe("test_table");
     }
 
     [Fact]
@@ -545,7 +544,7 @@ public sealed class AthenaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
             DatabaseName = "default",
         });
 
-        Assert.NotNull(resp.TableMetadataList);
+        resp.TableMetadataList.ShouldNotBeNull();
     }
 
     // -- Query results validation -----------------------------------------------
@@ -566,12 +565,12 @@ public sealed class AthenaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
         });
 
         var rows = results.ResultSet.Rows;
-        Assert.True(rows.Count >= 2);
-        Assert.Equal("answer", rows[0].Data[0].VarCharValue);
-        Assert.Equal("42", rows[1].Data[0].VarCharValue);
+        (rows.Count >= 2).ShouldBe(true);
+        rows[0].Data[0].VarCharValue.ShouldBe("answer");
+        rows[1].Data[0].VarCharValue.ShouldBe("42");
 
         var colInfo = results.ResultSet.ResultSetMetadata.ColumnInfo;
-        Assert.Equal(2, colInfo.Count);
+        colInfo.Count.ShouldBe(2);
     }
 
     // -- Duplicate workgroup ---------------------------------------------------
@@ -581,7 +580,7 @@ public sealed class AthenaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
     {
         await _athena.CreateWorkGroupAsync(new CreateWorkGroupRequest { Name = "dup-wg" });
 
-        await Assert.ThrowsAsync<InvalidRequestException>(() =>
+        await Should.ThrowAsync<InvalidRequestException>(() =>
             _athena.CreateWorkGroupAsync(new CreateWorkGroupRequest { Name = "dup-wg" }));
     }
 
@@ -596,7 +595,7 @@ public sealed class AthenaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
             Type = DataCatalogType.HIVE,
         });
 
-        await Assert.ThrowsAsync<InvalidRequestException>(() =>
+        await Should.ThrowAsync<InvalidRequestException>(() =>
             _athena.CreateDataCatalogAsync(new CreateDataCatalogRequest
             {
                 Name = "dup-cat",
@@ -616,7 +615,7 @@ public sealed class AthenaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
             QueryStatement = "SELECT 1",
         });
 
-        await Assert.ThrowsAsync<InvalidRequestException>(() =>
+        await Should.ThrowAsync<InvalidRequestException>(() =>
             _athena.CreatePreparedStatementAsync(new CreatePreparedStatementRequest
             {
                 StatementName = "dup_ps",

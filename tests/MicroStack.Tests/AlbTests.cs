@@ -57,20 +57,20 @@ public sealed class AlbTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         });
         var lb = createResp.LoadBalancers[0];
         var lbArn = lb.LoadBalancerArn;
-        Assert.StartsWith("arn:aws:elasticloadbalancing", lbArn);
-        Assert.Equal("qa-alb", lb.LoadBalancerName);
-        Assert.Equal(LoadBalancerTypeEnum.Application, lb.Type);
-        Assert.Equal(LoadBalancerSchemeEnum.InternetFacing, lb.Scheme);
-        Assert.NotNull(lb.DNSName);
-        Assert.NotEmpty(lb.DNSName);
-        Assert.Equal("active", lb.State.Code.Value);
+        lbArn.ShouldStartWith("arn:aws:elasticloadbalancing");
+        lb.LoadBalancerName.ShouldBe("qa-alb");
+        lb.Type.ShouldBe(LoadBalancerTypeEnum.Application);
+        lb.Scheme.ShouldBe(LoadBalancerSchemeEnum.InternetFacing);
+        lb.DNSName.ShouldNotBeNull();
+        lb.DNSName.ShouldNotBeEmpty();
+        lb.State.Code.Value.ShouldBe("active");
 
         var descResp = await _elb.DescribeLoadBalancersAsync(new DescribeLoadBalancersRequest
         {
             LoadBalancerArns = [lbArn],
         });
-        Assert.Single(descResp.LoadBalancers);
-        Assert.Equal(lbArn, descResp.LoadBalancers[0].LoadBalancerArn);
+        descResp.LoadBalancers.ShouldHaveSingleItem();
+        descResp.LoadBalancers[0].LoadBalancerArn.ShouldBe(lbArn);
 
         await _elb.DeleteLoadBalancerAsync(new DeleteLoadBalancerRequest
         {
@@ -78,7 +78,7 @@ public sealed class AlbTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         });
 
         var descAfter = await _elb.DescribeLoadBalancersAsync(new DescribeLoadBalancersRequest());
-        Assert.DoesNotContain(descAfter.LoadBalancers ?? [], l => l.LoadBalancerArn == lbArn);
+        descAfter.LoadBalancers.ShouldNotContain(l => l.LoadBalancerArn == lbArn);
     }
 
     [Fact]
@@ -93,8 +93,8 @@ public sealed class AlbTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             Names = ["qa-alb-named"],
         });
-        Assert.Single(resp.LoadBalancers);
-        Assert.Equal("qa-alb-named", resp.LoadBalancers[0].LoadBalancerName);
+        resp.LoadBalancers.ShouldHaveSingleItem();
+        resp.LoadBalancers[0].LoadBalancerName.ShouldBe("qa-alb-named");
 
         await _elb.DeleteLoadBalancerAsync(new DeleteLoadBalancerRequest
         {
@@ -113,14 +113,14 @@ public sealed class AlbTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
 
         try
         {
-            var ex = await Assert.ThrowsAsync<DuplicateLoadBalancerNameException>(async () =>
+            var ex = await Should.ThrowAsync<DuplicateLoadBalancerNameException>(async () =>
             {
                 await _elb.CreateLoadBalancerAsync(new CreateLoadBalancerRequest
                 {
                     Name = "qa-alb-dup",
                 });
             });
-            Assert.Contains("DuplicateLoadBalancerName", ex.ErrorCode);
+            ex.ErrorCode.ShouldContain("DuplicateLoadBalancerName");
         }
         finally
         {
@@ -148,7 +148,7 @@ public sealed class AlbTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             })).Attributes;
 
         var keys = attrs.Select(a => a.Key).ToHashSet();
-        Assert.Contains("idle_timeout.timeout_seconds", keys);
+        keys.ShouldContain("idle_timeout.timeout_seconds");
 
         await _elb.ModifyLoadBalancerAttributesAsync(
             new ModifyLoadBalancerAttributesRequest
@@ -171,7 +171,7 @@ public sealed class AlbTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             })).Attributes;
 
         var val = updated.First(a => a.Key == "idle_timeout.timeout_seconds").Value;
-        Assert.Equal("120", val);
+        val.ShouldBe("120");
 
         await _elb.DeleteLoadBalancerAsync(new DeleteLoadBalancerRequest
         {
@@ -194,16 +194,16 @@ public sealed class AlbTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         });
         var tg = createResp.TargetGroups[0];
         var tgArn = tg.TargetGroupArn;
-        Assert.StartsWith("arn:aws:elasticloadbalancing", tgArn);
-        Assert.Equal("qa-tg", tg.TargetGroupName);
-        Assert.Equal("/health", tg.HealthCheckPath);
+        tgArn.ShouldStartWith("arn:aws:elasticloadbalancing");
+        tg.TargetGroupName.ShouldBe("qa-tg");
+        tg.HealthCheckPath.ShouldBe("/health");
 
         var descResp = await _elb.DescribeTargetGroupsAsync(new DescribeTargetGroupsRequest
         {
             TargetGroupArns = [tgArn],
         });
-        Assert.Single(descResp.TargetGroups);
-        Assert.Equal(tgArn, descResp.TargetGroups[0].TargetGroupArn);
+        descResp.TargetGroups.ShouldHaveSingleItem();
+        descResp.TargetGroups[0].TargetGroupArn.ShouldBe(tgArn);
 
         await _elb.DeleteTargetGroupAsync(new DeleteTargetGroupRequest
         {
@@ -211,7 +211,7 @@ public sealed class AlbTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         });
 
         var descAfter = await _elb.DescribeTargetGroupsAsync(new DescribeTargetGroupsRequest());
-        Assert.DoesNotContain(descAfter.TargetGroups ?? [], t => t.TargetGroupArn == tgArn);
+        descAfter.TargetGroups.ShouldNotContain(t => t.TargetGroupArn == tgArn);
     }
 
     [Fact]
@@ -228,7 +228,7 @@ public sealed class AlbTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
 
         try
         {
-            var ex = await Assert.ThrowsAsync<DuplicateTargetGroupNameException>(async () =>
+            var ex = await Should.ThrowAsync<DuplicateTargetGroupNameException>(async () =>
             {
                 await _elb.CreateTargetGroupAsync(new CreateTargetGroupRequest
                 {
@@ -238,7 +238,7 @@ public sealed class AlbTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
                     VpcId = "vpc-00000001",
                 });
             });
-            Assert.Contains("DuplicateTargetGroupName", ex.ErrorCode);
+            ex.ErrorCode.ShouldContain("DuplicateTargetGroupName");
         }
         finally
         {
@@ -269,7 +269,7 @@ public sealed class AlbTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             })).Attributes;
 
         var keys = attrs.Select(a => a.Key).ToHashSet();
-        Assert.Contains("deregistration_delay.timeout_seconds", keys);
+        keys.ShouldContain("deregistration_delay.timeout_seconds");
 
         await _elb.ModifyTargetGroupAttributesAsync(
             new ModifyTargetGroupAttributesRequest
@@ -292,7 +292,7 @@ public sealed class AlbTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             })).Attributes;
 
         var val = updated.First(a => a.Key == "deregistration_delay.timeout_seconds").Value;
-        Assert.Equal("60", val);
+        val.ShouldBe("60");
 
         await _elb.DeleteTargetGroupAsync(new DeleteTargetGroupRequest
         {
@@ -324,7 +324,7 @@ public sealed class AlbTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             TargetGroupArns = [tgArn],
         });
-        Assert.Equal("/new-health", desc.TargetGroups[0].HealthCheckPath);
+        desc.TargetGroups[0].HealthCheckPath.ShouldBe("/new-health");
 
         await _elb.DeleteTargetGroupAsync(new DeleteTargetGroupRequest
         {
@@ -366,22 +366,22 @@ public sealed class AlbTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         });
         var listener = lResp.Listeners[0];
         var lArn = listener.ListenerArn;
-        Assert.StartsWith("arn:aws:elasticloadbalancing", lArn);
-        Assert.Equal(80, listener.Port);
-        Assert.Equal(ProtocolEnum.HTTP, listener.Protocol);
+        lArn.ShouldStartWith("arn:aws:elasticloadbalancing");
+        listener.Port.ShouldBe(80);
+        listener.Protocol.ShouldBe(ProtocolEnum.HTTP);
 
         var descResp = await _elb.DescribeListenersAsync(new DescribeListenersRequest
         {
             LoadBalancerArn = lbArn,
         });
-        Assert.Contains(descResp.Listeners, l => l.ListenerArn == lArn);
+        descResp.Listeners.ShouldContain(l => l.ListenerArn == lArn);
 
         // TG should now reference the LB
         var tgDesc = (await _elb.DescribeTargetGroupsAsync(new DescribeTargetGroupsRequest
         {
             TargetGroupArns = [tgArn],
         })).TargetGroups[0];
-        Assert.Contains(lbArn, tgDesc.LoadBalancerArns);
+        tgDesc.LoadBalancerArns.ShouldContain(lbArn);
 
         // Modify listener port
         await _elb.ModifyListenerAsync(new ModifyListenerRequest
@@ -393,7 +393,7 @@ public sealed class AlbTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             ListenerArns = [lArn],
         })).Listeners[0];
-        Assert.Equal(8080, updated.Port);
+        updated.Port.ShouldBe(8080);
 
         // Delete listener
         await _elb.DeleteListenerAsync(new DeleteListenerRequest
@@ -404,7 +404,7 @@ public sealed class AlbTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             LoadBalancerArn = lbArn,
         });
-        Assert.DoesNotContain(descAfter.Listeners ?? [], l => l.ListenerArn == lArn);
+        descAfter.Listeners.ShouldNotContain(l => l.ListenerArn == lArn);
 
         await _elb.DeleteTargetGroupAsync(new DeleteTargetGroupRequest { TargetGroupArn = tgArn });
         await _elb.DeleteLoadBalancerAsync(new DeleteLoadBalancerRequest { LoadBalancerArn = lbArn });
@@ -448,7 +448,7 @@ public sealed class AlbTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             ListenerArn = lArn,
         })).Rules;
-        Assert.Contains(rules, r => r.IsDefault == true);
+        rules.ShouldContain(r => r.IsDefault == true);
 
         // Create a custom rule
         var ruleResp = await _elb.CreateRuleAsync(new CreateRuleRequest
@@ -474,14 +474,14 @@ public sealed class AlbTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         });
         var rule = ruleResp.Rules[0];
         var rArn = rule.RuleArn;
-        Assert.False(rule.IsDefault == true);
-        Assert.Equal("10", rule.Priority);
+        (rule.IsDefault == true).ShouldBe(false);
+        rule.Priority.ShouldBe("10");
 
         var rules2 = (await _elb.DescribeRulesAsync(new DescribeRulesRequest
         {
             ListenerArn = lArn,
         })).Rules;
-        Assert.Contains(rules2, r => r.RuleArn == rArn);
+        rules2.ShouldContain(r => r.RuleArn == rArn);
 
         // Delete the rule
         await _elb.DeleteRuleAsync(new DeleteRuleRequest { RuleArn = rArn });
@@ -489,7 +489,7 @@ public sealed class AlbTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             ListenerArn = lArn,
         })).Rules;
-        Assert.DoesNotContain(rules3, r => r.RuleArn == rArn);
+        rules3.ShouldNotContain(r => r.RuleArn == rArn);
 
         await _elb.DeleteListenerAsync(new DeleteListenerRequest { ListenerArn = lArn });
         await _elb.DeleteTargetGroupAsync(new DeleteTargetGroupRequest { TargetGroupArn = tgArn });
@@ -533,7 +533,7 @@ public sealed class AlbTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         })).Rules;
         var defaultRule = rules.First(r => r.IsDefault == true);
 
-        await Assert.ThrowsAsync<OperationNotPermittedException>(async () =>
+        await Should.ThrowAsync<OperationNotPermittedException>(async () =>
         {
             await _elb.DeleteRuleAsync(new DeleteRuleRequest { RuleArn = defaultRule.RuleArn });
         });
@@ -599,7 +599,7 @@ public sealed class AlbTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
                 new RulePriorityPair { RuleArn = rArn, Priority = 20 },
             ],
         });
-        Assert.Contains(resp.Rules, r => r.RuleArn == rArn && r.Priority == "20");
+        resp.Rules.ShouldContain(r => r.RuleArn == rArn && r.Priority == "20");
 
         await _elb.DeleteRuleAsync(new DeleteRuleRequest { RuleArn = rArn });
         await _elb.DeleteListenerAsync(new DeleteListenerRequest { ListenerArn = lArn });
@@ -634,12 +634,11 @@ public sealed class AlbTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             TargetGroupArn = tgArn,
         });
-        Assert.Equal(2, health.TargetHealthDescriptions.Count);
+        health.TargetHealthDescriptions.Count.ShouldBe(2);
         var ids = health.TargetHealthDescriptions.Select(d => d.Target.Id).ToHashSet();
-        Assert.Contains("i-0001", ids);
-        Assert.Contains("i-0002", ids);
-        Assert.All(health.TargetHealthDescriptions,
-            d => Assert.Equal("healthy", d.TargetHealth.State.Value));
+        ids.ShouldContain("i-0001");
+        ids.ShouldContain("i-0002");
+        health.TargetHealthDescriptions.ShouldAllBe(d => d.TargetHealth.State.Value == "healthy");
 
         await _elb.DeregisterTargetsAsync(new DeregisterTargetsRequest
         {
@@ -651,8 +650,8 @@ public sealed class AlbTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             TargetGroupArn = tgArn,
         });
-        Assert.Single(health2.TargetHealthDescriptions);
-        Assert.Equal("i-0002", health2.TargetHealthDescriptions[0].Target.Id);
+        health2.TargetHealthDescriptions.ShouldHaveSingleItem();
+        health2.TargetHealthDescriptions[0].Target.Id.ShouldBe("i-0002");
 
         await _elb.DeleteTargetGroupAsync(new DeleteTargetGroupRequest
         {
@@ -688,7 +687,7 @@ public sealed class AlbTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             TargetGroupArn = tgArn,
         });
-        Assert.Single(health.TargetHealthDescriptions);
+        health.TargetHealthDescriptions.ShouldHaveSingleItem();
 
         await _elb.DeleteTargetGroupAsync(new DeleteTargetGroupRequest
         {
@@ -721,8 +720,8 @@ public sealed class AlbTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             ResourceArns = [lbArn],
         });
         var tagMap = desc.TagDescriptions[0].Tags.ToDictionary(t => t.Key, t => t.Value);
-        Assert.Equal("test", tagMap["env"]);
-        Assert.Equal("infra", tagMap["team"]);
+        tagMap["env"].ShouldBe("test");
+        tagMap["team"].ShouldBe("infra");
 
         await _elb.RemoveTagsAsync(new RemoveTagsRequest
         {
@@ -735,8 +734,8 @@ public sealed class AlbTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             ResourceArns = [lbArn],
         });
         var tagMap2 = desc2.TagDescriptions[0].Tags.ToDictionary(t => t.Key, t => t.Value);
-        Assert.False(tagMap2.ContainsKey("env"));
-        Assert.Equal("infra", tagMap2["team"]);
+        tagMap2.ContainsKey("env").ShouldBe(false);
+        tagMap2["team"].ShouldBe("infra");
 
         await _elb.DeleteLoadBalancerAsync(new DeleteLoadBalancerRequest
         {
@@ -764,7 +763,7 @@ public sealed class AlbTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             ResourceArns = [lbArn],
         });
         var tagMap = desc.TagDescriptions[0].Tags.ToDictionary(t => t.Key, t => t.Value);
-        Assert.Equal("prod", tagMap["env"]);
+        tagMap["env"].ShouldBe("prod");
 
         await _elb.DeleteLoadBalancerAsync(new DeleteLoadBalancerRequest
         {
@@ -787,8 +786,8 @@ public sealed class AlbTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             LoadBalancerArn = lbArn,
             SecurityGroups = ["sg-111", "sg-222"],
         });
-        Assert.Contains("sg-111", resp.SecurityGroupIds);
-        Assert.Contains("sg-222", resp.SecurityGroupIds);
+        resp.SecurityGroupIds.ShouldContain("sg-111");
+        resp.SecurityGroupIds.ShouldContain("sg-222");
 
         await _elb.DeleteLoadBalancerAsync(new DeleteLoadBalancerRequest
         {
@@ -811,9 +810,9 @@ public sealed class AlbTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             LoadBalancerArn = lbArn,
             Subnets = ["subnet-aaa", "subnet-bbb"],
         });
-        Assert.Equal(2, resp.AvailabilityZones.Count);
-        Assert.Contains(resp.AvailabilityZones, az => az.SubnetId == "subnet-aaa");
-        Assert.Contains(resp.AvailabilityZones, az => az.SubnetId == "subnet-bbb");
+        resp.AvailabilityZones.Count.ShouldBe(2);
+        resp.AvailabilityZones.ShouldContain(az => az.SubnetId == "subnet-aaa");
+        resp.AvailabilityZones.ShouldContain(az => az.SubnetId == "subnet-bbb");
 
         await _elb.DeleteLoadBalancerAsync(new DeleteLoadBalancerRequest
         {
@@ -851,9 +850,9 @@ public sealed class AlbTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             ],
         });
         var listener = lResp.Listeners[0];
-        Assert.Equal("fixed-response", listener.DefaultActions[0].Type.Value);
-        Assert.Equal("200", listener.DefaultActions[0].FixedResponseConfig.StatusCode);
-        Assert.Equal("maintenance", listener.DefaultActions[0].FixedResponseConfig.MessageBody);
+        listener.DefaultActions[0].Type.Value.ShouldBe("fixed-response");
+        listener.DefaultActions[0].FixedResponseConfig.StatusCode.ShouldBe("200");
+        listener.DefaultActions[0].FixedResponseConfig.MessageBody.ShouldBe("maintenance");
 
         await _elb.DeleteListenerAsync(new DeleteListenerRequest { ListenerArn = listener.ListenerArn });
         await _elb.DeleteLoadBalancerAsync(new DeleteLoadBalancerRequest { LoadBalancerArn = lbArn });
@@ -890,9 +889,9 @@ public sealed class AlbTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             ],
         });
         var listener = lResp.Listeners[0];
-        Assert.Equal("redirect", listener.DefaultActions[0].Type.Value);
-        Assert.Equal("HTTP_301", listener.DefaultActions[0].RedirectConfig.StatusCode);
-        Assert.Equal("example.com", listener.DefaultActions[0].RedirectConfig.Host);
+        listener.DefaultActions[0].Type.Value.ShouldBe("redirect");
+        listener.DefaultActions[0].RedirectConfig.StatusCode.Value.ShouldBe("HTTP_301");
+        listener.DefaultActions[0].RedirectConfig.Host.ShouldBe("example.com");
 
         await _elb.DeleteListenerAsync(new DeleteListenerRequest { ListenerArn = listener.ListenerArn });
         await _elb.DeleteLoadBalancerAsync(new DeleteLoadBalancerRequest { LoadBalancerArn = lbArn });
@@ -957,7 +956,7 @@ public sealed class AlbTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
                 new RuleCondition { Field = "path-pattern", Values = ["/new/*"] },
             ],
         });
-        Assert.Equal("/new/*", modResp.Rules[0].Conditions[0].Values[0]);
+        modResp.Rules[0].Conditions[0].Values[0].ShouldBe("/new/*");
 
         await _elb.DeleteRuleAsync(new DeleteRuleRequest { RuleArn = rArn });
         await _elb.DeleteListenerAsync(new DeleteListenerRequest { ListenerArn = lArn });
@@ -1020,8 +1019,8 @@ public sealed class AlbTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             RuleArns = [rArn],
         });
-        Assert.Single(resp.Rules);
-        Assert.Equal(rArn, resp.Rules[0].RuleArn);
+        resp.Rules.ShouldHaveSingleItem();
+        resp.Rules[0].RuleArn.ShouldBe(rArn);
 
         await _elb.DeleteRuleAsync(new DeleteRuleRequest { RuleArn = rArn });
         await _elb.DeleteListenerAsync(new DeleteListenerRequest { ListenerArn = lArn });
@@ -1058,8 +1057,8 @@ public sealed class AlbTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             TargetGroupArn = tgArn,
             Targets = [new TargetDescription { Id = "i-0002" }],
         });
-        Assert.Single(health.TargetHealthDescriptions);
-        Assert.Equal("i-0002", health.TargetHealthDescriptions[0].Target.Id);
+        health.TargetHealthDescriptions.ShouldHaveSingleItem();
+        health.TargetHealthDescriptions[0].Target.Id.ShouldBe("i-0002");
 
         await _elb.DeleteTargetGroupAsync(new DeleteTargetGroupRequest
         {
@@ -1104,8 +1103,8 @@ public sealed class AlbTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             ListenerArns = [lArn],
         });
-        Assert.Single(resp.Listeners);
-        Assert.Equal(lArn, resp.Listeners[0].ListenerArn);
+        resp.Listeners.ShouldHaveSingleItem();
+        resp.Listeners[0].ListenerArn.ShouldBe(lArn);
 
         await _elb.DeleteListenerAsync(new DeleteListenerRequest { ListenerArn = lArn });
         await _elb.DeleteTargetGroupAsync(new DeleteTargetGroupRequest { TargetGroupArn = tgArn });
@@ -1169,14 +1168,14 @@ public sealed class AlbTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             ListenerArn = lArn,
         })).Rules;
-        Assert.True(rules.Count >= 2); // default + custom
+        (rules.Count >= 2).ShouldBe(true); // default + custom
 
         // Delete listener
         await _elb.DeleteListenerAsync(new DeleteListenerRequest { ListenerArn = lArn });
 
         // All rules for that listener should be gone
         var allRules = (await _elb.DescribeRulesAsync(new DescribeRulesRequest())).Rules ?? [];
-        Assert.DoesNotContain(allRules, r => r.RuleArn.Contains(lArn.Split('/')[^1]));
+        allRules.ShouldNotContain(r => r.RuleArn.Contains(lArn.Split('/').Last()));
 
         await _elb.DeleteTargetGroupAsync(new DeleteTargetGroupRequest { TargetGroupArn = tgArn });
         await _elb.DeleteLoadBalancerAsync(new DeleteLoadBalancerRequest { LoadBalancerArn = lbArn });
@@ -1233,7 +1232,7 @@ public sealed class AlbTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
                 },
             ],
         });
-        Assert.Equal("fixed-response", modResp.Listeners[0].DefaultActions[0].Type.Value);
+        modResp.Listeners[0].DefaultActions[0].Type.Value.ShouldBe("fixed-response");
 
         await _elb.DeleteListenerAsync(new DeleteListenerRequest { ListenerArn = lArn });
         await _elb.DeleteTargetGroupAsync(new DeleteTargetGroupRequest { TargetGroupArn = tgArn });
@@ -1257,8 +1256,8 @@ public sealed class AlbTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             Names = ["qa-tg-byname"],
         });
-        Assert.Single(resp.TargetGroups);
-        Assert.Equal("qa-tg-byname", resp.TargetGroups[0].TargetGroupName);
+        resp.TargetGroups.ShouldHaveSingleItem();
+        resp.TargetGroups[0].TargetGroupName.ShouldBe("qa-tg-byname");
 
         await _elb.DeleteTargetGroupAsync(new DeleteTargetGroupRequest
         {
@@ -1289,7 +1288,7 @@ public sealed class AlbTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             LoadBalancerArn = lbArn,
         });
-        Assert.DoesNotContain(before.TargetGroups ?? [], tg => tg.TargetGroupArn == tgArn);
+        before.TargetGroups.ShouldNotContain(tg => tg.TargetGroupArn == tgArn);
 
         // Create listener to link TG to LB
         var lArn = (await _elb.CreateListenerAsync(new CreateListenerRequest
@@ -1311,7 +1310,7 @@ public sealed class AlbTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             LoadBalancerArn = lbArn,
         });
-        Assert.Contains(after.TargetGroups, tg => tg.TargetGroupArn == tgArn);
+        after.TargetGroups.ShouldContain(tg => tg.TargetGroupArn == tgArn);
 
         await _elb.DeleteListenerAsync(new DeleteListenerRequest { ListenerArn = lArn });
         await _elb.DeleteTargetGroupAsync(new DeleteTargetGroupRequest { TargetGroupArn = tgArn });
@@ -1323,7 +1322,7 @@ public sealed class AlbTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
     [Fact]
     public async Task DescribeLoadBalancerAttributesForNonexistentLbThrows()
     {
-        await Assert.ThrowsAsync<LoadBalancerNotFoundException>(async () =>
+        await Should.ThrowAsync<LoadBalancerNotFoundException>(async () =>
         {
             await _elb.DescribeLoadBalancerAttributesAsync(
                 new DescribeLoadBalancerAttributesRequest
@@ -1336,7 +1335,7 @@ public sealed class AlbTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
     [Fact]
     public async Task DescribeTargetGroupAttributesForNonexistentTgThrows()
     {
-        await Assert.ThrowsAsync<TargetGroupNotFoundException>(async () =>
+        await Should.ThrowAsync<TargetGroupNotFoundException>(async () =>
         {
             await _elb.DescribeTargetGroupAttributesAsync(
                 new DescribeTargetGroupAttributesRequest
@@ -1365,7 +1364,7 @@ public sealed class AlbTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             ResourceArns = [tgArn],
         });
         var tagMap = desc.TagDescriptions[0].Tags.ToDictionary(t => t.Key, t => t.Value);
-        Assert.Equal("testing", tagMap["purpose"]);
+        tagMap["purpose"].ShouldBe("testing");
 
         await _elb.DeleteTargetGroupAsync(new DeleteTargetGroupRequest
         {
@@ -1394,13 +1393,13 @@ public sealed class AlbTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             ResourceArns = [lb1Arn, lb2Arn],
         });
-        Assert.Equal(2, desc.TagDescriptions.Count);
+        desc.TagDescriptions.Count.ShouldBe(2);
 
         var td1 = desc.TagDescriptions.First(td => td.ResourceArn == lb1Arn);
-        Assert.Equal("dev", td1.Tags.First(t => t.Key == "env").Value);
+        td1.Tags.First(t => t.Key == "env").Value.ShouldBe("dev");
 
         var td2 = desc.TagDescriptions.First(td => td.ResourceArn == lb2Arn);
-        Assert.Equal("prod", td2.Tags.First(t => t.Key == "env").Value);
+        td2.Tags.First(t => t.Key == "env").Value.ShouldBe("prod");
 
         await _elb.DeleteLoadBalancerAsync(new DeleteLoadBalancerRequest { LoadBalancerArn = lb1Arn });
         await _elb.DeleteLoadBalancerAsync(new DeleteLoadBalancerRequest { LoadBalancerArn = lb2Arn });

@@ -64,11 +64,11 @@ public sealed class SqsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
     public async Task CreateQueueAndGetUrl()
     {
         var created = await _sqs.CreateQueueAsync("test-queue-basic");
-        Assert.NotEmpty(created.QueueUrl);
-        Assert.Contains("test-queue-basic", created.QueueUrl);
+        created.QueueUrl.ShouldNotBeEmpty();
+        created.QueueUrl.ShouldContain("test-queue-basic");
 
         var getUrl = await _sqs.GetQueueUrlAsync("test-queue-basic");
-        Assert.Equal(created.QueueUrl, getUrl.QueueUrl);
+        getUrl.QueueUrl.ShouldBe(created.QueueUrl);
     }
 
     [Fact]
@@ -76,7 +76,7 @@ public sealed class SqsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
     {
         await _sqs.CreateQueueAsync("idem-queue");
         var second = await _sqs.CreateQueueAsync("idem-queue");
-        Assert.Contains("idem-queue", second.QueueUrl);
+        second.QueueUrl.ShouldContain("idem-queue");
     }
 
     [Fact]
@@ -86,7 +86,7 @@ public sealed class SqsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         await _sqs.CreateQueueAsync("list-q-2");
 
         var list = await _sqs.ListQueuesAsync("list-q-");
-        Assert.Equal(2, list.QueueUrls.Count);
+        list.QueueUrls.Count.ShouldBe(2);
     }
 
     [Fact]
@@ -96,7 +96,7 @@ public sealed class SqsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         await _sqs.DeleteQueueAsync(q.QueueUrl);
 
         var list = await _sqs.ListQueuesAsync("del-queue");
-        Assert.Empty(list.QueueUrls);
+        list.QueueUrls.ShouldBeEmpty();
     }
 
     // ── Message operations ──────────────────────────────────────────────────────
@@ -107,17 +107,17 @@ public sealed class SqsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         var q = await _sqs.CreateQueueAsync("send-recv-queue");
 
         var sent = await _sqs.SendMessageAsync(q.QueueUrl, "hello world");
-        Assert.NotEmpty(sent.MessageId);
-        Assert.NotEmpty(sent.MD5OfMessageBody);
+        sent.MessageId.ShouldNotBeEmpty();
+        sent.MD5OfMessageBody.ShouldNotBeEmpty();
 
         var recv = await _sqs.ReceiveMessageAsync(new ReceiveMessageRequest
         {
             QueueUrl            = q.QueueUrl,
             MaxNumberOfMessages = 1,
         });
-        Assert.Single(recv.Messages);
-        Assert.Equal("hello world", recv.Messages[0].Body);
-        Assert.NotEmpty(recv.Messages[0].ReceiptHandle);
+        recv.Messages.ShouldHaveSingleItem();
+        recv.Messages[0].Body.ShouldBe("hello world");
+        recv.Messages[0].ReceiptHandle.ShouldNotBeEmpty();
     }
 
     [Fact]
@@ -131,7 +131,7 @@ public sealed class SqsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             QueueUrl            = q.QueueUrl,
             MaxNumberOfMessages = 1,
         });
-        Assert.Single(recv.Messages);
+        recv.Messages.ShouldHaveSingleItem();
 
         await _sqs.DeleteMessageAsync(q.QueueUrl, recv.Messages[0].ReceiptHandle);
 
@@ -139,8 +139,8 @@ public sealed class SqsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         // Re-receive with visibility=0 to confirm deletion
         var attrs = await _sqs.GetQueueAttributesAsync(q.QueueUrl,
             ["ApproximateNumberOfMessages", "ApproximateNumberOfMessagesNotVisible"]);
-        Assert.Equal("0", attrs.Attributes["ApproximateNumberOfMessages"]);
-        Assert.Equal("0", attrs.Attributes["ApproximateNumberOfMessagesNotVisible"]);
+        attrs.Attributes["ApproximateNumberOfMessages"].ShouldBe("0");
+        attrs.Attributes["ApproximateNumberOfMessagesNotVisible"].ShouldBe("0");
     }
 
     [Fact]
@@ -149,9 +149,9 @@ public sealed class SqsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         var q = await _sqs.CreateQueueAsync("attrs-queue");
         var attrs = await _sqs.GetQueueAttributesAsync(q.QueueUrl, ["All"]);
 
-        Assert.True(attrs.Attributes.ContainsKey("QueueArn"));
-        Assert.Contains("attrs-queue", attrs.Attributes["QueueArn"]);
-        Assert.Equal("30", attrs.Attributes["VisibilityTimeout"]);
+        attrs.Attributes.ContainsKey("QueueArn").ShouldBe(true);
+        attrs.Attributes["QueueArn"].ShouldContain("attrs-queue");
+        attrs.Attributes["VisibilityTimeout"].ShouldBe("30");
     }
 
     [Fact]
@@ -162,7 +162,7 @@ public sealed class SqsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             new Dictionary<string, string> { ["VisibilityTimeout"] = "60" });
 
         var attrs = await _sqs.GetQueueAttributesAsync(q.QueueUrl, ["VisibilityTimeout"]);
-        Assert.Equal("60", attrs.Attributes["VisibilityTimeout"]);
+        attrs.Attributes["VisibilityTimeout"].ShouldBe("60");
     }
 
     [Fact]
@@ -176,7 +176,7 @@ public sealed class SqsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
 
         var attrs = await _sqs.GetQueueAttributesAsync(q.QueueUrl,
             ["ApproximateNumberOfMessages"]);
-        Assert.Equal("0", attrs.Attributes["ApproximateNumberOfMessages"]);
+        attrs.Attributes["ApproximateNumberOfMessages"].ShouldBe("0");
     }
 
     // ── Batch operations ────────────────────────────────────────────────────────
@@ -192,8 +192,8 @@ public sealed class SqsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             new SendMessageBatchRequestEntry { Id = "2", MessageBody = "body-2" },
         ]);
 
-        Assert.Equal(2, resp.Successful.Count);
-        Assert.Empty(resp.Failed);
+        resp.Successful.Count.ShouldBe(2);
+        resp.Failed.ShouldBeEmpty();
     }
 
     [Fact]
@@ -217,8 +217,8 @@ public sealed class SqsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
                     ReceiptHandle = m.ReceiptHandle,
                 }).ToList());
 
-        Assert.Equal(recv.Messages.Count, delResp.Successful.Count);
-        Assert.Empty(delResp.Failed);
+        delResp.Successful.Count.ShouldBe(recv.Messages.Count);
+        delResp.Failed.ShouldBeEmpty();
     }
 
     // ── Message attributes ──────────────────────────────────────────────────────
@@ -246,11 +246,11 @@ public sealed class SqsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             MessageAttributeNames = ["All"],
         });
 
-        Assert.Single(recv.Messages);
+        recv.Messages.ShouldHaveSingleItem();
         var msg = recv.Messages[0];
-        Assert.True(msg.MessageAttributes.ContainsKey("Color"));
-        Assert.Equal("blue", msg.MessageAttributes["Color"].StringValue);
-        Assert.Equal("42",   msg.MessageAttributes["Count"].StringValue);
+        msg.MessageAttributes.ContainsKey("Color").ShouldBe(true);
+        msg.MessageAttributes["Color"].StringValue.ShouldBe("blue");
+        msg.MessageAttributes["Count"].StringValue.ShouldBe("42");
     }
 
     // ── System attributes ───────────────────────────────────────────────────────
@@ -268,11 +268,11 @@ public sealed class SqsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             MessageSystemAttributeNames = ["All"],
         });
 
-        Assert.Single(recv.Messages);
+        recv.Messages.ShouldHaveSingleItem();
         var attrs = recv.Messages[0].Attributes;
-        Assert.True(attrs.ContainsKey("SentTimestamp"));
-        Assert.True(attrs.ContainsKey("ApproximateReceiveCount"));
-        Assert.Equal("1", attrs["ApproximateReceiveCount"]);
+        attrs.ContainsKey("SentTimestamp").ShouldBe(true);
+        attrs.ContainsKey("ApproximateReceiveCount").ShouldBe(true);
+        attrs["ApproximateReceiveCount"].ShouldBe("1");
     }
 
     // ── Queue tags ──────────────────────────────────────────────────────────────
@@ -295,8 +295,8 @@ public sealed class SqsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             QueueUrl = q.QueueUrl,
         });
-        Assert.Equal("test",       tags.Tags["env"]);
-        Assert.Equal("microstack", tags.Tags["app"]);
+        tags.Tags["env"].ShouldBe("test");
+        tags.Tags["app"].ShouldBe("microstack");
 
         await _sqs.UntagQueueAsync(new Amazon.SQS.Model.UntagQueueRequest
         {
@@ -307,8 +307,8 @@ public sealed class SqsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             QueueUrl = q.QueueUrl,
         });
-        Assert.False(tags.Tags.ContainsKey("env"));
-        Assert.True(tags.Tags.ContainsKey("app"));
+        tags.Tags.ContainsKey("env").ShouldBe(false);
+        tags.Tags.ContainsKey("app").ShouldBe(true);
     }
 
     // ── FIFO queue ──────────────────────────────────────────────────────────────
@@ -325,15 +325,15 @@ public sealed class SqsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             MessageGroupId         = "g1",
             MessageDeduplicationId = "d1",
         });
-        Assert.NotEmpty(s1.SequenceNumber);
+        s1.SequenceNumber.ShouldNotBeEmpty();
 
         var recv = await _sqs.ReceiveMessageAsync(new ReceiveMessageRequest
         {
             QueueUrl            = q.QueueUrl,
             MaxNumberOfMessages = 1,
         });
-        Assert.Single(recv.Messages);
-        Assert.Equal("fifo-msg-1", recv.Messages[0].Body);
+        recv.Messages.ShouldHaveSingleItem();
+        recv.Messages[0].Body.ShouldBe("fifo-msg-1");
     }
 
     [Fact]
@@ -360,7 +360,7 @@ public sealed class SqsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         // Should only have 1 message
         var attrs = await _sqs.GetQueueAttributesAsync(q.QueueUrl,
             ["ApproximateNumberOfMessages"]);
-        Assert.Equal("1", attrs.Attributes["ApproximateNumberOfMessages"]);
+        attrs.Attributes["ApproximateNumberOfMessages"].ShouldBe("1");
     }
 
     // ── Dead-letter queue ───────────────────────────────────────────────────────
@@ -391,7 +391,7 @@ public sealed class SqsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             QueueUrl = src.QueueUrl, MaxNumberOfMessages = 1,
         });
-        Assert.Single(recv.Messages);
+        recv.Messages.ShouldHaveSingleItem();
 
         // Don't delete it — visibility is 0 so it becomes visible immediately.
         // A second receive triggers the DLQ sweep.
@@ -403,7 +403,7 @@ public sealed class SqsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         // Message should now be in DLQ
         var dlqAttrsAfter = await _sqs.GetQueueAttributesAsync(dlq.QueueUrl,
             ["ApproximateNumberOfMessages"]);
-        Assert.Equal("1", dlqAttrsAfter.Attributes["ApproximateNumberOfMessages"]);
+        dlqAttrsAfter.Attributes["ApproximateNumberOfMessages"].ShouldBe("1");
     }
 
     // ── ChangeMessageVisibility ─────────────────────────────────────────────────
@@ -418,7 +418,7 @@ public sealed class SqsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         {
             QueueUrl = q.QueueUrl, MaxNumberOfMessages = 1,
         });
-        Assert.Single(recv.Messages);
+        recv.Messages.ShouldHaveSingleItem();
 
         // Extend visibility — no exception = success
         await _sqs.ChangeMessageVisibilityAsync(

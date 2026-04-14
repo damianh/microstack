@@ -80,9 +80,9 @@ public sealed class DynamoDbTests : IClassFixture<MicroStackFixture>, IAsyncLife
     {
         var resp = await _ddb.CreateTableAsync(HashOnlyTable("t_hash_only"));
         var desc = resp.TableDescription;
-        Assert.Equal("t_hash_only", desc.TableName);
-        Assert.Equal(TableStatus.ACTIVE, desc.TableStatus);
-        Assert.Contains(desc.KeySchema, k => k.KeyType == KeyType.HASH);
+        desc.TableName.ShouldBe("t_hash_only");
+        desc.TableStatus.ShouldBe(TableStatus.ACTIVE);
+        desc.KeySchema.ShouldContain(k => k.KeyType == KeyType.HASH);
     }
 
     [Fact]
@@ -90,17 +90,17 @@ public sealed class DynamoDbTests : IClassFixture<MicroStackFixture>, IAsyncLife
     {
         var resp = await _ddb.CreateTableAsync(CompositeTable("t_composite"));
         var types = resp.TableDescription.KeySchema.Select(k => k.KeyType).ToHashSet();
-        Assert.Contains(KeyType.HASH, types);
-        Assert.Contains(KeyType.RANGE, types);
+        types.ShouldContain(KeyType.HASH);
+        types.ShouldContain(KeyType.RANGE);
     }
 
     [Fact]
     public async Task CreateTable_Duplicate_ThrowsResourceInUseException()
     {
         await _ddb.CreateTableAsync(HashOnlyTable("t_hash_only"));
-        var ex = await Assert.ThrowsAsync<ResourceInUseException>(() =>
+        var ex = await Should.ThrowAsync<ResourceInUseException>(() =>
             _ddb.CreateTableAsync(HashOnlyTable("t_hash_only")));
-        Assert.NotNull(ex);
+        ex.ShouldNotBeNull();
     }
 
     [Fact]
@@ -108,16 +108,16 @@ public sealed class DynamoDbTests : IClassFixture<MicroStackFixture>, IAsyncLife
     {
         await _ddb.CreateTableAsync(HashOnlyTable("t_to_delete"));
         var resp = await _ddb.DeleteTableAsync("t_to_delete");
-        Assert.Equal(TableStatus.DELETING, resp.TableDescription.TableStatus);
+        resp.TableDescription.TableStatus.ShouldBe(TableStatus.DELETING);
 
         var list = await _ddb.ListTablesAsync();
-        Assert.DoesNotContain("t_to_delete", list.TableNames);
+        list.TableNames.ShouldNotContain("t_to_delete");
     }
 
     [Fact]
     public async Task DeleteTable_NotFound_ThrowsResourceNotFoundException()
     {
-        await Assert.ThrowsAsync<ResourceNotFoundException>(() =>
+        await Should.ThrowAsync<ResourceNotFoundException>(() =>
             _ddb.DeleteTableAsync("t_nonexistent_xyz"));
     }
 
@@ -150,11 +150,11 @@ public sealed class DynamoDbTests : IClassFixture<MicroStackFixture>, IAsyncLife
 
         var resp  = await _ddb.DescribeTableAsync("t_describe_gsi");
         var table = resp.Table;
-        Assert.Equal("t_describe_gsi", table.TableName);
-        Assert.Single(table.GlobalSecondaryIndexes);
-        Assert.Equal("gsi1", table.GlobalSecondaryIndexes[0].IndexName);
-        Assert.Single(table.LocalSecondaryIndexes);
-        Assert.Equal("lsi1", table.LocalSecondaryIndexes[0].IndexName);
+        table.TableName.ShouldBe("t_describe_gsi");
+        table.GlobalSecondaryIndexes.ShouldHaveSingleItem();
+        table.GlobalSecondaryIndexes[0].IndexName.ShouldBe("gsi1");
+        table.LocalSecondaryIndexes.ShouldHaveSingleItem();
+        table.LocalSecondaryIndexes[0].IndexName.ShouldBe("lsi1");
     }
 
     [Fact]
@@ -167,7 +167,7 @@ public sealed class DynamoDbTests : IClassFixture<MicroStackFixture>, IAsyncLife
         }
 
         var resp = await _ddb.ListTablesAsync(new ListTablesRequest { Limit = 2 });
-        Assert.True(resp.TableNames.Count <= 2);
+        (resp.TableNames.Count <= 2).ShouldBe(true);
 
         if (resp.LastEvaluatedTableName is not null)
         {
@@ -176,7 +176,7 @@ public sealed class DynamoDbTests : IClassFixture<MicroStackFixture>, IAsyncLife
                 ExclusiveStartTableName = resp.LastEvaluatedTableName,
                 Limit = 100,
             });
-            Assert.True(resp2.TableNames.Count >= 1);
+            (resp2.TableNames.Count >= 1).ShouldBe(true);
         }
     }
 
@@ -192,7 +192,7 @@ public sealed class DynamoDbTests : IClassFixture<MicroStackFixture>, IAsyncLife
             BillingMode          = BillingMode.PROVISIONED,
             ProvisionedThroughput = new ProvisionedThroughput { ReadCapacityUnits = 5, WriteCapacityUnits = 5 },
         });
-        Assert.Equal(name, resp.TableDescription.TableName);
+        resp.TableDescription.TableName.ShouldBe(name);
         await _ddb.DeleteTableAsync(name);
     }
 
@@ -217,14 +217,14 @@ public sealed class DynamoDbTests : IClassFixture<MicroStackFixture>, IAsyncLife
 
         var resp = await _ddb.GetItemAsync("t_hash_only", StrAttr("pk", "allTypes"));
         var item = resp.Item;
-        Assert.Equal("hello", item["str_attr"].S);
-        Assert.Equal("42", item["num_attr"].N);
-        Assert.True(item["bool_attr"].BOOL);
-        Assert.True(item["null_attr"].NULL);
-        Assert.Equal(2, item["list_attr"].L.Count);
-        Assert.Equal("value", item["map_attr"].M["nested"].S);
-        Assert.Equal(new HashSet<string> { "x", "y" }, item["ss_attr"].SS.ToHashSet());
-        Assert.Equal(new HashSet<string> { "1", "2", "3" }, item["ns_attr"].NS.ToHashSet());
+        item["str_attr"].S.ShouldBe("hello");
+        item["num_attr"].N.ShouldBe("42");
+        item["bool_attr"].BOOL.ShouldBe(true);
+        item["null_attr"].NULL.ShouldBe(true);
+        item["list_attr"].L.Count.ShouldBe(2);
+        item["map_attr"].M["nested"].S.ShouldBe("value");
+        item["ss_attr"].SS.ToHashSet().ShouldBe(new HashSet<string> { "x", "y" });
+        item["ns_attr"].NS.ToHashSet().ShouldBe(new HashSet<string> { "1", "2", "3" });
     }
 
     [Fact]
@@ -239,12 +239,12 @@ public sealed class DynamoDbTests : IClassFixture<MicroStackFixture>, IAsyncLife
         });
 
         var get1 = await _ddb.GetItemAsync("t_crud", StrAttr("pk", "key1"));
-        Assert.Equal("value1", get1.Item["data"].S);
+        get1.Item["data"].S.ShouldBe("value1");
 
         await _ddb.DeleteItemAsync("t_crud", StrAttr("pk", "key1"));
 
         var get2 = await _ddb.GetItemAsync("t_crud", StrAttr("pk", "key1"));
-        Assert.Null(get2.Item);
+        get2.Item.ShouldBeNull();
     }
 
     [Fact]
@@ -259,7 +259,7 @@ public sealed class DynamoDbTests : IClassFixture<MicroStackFixture>, IAsyncLife
         });
 
         var resp = await _ddb.GetItemAsync("t_hash_only", StrAttr("pk", "cond_new"));
-        Assert.Equal("first", resp.Item["val"].S);
+        resp.Item["val"].S.ShouldBe("first");
     }
 
     [Fact]
@@ -269,7 +269,7 @@ public sealed class DynamoDbTests : IClassFixture<MicroStackFixture>, IAsyncLife
         await _ddb.PutItemAsync("t_hash_only", new Dictionary<string, AttributeValue>
             { ["pk"] = new() { S = "cond_fail" }, ["val"] = new() { S = "v1" } });
 
-        await Assert.ThrowsAsync<ConditionalCheckFailedException>(() =>
+        await Should.ThrowAsync<ConditionalCheckFailedException>(() =>
             _ddb.PutItemAsync(new PutItemRequest
             {
                 TableName           = "t_hash_only",
@@ -291,7 +291,7 @@ public sealed class DynamoDbTests : IClassFixture<MicroStackFixture>, IAsyncLife
             Key          = StrAttr("pk", "ret_old"),
             ReturnValues = ReturnValue.ALL_OLD,
         });
-        Assert.Equal("precious", resp.Attributes["data"].S);
+        resp.Attributes["data"].S.ShouldBe("precious");
     }
 
     [Fact]
@@ -305,9 +305,9 @@ public sealed class DynamoDbTests : IClassFixture<MicroStackFixture>, IAsyncLife
             BillingMode          = BillingMode.PAY_PER_REQUEST,
         });
 
-        var ex = await Assert.ThrowsAsync<AmazonDynamoDBException>(() =>
+        var ex = await Should.ThrowAsync<AmazonDynamoDBException>(() =>
             _ddb.GetItemAsync("t_get_missing_sk", StrAttr("pk", "q_pk")));
-        Assert.Contains("ValidationException", ex.ErrorCode ?? ex.Message);
+        (ex.ErrorCode ?? ex.Message).ShouldContain("ValidationException");
     }
 
     [Fact]
@@ -317,10 +317,10 @@ public sealed class DynamoDbTests : IClassFixture<MicroStackFixture>, IAsyncLife
         await _ddb.PutItemAsync("t_get_wrong_type", new Dictionary<string, AttributeValue>
             { ["pk"] = new() { S = "typed-key" } });
 
-        var ex = await Assert.ThrowsAsync<AmazonDynamoDBException>(() =>
+        var ex = await Should.ThrowAsync<AmazonDynamoDBException>(() =>
             _ddb.GetItemAsync("t_get_wrong_type",
                 new Dictionary<string, AttributeValue> { ["pk"] = new() { N = "123" } }));
-        Assert.Contains("ValidationException", ex.ErrorCode ?? ex.Message);
+        (ex.ErrorCode ?? ex.Message).ShouldContain("ValidationException");
     }
 
     [Fact]
@@ -328,7 +328,7 @@ public sealed class DynamoDbTests : IClassFixture<MicroStackFixture>, IAsyncLife
     {
         await _ddb.CreateTableAsync(HashOnlyTable("t_update_extra_key"));
 
-        var ex = await Assert.ThrowsAsync<AmazonDynamoDBException>(() =>
+        var ex = await Should.ThrowAsync<AmazonDynamoDBException>(() =>
             _ddb.UpdateItemAsync(new UpdateItemRequest
             {
                 TableName                = "t_update_extra_key",
@@ -340,7 +340,7 @@ public sealed class DynamoDbTests : IClassFixture<MicroStackFixture>, IAsyncLife
                 UpdateExpression         = "SET v = :v",
                 ExpressionAttributeValues = new Dictionary<string, AttributeValue> { [":v"] = new() { S = "x" } },
             }));
-        Assert.Contains("ValidationException", ex.ErrorCode ?? ex.Message);
+        (ex.ErrorCode ?? ex.Message).ShouldContain("ValidationException");
     }
 
     [Fact]
@@ -359,7 +359,7 @@ public sealed class DynamoDbTests : IClassFixture<MicroStackFixture>, IAsyncLife
             ExpressionAttributeValues = new Dictionary<string, AttributeValue> { [":val"] = new() { N = "10" } },
             ReturnValues             = ReturnValue.ALL_NEW,
         });
-        Assert.Equal("10", resp.Attributes["count"].N);
+        resp.Attributes["count"].N.ShouldBe("10");
     }
 
     [Fact]
@@ -380,8 +380,8 @@ public sealed class DynamoDbTests : IClassFixture<MicroStackFixture>, IAsyncLife
             UpdateExpression = "REMOVE extra",
             ReturnValues     = ReturnValue.ALL_NEW,
         });
-        Assert.False(resp.Attributes.ContainsKey("extra"));
-        Assert.Equal("stay", resp.Attributes["keep"].S);
+        resp.Attributes.ContainsKey("extra").ShouldBe(false);
+        resp.Attributes["keep"].S.ShouldBe("stay");
     }
 
     [Fact]
@@ -399,7 +399,7 @@ public sealed class DynamoDbTests : IClassFixture<MicroStackFixture>, IAsyncLife
             ExpressionAttributeValues = new Dictionary<string, AttributeValue> { [":inc"] = new() { N = "3" } },
             ReturnValues             = ReturnValue.ALL_NEW,
         });
-        Assert.Equal("8", resp.Attributes["counter"].N);
+        resp.Attributes["counter"].N.ShouldBe("8");
     }
 
     [Fact]
@@ -417,7 +417,7 @@ public sealed class DynamoDbTests : IClassFixture<MicroStackFixture>, IAsyncLife
             ExpressionAttributeValues = new Dictionary<string, AttributeValue> { [":new"] = new() { N = "99" } },
             ReturnValues             = ReturnValue.ALL_OLD,
         });
-        Assert.Equal("1", resp.Attributes["v"].N);
+        resp.Attributes["v"].N.ShouldBe("1");
     }
 
     [Fact]
@@ -425,7 +425,7 @@ public sealed class DynamoDbTests : IClassFixture<MicroStackFixture>, IAsyncLife
     {
         await _ddb.CreateTableAsync(HashOnlyTable("t_update_cond_missing"));
 
-        await Assert.ThrowsAsync<ConditionalCheckFailedException>(() =>
+        await Should.ThrowAsync<ConditionalCheckFailedException>(() =>
             _ddb.UpdateItemAsync(new UpdateItemRequest
             {
                 TableName                = "t_update_cond_missing",
@@ -456,9 +456,9 @@ public sealed class DynamoDbTests : IClassFixture<MicroStackFixture>, IAsyncLife
             ExpressionAttributeValues = new Dictionary<string, AttributeValue> { [":new"] = new() { S = "new" } },
             ReturnValues             = ReturnValue.UPDATED_NEW,
         });
-        Assert.True(resp.Attributes.ContainsKey("a"));
-        Assert.Equal("new", resp.Attributes["a"].S);
-        Assert.False(resp.Attributes.ContainsKey("b"));
+        resp.Attributes.ContainsKey("a").ShouldBe(true);
+        resp.Attributes["a"].S.ShouldBe("new");
+        resp.Attributes.ContainsKey("b").ShouldBe(false);
     }
 
     [Fact]
@@ -476,7 +476,7 @@ public sealed class DynamoDbTests : IClassFixture<MicroStackFixture>, IAsyncLife
             ExpressionAttributeValues = new Dictionary<string, AttributeValue> { [":new"] = new() { N = "20" } },
             ReturnValues             = ReturnValue.UPDATED_OLD,
         });
-        Assert.Equal("10", resp.Attributes["score"].N);
+        resp.Attributes["score"].N.ShouldBe("10");
     }
 
     // ── Query ────────────────────────────────────────────────────────────────────
@@ -499,7 +499,7 @@ public sealed class DynamoDbTests : IClassFixture<MicroStackFixture>, IAsyncLife
             KeyConditionExpression   = "pk = :pk",
             ExpressionAttributeValues = new Dictionary<string, AttributeValue> { [":pk"] = new() { S = "q_pk" } },
         });
-        Assert.Equal(3, resp.Count);
+        resp.Count.ShouldBe(3);
     }
 
     [Fact]
@@ -523,9 +523,9 @@ public sealed class DynamoDbTests : IClassFixture<MicroStackFixture>, IAsyncLife
                 [":prefix"] = new() { S = "item_00" },
             },
         });
-        Assert.True(resp.Count >= 1);
+        (resp.Count >= 1).ShouldBe(true);
         foreach (var item in resp.Items)
-            Assert.StartsWith("item_00", item["sk"].S);
+            item["sk"].S.ShouldStartWith("item_00");
     }
 
     [Fact]
@@ -550,12 +550,12 @@ public sealed class DynamoDbTests : IClassFixture<MicroStackFixture>, IAsyncLife
                 [":hi"] = new() { S = "item_003" },
             },
         });
-        Assert.True(resp.Count >= 1);
+        (resp.Count >= 1).ShouldBe(true);
         foreach (var item in resp.Items)
         {
             var sk = item["sk"].S;
-            Assert.True(string.Compare(sk, "item_001", StringComparison.Ordinal) >= 0);
-            Assert.True(string.Compare(sk, "item_003", StringComparison.Ordinal) <= 0);
+            (string.Compare(sk, "item_001", StringComparison.Ordinal) >= 0).ShouldBe(true);
+            (string.Compare(sk, "item_003", StringComparison.Ordinal) <= 0).ShouldBe(true);
         }
     }
 
@@ -582,8 +582,8 @@ public sealed class DynamoDbTests : IClassFixture<MicroStackFixture>, IAsyncLife
                 [":min"] = new() { N = "2" },
             },
         });
-        Assert.Equal(2, resp.Count);
-        Assert.Equal(5, resp.ScannedCount);
+        resp.Count.ShouldBe(2);
+        resp.ScannedCount.ShouldBe(5);
     }
 
     [Fact]
@@ -604,8 +604,8 @@ public sealed class DynamoDbTests : IClassFixture<MicroStackFixture>, IAsyncLife
             ExpressionAttributeValues = new Dictionary<string, AttributeValue> { [":pk"] = new() { S = "q_page" } },
             Limit                    = 3,
         });
-        Assert.Equal(3, resp1.Count);
-        Assert.NotEmpty(resp1.LastEvaluatedKey);
+        resp1.Count.ShouldBe(3);
+        resp1.LastEvaluatedKey.ShouldNotBeEmpty();
 
         var resp2 = await _ddb.QueryAsync(new QueryRequest
         {
@@ -615,11 +615,11 @@ public sealed class DynamoDbTests : IClassFixture<MicroStackFixture>, IAsyncLife
             ExclusiveStartKey        = resp1.LastEvaluatedKey,
             Limit                    = 3,
         });
-        Assert.Equal(3, resp2.Count);
+        resp2.Count.ShouldBe(3);
 
         var page1Sks = resp1.Items.Select(it => it["sk"].S).ToHashSet();
         var page2Sks = resp2.Items.Select(it => it["sk"].S).ToHashSet();
-        Assert.Empty(page1Sks.Intersect(page2Sks));
+        page1Sks.Intersect(page2Sks).ShouldBeEmpty();
     }
 
     [Fact]
@@ -652,8 +652,8 @@ public sealed class DynamoDbTests : IClassFixture<MicroStackFixture>, IAsyncLife
                 [":t"]  = new() { BOOL = true },
             },
         });
-        Assert.Equal(3, resp.Count);
-        Assert.Equal(5, resp.ScannedCount);
+        resp.Count.ShouldBe(3);
+        resp.ScannedCount.ShouldBe(5);
     }
 
     [Fact]
@@ -689,10 +689,10 @@ public sealed class DynamoDbTests : IClassFixture<MicroStackFixture>, IAsyncLife
                 },
             },
         });
-        Assert.Equal(3, resp.Count);
-        Assert.Equal(5, resp.ScannedCount);
+        resp.Count.ShouldBe(3);
+        resp.ScannedCount.ShouldBe(5);
         foreach (var item in resp.Items)
-            Assert.Equal("active", item["status"].S);
+            item["status"].S.ShouldBe("active");
     }
 
     // ── Scan ─────────────────────────────────────────────────────────────────────
@@ -706,8 +706,8 @@ public sealed class DynamoDbTests : IClassFixture<MicroStackFixture>, IAsyncLife
                 { ["pk"] = new() { S = $"sc_{i}" }, ["n"] = new() { N = i.ToString() } });
 
         var resp = await _ddb.ScanAsync(new ScanRequest { TableName = "t_scan" });
-        Assert.Equal(8, resp.Count);
-        Assert.Equal(8, resp.Items.Count);
+        resp.Count.ShouldBe(8);
+        resp.Items.Count.ShouldBe(8);
     }
 
     [Fact]
@@ -724,9 +724,9 @@ public sealed class DynamoDbTests : IClassFixture<MicroStackFixture>, IAsyncLife
             FilterExpression         = "n >= :min",
             ExpressionAttributeValues = new Dictionary<string, AttributeValue> { [":min"] = new() { N = "5" } },
         });
-        Assert.Equal(3, resp.Count);
+        resp.Count.ShouldBe(3);
         foreach (var item in resp.Items)
-            Assert.True(int.Parse(item["n"].N) >= 5);
+            (int.Parse(item["n"].N) >= 5).ShouldBe(true);
     }
 
     [Fact]
@@ -748,7 +748,7 @@ public sealed class DynamoDbTests : IClassFixture<MicroStackFixture>, IAsyncLife
             lek = resp.LastEvaluatedKey?.Count > 0 ? resp.LastEvaluatedKey : null;
         } while (lek is not null);
 
-        Assert.Equal(10, allItems.Count);
+        allItems.Count.ShouldBe(10);
     }
 
     [Fact]
@@ -760,8 +760,8 @@ public sealed class DynamoDbTests : IClassFixture<MicroStackFixture>, IAsyncLife
                 { ["pk"] = new() { S = $"item_{i:D3}" }, ["v"] = new() { N = i.ToString() } });
 
         var resp1 = await _ddb.ScanAsync(new ScanRequest { TableName = "t_hash_paginate", Limit = 3 });
-        Assert.Equal(3, resp1.Count);
-        Assert.NotEmpty(resp1.LastEvaluatedKey);
+        resp1.Count.ShouldBe(3);
+        resp1.LastEvaluatedKey.ShouldNotBeEmpty();
 
         var resp2 = await _ddb.ScanAsync(new ScanRequest
         {
@@ -769,10 +769,10 @@ public sealed class DynamoDbTests : IClassFixture<MicroStackFixture>, IAsyncLife
             Limit             = 3,
             ExclusiveStartKey = resp1.LastEvaluatedKey,
         });
-        Assert.Equal(2, resp2.Count);
+        resp2.Count.ShouldBe(2);
 
         var all = resp1.Items.Concat(resp2.Items).Select(it => it["pk"].S).ToHashSet();
-        Assert.Equal(5, all.Count);
+        all.Count.ShouldBe(5);
     }
 
     [Fact]
@@ -798,9 +798,9 @@ public sealed class DynamoDbTests : IClassFixture<MicroStackFixture>, IAsyncLife
                 },
             },
         });
-        Assert.Equal(3, resp.Count);
+        resp.Count.ShouldBe(3);
         foreach (var item in resp.Items)
-            Assert.Equal("red", item["color"].S);
+            item["color"].S.ShouldBe("red");
     }
 
     // ── Batch operations ─────────────────────────────────────────────────────────
@@ -828,7 +828,7 @@ public sealed class DynamoDbTests : IClassFixture<MicroStackFixture>, IAsyncLife
         });
 
         var scan = await _ddb.ScanAsync(new ScanRequest { TableName = "t_bw" });
-        Assert.Equal(10, scan.Count);
+        scan.Count.ShouldBe(10);
     }
 
     [Fact]
@@ -851,7 +851,7 @@ public sealed class DynamoDbTests : IClassFixture<MicroStackFixture>, IAsyncLife
                 },
             },
         });
-        Assert.Equal(5, resp.Responses["t_bw"].Count);
+        resp.Responses["t_bw"].Count.ShouldBe(5);
     }
 
     [Fact]
@@ -867,7 +867,7 @@ public sealed class DynamoDbTests : IClassFixture<MicroStackFixture>, IAsyncLife
                 },
             },
         });
-        Assert.True(resp.UnprocessedKeys.ContainsKey("qa-ddb-nonexistent-xyz"));
+        resp.UnprocessedKeys.ContainsKey("qa-ddb-nonexistent-xyz").ShouldBe(true);
     }
 
     [Fact]
@@ -885,9 +885,9 @@ public sealed class DynamoDbTests : IClassFixture<MicroStackFixture>, IAsyncLife
             },
             ReturnConsumedCapacity = ReturnConsumedCapacity.TOTAL,
         });
-        Assert.NotEmpty(resp.ConsumedCapacity);
-        Assert.Equal("batch-cap-regression", resp.ConsumedCapacity[0].TableName);
-        Assert.Equal(1.0, resp.ConsumedCapacity[0].CapacityUnits);
+        resp.ConsumedCapacity.ShouldNotBeEmpty();
+        resp.ConsumedCapacity[0].TableName.ShouldBe("batch-cap-regression");
+        resp.ConsumedCapacity[0].CapacityUnits.ShouldBe(1.0);
         await _ddb.DeleteTableAsync("batch-cap-regression");
     }
 
@@ -923,7 +923,7 @@ public sealed class DynamoDbTests : IClassFixture<MicroStackFixture>, IAsyncLife
             },
             ReturnConsumedCapacity = ReturnConsumedCapacity.TOTAL,
         });
-        Assert.Equal(2.0, resp.ConsumedCapacity.CapacityUnits);
+        resp.ConsumedCapacity.CapacityUnits.ShouldBe(2.0);
         await _ddb.DeleteTableAsync("gsi-cap-put");
     }
 
@@ -959,7 +959,7 @@ public sealed class DynamoDbTests : IClassFixture<MicroStackFixture>, IAsyncLife
             },
             ReturnConsumedCapacity = ReturnConsumedCapacity.TOTAL,
         });
-        Assert.Equal(4.0, resp.ConsumedCapacity[0].CapacityUnits);
+        resp.ConsumedCapacity[0].CapacityUnits.ShouldBe(4.0);
         await _ddb.DeleteTableAsync("gsi-cap-batch");
     }
 
@@ -979,7 +979,7 @@ public sealed class DynamoDbTests : IClassFixture<MicroStackFixture>, IAsyncLife
         });
 
         var scan = await _ddb.ScanAsync(new ScanRequest { TableName = "t_tx" });
-        Assert.Equal(3, scan.Count);
+        scan.Count.ShouldBe(3);
 
         await _ddb.TransactWriteItemsAsync(new TransactWriteItemsRequest
         {
@@ -999,10 +999,10 @@ public sealed class DynamoDbTests : IClassFixture<MicroStackFixture>, IAsyncLife
         });
 
         var item = (await _ddb.GetItemAsync("t_tx", StrAttr("pk", "tx1"))).Item;
-        Assert.Equal("updated", item["v"].S);
+        item["v"].S.ShouldBe("updated");
 
         var gone = await _ddb.GetItemAsync("t_tx", StrAttr("pk", "tx3"));
-        Assert.Null(gone.Item);
+        gone.Item.ShouldBeNull();
     }
 
     [Fact]
@@ -1019,9 +1019,9 @@ public sealed class DynamoDbTests : IClassFixture<MicroStackFixture>, IAsyncLife
                 new TransactGetItem { Get = new Get { TableName = "t_tx", Key = StrAttr("pk", "tx2") } },
             ],
         });
-        Assert.Equal(2, resp.Responses.Count);
-        Assert.Equal("tx1", resp.Responses[0].Item["pk"].S);
-        Assert.Equal("tx2", resp.Responses[1].Item["pk"].S);
+        resp.Responses.Count.ShouldBe(2);
+        resp.Responses[0].Item["pk"].S.ShouldBe("tx1");
+        resp.Responses[1].Item["pk"].S.ShouldBe("tx2");
     }
 
     [Fact]
@@ -1031,7 +1031,7 @@ public sealed class DynamoDbTests : IClassFixture<MicroStackFixture>, IAsyncLife
         await _ddb.PutItemAsync("qa-ddb-transact", new Dictionary<string, AttributeValue>
             { ["pk"] = new() { S = "existing" } });
 
-        await Assert.ThrowsAsync<TransactionCanceledException>(() =>
+        await Should.ThrowAsync<TransactionCanceledException>(() =>
             _ddb.TransactWriteItemsAsync(new TransactWriteItemsRequest
             {
                 TransactItems = [
@@ -1056,7 +1056,7 @@ public sealed class DynamoDbTests : IClassFixture<MicroStackFixture>, IAsyncLife
             }));
 
         var resp = await _ddb.GetItemAsync("qa-ddb-transact", StrAttr("pk", "new-item"));
-        Assert.Null(resp.Item);
+        resp.Item.ShouldBeNull();
     }
 
     // ── GSI Query ────────────────────────────────────────────────────────────────
@@ -1103,9 +1103,9 @@ public sealed class DynamoDbTests : IClassFixture<MicroStackFixture>, IAsyncLife
             KeyConditionExpression   = "gsi_pk = :gpk",
             ExpressionAttributeValues = new Dictionary<string, AttributeValue> { [":gpk"] = new() { S = "shared_gsi" } },
         });
-        Assert.Equal(4, resp.Count);
+        resp.Count.ShouldBe(4);
         foreach (var item in resp.Items)
-            Assert.Equal("shared_gsi", item["gsi_pk"].S);
+            item["gsi_pk"].S.ShouldBe("shared_gsi");
     }
 
     // ── TTL ──────────────────────────────────────────────────────────────────────
@@ -1117,7 +1117,7 @@ public sealed class DynamoDbTests : IClassFixture<MicroStackFixture>, IAsyncLife
         await _ddb.CreateTableAsync(HashOnlyTable(table));
 
         var desc1 = await _ddb.DescribeTimeToLiveAsync(table);
-        Assert.Equal(TimeToLiveStatus.DISABLED, desc1.TimeToLiveDescription.TimeToLiveStatus);
+        desc1.TimeToLiveDescription.TimeToLiveStatus.ShouldBe(TimeToLiveStatus.DISABLED);
 
         await _ddb.UpdateTimeToLiveAsync(new UpdateTimeToLiveRequest
         {
@@ -1126,8 +1126,8 @@ public sealed class DynamoDbTests : IClassFixture<MicroStackFixture>, IAsyncLife
         });
 
         var desc2 = await _ddb.DescribeTimeToLiveAsync(table);
-        Assert.Equal(TimeToLiveStatus.ENABLED, desc2.TimeToLiveDescription.TimeToLiveStatus);
-        Assert.Equal("expires_at", desc2.TimeToLiveDescription.AttributeName);
+        desc2.TimeToLiveDescription.TimeToLiveStatus.ShouldBe(TimeToLiveStatus.ENABLED);
+        desc2.TimeToLiveDescription.AttributeName.ShouldBe("expires_at");
 
         await _ddb.UpdateTimeToLiveAsync(new UpdateTimeToLiveRequest
         {
@@ -1136,7 +1136,7 @@ public sealed class DynamoDbTests : IClassFixture<MicroStackFixture>, IAsyncLife
         });
 
         var desc3 = await _ddb.DescribeTimeToLiveAsync(table);
-        Assert.Equal(TimeToLiveStatus.DISABLED, desc3.TimeToLiveDescription.TimeToLiveStatus);
+        desc3.TimeToLiveDescription.TimeToLiveStatus.ShouldBe(TimeToLiveStatus.DISABLED);
         await _ddb.DeleteTableAsync(table);
     }
 
@@ -1160,11 +1160,11 @@ public sealed class DynamoDbTests : IClassFixture<MicroStackFixture>, IAsyncLife
         });
 
         var resp = await _ddb.GetItemAsync(table, StrAttr("pk", "expired-item"));
-        Assert.NotEmpty(resp.Item);
+        resp.Item.ShouldNotBeEmpty();
 
         var ttlDesc = await _ddb.DescribeTimeToLiveAsync(table);
-        Assert.Equal(TimeToLiveStatus.ENABLED, ttlDesc.TimeToLiveDescription.TimeToLiveStatus);
-        Assert.Equal("expires_at", ttlDesc.TimeToLiveDescription.AttributeName);
+        ttlDesc.TimeToLiveDescription.TimeToLiveStatus.ShouldBe(TimeToLiveStatus.ENABLED);
+        ttlDesc.TimeToLiveDescription.AttributeName.ShouldBe("expires_at");
     }
 
     // ── Continuous backups (PITR) ────────────────────────────────────────────────
@@ -1176,8 +1176,8 @@ public sealed class DynamoDbTests : IClassFixture<MicroStackFixture>, IAsyncLife
 
         var resp = await _ddb.DescribeContinuousBackupsAsync(new DescribeContinuousBackupsRequest { TableName = "ddb-pitr-tbl" });
         var cbs  = resp.ContinuousBackupsDescription;
-        Assert.Equal(ContinuousBackupsStatus.ENABLED, cbs.ContinuousBackupsStatus);
-        Assert.Equal(PointInTimeRecoveryStatus.DISABLED, cbs.PointInTimeRecoveryDescription.PointInTimeRecoveryStatus);
+        cbs.ContinuousBackupsStatus.ShouldBe(ContinuousBackupsStatus.ENABLED);
+        cbs.PointInTimeRecoveryDescription.PointInTimeRecoveryStatus.ShouldBe(PointInTimeRecoveryStatus.DISABLED);
     }
 
     [Fact]
@@ -1191,8 +1191,7 @@ public sealed class DynamoDbTests : IClassFixture<MicroStackFixture>, IAsyncLife
         });
 
         var resp = await _ddb.DescribeContinuousBackupsAsync(new DescribeContinuousBackupsRequest { TableName = "ddb-pitr-tbl" });
-        Assert.Equal(PointInTimeRecoveryStatus.ENABLED,
-            resp.ContinuousBackupsDescription.PointInTimeRecoveryDescription.PointInTimeRecoveryStatus);
+        resp.ContinuousBackupsDescription.PointInTimeRecoveryDescription.PointInTimeRecoveryStatus.ShouldBe(PointInTimeRecoveryStatus.ENABLED);
     }
 
     // ── Tags ─────────────────────────────────────────────────────────────────────
@@ -1212,15 +1211,15 @@ public sealed class DynamoDbTests : IClassFixture<MicroStackFixture>, IAsyncLife
 
         var tags1 = (await _ddb.ListTagsOfResourceAsync(new ListTagsOfResourceRequest { ResourceArn = arn })).Tags;
         var keys1 = tags1.Select(t => t.Key).ToHashSet();
-        Assert.Contains("env", keys1);
-        Assert.Contains("team", keys1);
+        keys1.ShouldContain("env");
+        keys1.ShouldContain("team");
 
         await _ddb.UntagResourceAsync(new UntagResourceRequest { ResourceArn = arn, TagKeys = ["team"] });
 
         var tags2 = (await _ddb.ListTagsOfResourceAsync(new ListTagsOfResourceRequest { ResourceArn = arn })).Tags;
         var keys2 = tags2.Select(t => t.Key).ToHashSet();
-        Assert.Contains("env", keys2);
-        Assert.DoesNotContain("team", keys2);
+        keys2.ShouldContain("env");
+        keys2.ShouldNotContain("team");
     }
 
     // ── Endpoints ────────────────────────────────────────────────────────────────
@@ -1229,8 +1228,8 @@ public sealed class DynamoDbTests : IClassFixture<MicroStackFixture>, IAsyncLife
     public async Task DescribeEndpoints_ReturnsEndpoints()
     {
         var resp = await _ddb.DescribeEndpointsAsync(new DescribeEndpointsRequest());
-        Assert.NotEmpty(resp.Endpoints);
-        Assert.NotEmpty(resp.Endpoints[0].Address);
+        resp.Endpoints.ShouldNotBeEmpty();
+        resp.Endpoints[0].Address.ShouldNotBeEmpty();
     }
 
     // ── Streams ──────────────────────────────────────────────────────────────────
@@ -1249,9 +1248,8 @@ public sealed class DynamoDbTests : IClassFixture<MicroStackFixture>, IAsyncLife
         });
 
         var desc = (await _ddb.DescribeTableAsync(tableName)).Table;
-        Assert.True(
-            !string.IsNullOrEmpty(desc.LatestStreamArn) ||
-            (desc.StreamSpecification?.StreamEnabled == true));
+        (!string.IsNullOrEmpty(desc.LatestStreamArn) ||
+            (desc.StreamSpecification?.StreamEnabled == true)).ShouldBe(true);
 
         await _ddb.PutItemAsync(tableName, new Dictionary<string, AttributeValue>
             { ["pk"] = new() { S = "k1" }, ["val"] = new() { S = "v1" } });
@@ -1267,6 +1265,6 @@ public sealed class DynamoDbTests : IClassFixture<MicroStackFixture>, IAsyncLife
         await _ddb.DeleteItemAsync(tableName, StrAttr("pk", "k1"));
 
         var get = await _ddb.GetItemAsync(tableName, StrAttr("pk", "k1"));
-        Assert.Null(get.Item);
+        get.Item.ShouldBeNull();
     }
 }

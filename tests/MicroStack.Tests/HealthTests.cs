@@ -15,7 +15,7 @@ public sealed class HealthTests : IClassFixture<MicroStackFixture>
     public async Task HealthEndpointReturns200()
     {
         var response = await _client.GetAsync("/_ministack/health");
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
     }
 
     [Fact]
@@ -24,8 +24,8 @@ public sealed class HealthTests : IClassFixture<MicroStackFixture>
         var response = await _client.GetAsync("/_ministack/health");
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
 
-        Assert.Equal("light",   body.GetProperty("edition").GetString());
-        Assert.Equal("0.1.0",   body.GetProperty("version").GetString());
+        body.GetProperty("edition").GetString().ShouldBe("light");
+        body.GetProperty("version").GetString().ShouldBe("0.1.0");
     }
 
     [Fact]
@@ -34,31 +34,31 @@ public sealed class HealthTests : IClassFixture<MicroStackFixture>
         var response = await _client.GetAsync("/_ministack/health");
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
 
-        Assert.Equal(JsonValueKind.Object, body.GetProperty("services").ValueKind);
+        body.GetProperty("services").ValueKind.ShouldBe(JsonValueKind.Object);
     }
 
     [Fact]
     public async Task LocalStackHealthAliasReturns200()
     {
         var response = await _client.GetAsync("/_localstack/health");
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
     }
 
     [Fact]
     public async Task ShortHealthAliasReturns200()
     {
         var response = await _client.GetAsync("/health");
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
     }
 
     [Fact]
     public async Task ResetEndpointReturnsOk()
     {
         var response = await _client.PostAsync("/_ministack/reset", null);
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
 
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
-        Assert.Equal("ok", body.GetProperty("reset").GetString());
+        body.GetProperty("reset").GetString().ShouldBe("ok");
     }
 
     [Fact]
@@ -67,8 +67,6 @@ public sealed class HealthTests : IClassFixture<MicroStackFixture>
         var request = new HttpRequestMessage(HttpMethod.Options, "/_ministack/health");
         var response = await _client.SendAsync(request);
 
-        Assert.True(
-            response.Headers.Contains("Access-Control-Allow-Origin"),
-            "Expected Access-Control-Allow-Origin CORS header on OPTIONS response");
+        response.Headers.Contains("Access-Control-Allow-Origin").ShouldBe(true, "Expected Access-Control-Allow-Origin CORS header on OPTIONS response");
     }
 }

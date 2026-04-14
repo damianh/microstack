@@ -75,19 +75,19 @@ public sealed class Route53Tests : IClassFixture<MicroStackFixture>, IAsyncLifet
             CallerReference = "ref-create-1",
         });
 
-        Assert.Equal(201, (int)resp.HttpStatusCode);
+        ((int)resp.HttpStatusCode).ShouldBe(201);
         var hz = resp.HostedZone;
         var zoneId = hz.Id.Split('/')[^1];
-        Assert.Equal("example.com.", hz.Name);
-        Assert.NotNull(resp.DelegationSet);
-        Assert.Equal(4, resp.DelegationSet.NameServers.Count);
+        hz.Name.ShouldBe("example.com.");
+        resp.DelegationSet.ShouldNotBeNull();
+        resp.DelegationSet.NameServers.Count.ShouldBe(4);
 
         var getResp = await _r53.GetHostedZoneAsync(new GetHostedZoneRequest
         {
             Id = zoneId,
         });
-        Assert.Equal("example.com.", getResp.HostedZone.Name);
-        Assert.Equal(2, getResp.HostedZone.ResourceRecordSetCount); // SOA + NS
+        getResp.HostedZone.Name.ShouldBe("example.com.");
+        getResp.HostedZone.ResourceRecordSetCount.ShouldBe(2); // SOA + NS
     }
 
     [Fact]
@@ -105,7 +105,7 @@ public sealed class Route53Tests : IClassFixture<MicroStackFixture>, IAsyncLifet
             CallerReference = "ref-idem-1",
         });
         // Same CallerReference → same zone returned, not a new one
-        Assert.Equal("idempotent.com.", resp2.HostedZone.Name);
+        resp2.HostedZone.Name.ShouldBe("idempotent.com.");
     }
 
     [Fact]
@@ -119,7 +119,7 @@ public sealed class Route53Tests : IClassFixture<MicroStackFixture>, IAsyncLifet
 
         var resp = await _r53.ListHostedZonesAsync(new ListHostedZonesRequest());
         var names = resp.HostedZones.Select(hz => hz.Name).ToList();
-        Assert.Contains("list-test.com.", names);
+        names.ShouldContain("list-test.com.");
     }
 
     [Fact]
@@ -140,7 +140,7 @@ public sealed class Route53Tests : IClassFixture<MicroStackFixture>, IAsyncLifet
         {
             DNSName = "byname-alpha.com",
         });
-        Assert.Equal("byname-alpha.com.", resp.HostedZones[0].Name);
+        resp.HostedZones[0].Name.ShouldBe("byname-alpha.com.");
     }
 
     [Fact]
@@ -158,9 +158,9 @@ public sealed class Route53Tests : IClassFixture<MicroStackFixture>, IAsyncLifet
             Id = zoneId,
         });
 
-        var ex = await Assert.ThrowsAsync<NoSuchHostedZoneException>(() =>
+        var ex = await Should.ThrowAsync<NoSuchHostedZoneException>(() =>
             _r53.GetHostedZoneAsync(new GetHostedZoneRequest { Id = zoneId }));
-        Assert.Contains("NoSuchHostedZone", ex.ErrorCode);
+        ex.ErrorCode.ShouldContain("NoSuchHostedZone");
     }
 
     [Fact]
@@ -190,7 +190,7 @@ public sealed class Route53Tests : IClassFixture<MicroStackFixture>, IAsyncLifet
             },
         });
 
-        Assert.Equal("INSYNC", changeResp.ChangeInfo.Status);
+        changeResp.ChangeInfo.Status.Value.ShouldBe("INSYNC");
     }
 
     [Fact]
@@ -226,9 +226,9 @@ public sealed class Route53Tests : IClassFixture<MicroStackFixture>, IAsyncLifet
         });
 
         var types = listResp.ResourceRecordSets.Select(rrs => rrs.Type.Value).ToList();
-        Assert.Contains("MX", types);
-        Assert.Contains("SOA", types);
-        Assert.Contains("NS", types);
+        types.ShouldContain("MX");
+        types.ShouldContain("SOA");
+        types.ShouldContain("NS");
     }
 
     [Fact]
@@ -287,11 +287,10 @@ public sealed class Route53Tests : IClassFixture<MicroStackFixture>, IAsyncLifet
         });
 
         var returned = listResp.ResourceRecordSets;
-        Assert.Equal("child.parent-zone.com.", returned[0].Name);
-        Assert.Equal(RRType.NS, returned[0].Type);
+        returned[0].Name.ShouldBe("child.parent-zone.com.");
+        returned[0].Type.ShouldBe(RRType.NS);
         // Parent NS for "parent-zone.com." should not be in results
-        Assert.DoesNotContain(returned,
-            rrs => rrs.Name == "parent-zone.com." && rrs.Type == RRType.NS);
+        returned.ShouldNotContain(rrs => rrs.Name == "parent-zone.com." && rrs.Type == RRType.NS);
     }
 
     [Fact]
@@ -346,11 +345,11 @@ public sealed class Route53Tests : IClassFixture<MicroStackFixture>, IAsyncLifet
             MaxItems = "1",
         });
 
-        Assert.Equal("token.pagination-zone.com.", listResp.ResourceRecordSets[0].Name);
-        Assert.Equal(RRType.TXT, listResp.ResourceRecordSets[0].Type);
-        Assert.True(listResp.IsTruncated);
-        Assert.Equal("zz-next.pagination-zone.com.", listResp.NextRecordName);
-        Assert.Equal("NS", listResp.NextRecordType);
+        listResp.ResourceRecordSets[0].Name.ShouldBe("token.pagination-zone.com.");
+        listResp.ResourceRecordSets[0].Type.ShouldBe(RRType.TXT);
+        listResp.IsTruncated.ShouldBe(true);
+        listResp.NextRecordName.ShouldBe("zz-next.pagination-zone.com.");
+        listResp.NextRecordType.Value.ShouldBe("NS");
     }
 
     [Fact]
@@ -405,9 +404,9 @@ public sealed class Route53Tests : IClassFixture<MicroStackFixture>, IAsyncLifet
             MaxItems = "1",
         });
 
-        Assert.Equal("token.cursor-zone.com.", firstPage.ResourceRecordSets[0].Name);
-        Assert.Equal(RRType.TXT, firstPage.ResourceRecordSets[0].Type);
-        Assert.True(firstPage.IsTruncated);
+        firstPage.ResourceRecordSets[0].Name.ShouldBe("token.cursor-zone.com.");
+        firstPage.ResourceRecordSets[0].Type.ShouldBe(RRType.TXT);
+        firstPage.IsTruncated.ShouldBe(true);
 
         var secondPage = await _r53.ListResourceRecordSetsAsync(new ListResourceRecordSetsRequest
         {
@@ -417,10 +416,10 @@ public sealed class Route53Tests : IClassFixture<MicroStackFixture>, IAsyncLifet
             MaxItems = "1",
         });
 
-        Assert.Equal("zz-next.cursor-zone.com.", secondPage.ResourceRecordSets[0].Name);
-        Assert.Equal(RRType.NS, secondPage.ResourceRecordSets[0].Type);
-        Assert.NotEqual(firstPage.ResourceRecordSets[0].Name, secondPage.ResourceRecordSets[0].Name);
-        Assert.False(secondPage.IsTruncated);
+        secondPage.ResourceRecordSets[0].Name.ShouldBe("zz-next.cursor-zone.com.");
+        secondPage.ResourceRecordSets[0].Type.ShouldBe(RRType.NS);
+        secondPage.ResourceRecordSets[0].Name.ShouldNotBe(firstPage.ResourceRecordSets[0].Name);
+        secondPage.IsTruncated.ShouldBe(false);
     }
 
     [Fact]
@@ -458,8 +457,8 @@ public sealed class Route53Tests : IClassFixture<MicroStackFixture>, IAsyncLifet
             HostedZoneId = zoneId,
         });
         var aRecords = listResp.ResourceRecordSets.Where(rrs => rrs.Type == RRType.A).ToList();
-        Assert.Single(aRecords);
-        Assert.Equal("2.2.2.2", aRecords[0].ResourceRecords[0].Value);
+        aRecords.ShouldHaveSingleItem();
+        aRecords[0].ResourceRecords[0].Value.ShouldBe("2.2.2.2");
     }
 
     [Fact]
@@ -516,7 +515,7 @@ public sealed class Route53Tests : IClassFixture<MicroStackFixture>, IAsyncLifet
             HostedZoneId = zoneId,
         });
         var aRecords = listResp.ResourceRecordSets.Where(rrs => rrs.Type == RRType.A).ToList();
-        Assert.Empty(aRecords);
+        aRecords.ShouldBeEmpty();
     }
 
     [Fact]
@@ -551,7 +550,7 @@ public sealed class Route53Tests : IClassFixture<MicroStackFixture>, IAsyncLifet
         {
             Id = changeId,
         });
-        Assert.Equal(ChangeStatus.INSYNC, getChange.ChangeInfo.Status);
+        getChange.ChangeInfo.Status.ShouldBe(ChangeStatus.INSYNC);
     }
 
     [Fact]
@@ -571,15 +570,15 @@ public sealed class Route53Tests : IClassFixture<MicroStackFixture>, IAsyncLifet
             },
         });
 
-        Assert.Equal(201, (int)resp.HttpStatusCode);
+        ((int)resp.HttpStatusCode).ShouldBe(201);
         var hcId = resp.HealthCheck.Id;
-        Assert.Equal(HealthCheckType.HTTP, resp.HealthCheck.HealthCheckConfig.Type);
+        resp.HealthCheck.HealthCheckConfig.Type.ShouldBe(HealthCheckType.HTTP);
 
         var getResp = await _r53.GetHealthCheckAsync(new GetHealthCheckRequest
         {
             HealthCheckId = hcId,
         });
-        Assert.Equal(hcId, getResp.HealthCheck.Id);
+        getResp.HealthCheck.Id.ShouldBe(hcId);
     }
 
     [Fact]
@@ -597,7 +596,7 @@ public sealed class Route53Tests : IClassFixture<MicroStackFixture>, IAsyncLifet
         });
 
         var resp = await _r53.ListHealthChecksAsync(new ListHealthChecksRequest());
-        Assert.True(resp.HealthChecks.Count >= 1);
+        (resp.HealthChecks.Count >= 1).ShouldBe(true);
     }
 
     [Fact]
@@ -620,9 +619,9 @@ public sealed class Route53Tests : IClassFixture<MicroStackFixture>, IAsyncLifet
             HealthCheckId = hcId,
         });
 
-        var ex = await Assert.ThrowsAsync<NoSuchHealthCheckException>(() =>
+        var ex = await Should.ThrowAsync<NoSuchHealthCheckException>(() =>
             _r53.GetHealthCheckAsync(new GetHealthCheckRequest { HealthCheckId = hcId }));
-        Assert.Contains("NoSuchHealthCheck", ex.ErrorCode);
+        ex.ErrorCode.ShouldContain("NoSuchHealthCheck");
     }
 
     [Fact]
@@ -647,8 +646,8 @@ public sealed class Route53Tests : IClassFixture<MicroStackFixture>, IAsyncLifet
             ResourceId = zoneId,
         });
         var tags = tagsResp.ResourceTagSet.Tags.ToDictionary(t => t.Key, t => t.Value);
-        Assert.Equal("test", tags["env"]);
-        Assert.Equal("infra", tags["team"]);
+        tags["env"].ShouldBe("test");
+        tags["team"].ShouldBe("infra");
 
         // Remove a tag
         await _r53.ChangeTagsForResourceAsync(new ChangeTagsForResourceRequest
@@ -664,16 +663,16 @@ public sealed class Route53Tests : IClassFixture<MicroStackFixture>, IAsyncLifet
             ResourceId = zoneId,
         });
         var keys2 = tagsResp2.ResourceTagSet.Tags.Select(t => t.Key).ToList();
-        Assert.Contains("env", keys2);
-        Assert.DoesNotContain("team", keys2);
+        keys2.ShouldContain("env");
+        keys2.ShouldNotContain("team");
     }
 
     [Fact]
     public async Task NoSuchHostedZone()
     {
-        var ex = await Assert.ThrowsAsync<NoSuchHostedZoneException>(() =>
+        var ex = await Should.ThrowAsync<NoSuchHostedZoneException>(() =>
             _r53.GetHostedZoneAsync(new GetHostedZoneRequest { Id = "ZNOTEXIST1234" }));
-        Assert.Contains("NoSuchHostedZone", ex.ErrorCode);
+        ex.ErrorCode.ShouldContain("NoSuchHostedZone");
     }
 
     [Fact]
@@ -714,8 +713,8 @@ public sealed class Route53Tests : IClassFixture<MicroStackFixture>, IAsyncLifet
         var aliasRecs = listResp.ResourceRecordSets
             .Where(rrs => rrs.Type == RRType.A && rrs.AliasTarget is not null)
             .ToList();
-        Assert.Single(aliasRecs);
-        Assert.Equal("d1234.cloudfront.net.", aliasRecs[0].AliasTarget.DNSName);
+        aliasRecs.ShouldHaveSingleItem();
+        aliasRecs[0].AliasTarget.DNSName.ShouldBe("d1234.cloudfront.net.");
     }
 
     [Fact]
@@ -745,9 +744,9 @@ public sealed class Route53Tests : IClassFixture<MicroStackFixture>, IAsyncLifet
             },
         });
 
-        var ex = await Assert.ThrowsAsync<HostedZoneNotEmptyException>(() =>
+        var ex = await Should.ThrowAsync<HostedZoneNotEmptyException>(() =>
             _r53.DeleteHostedZoneAsync(new DeleteHostedZoneRequest { Id = zoneId }));
-        Assert.Contains("HostedZoneNotEmpty", ex.ErrorCode);
+        ex.ErrorCode.ShouldContain("HostedZoneNotEmpty");
     }
 
     [Fact]
@@ -787,8 +786,8 @@ public sealed class Route53Tests : IClassFixture<MicroStackFixture>, IAsyncLifet
         var aRecords = records.ResourceRecordSets
             .Where(r => r.Name == "api.qa-r53-upsert.com." && r.Type == RRType.A)
             .ToList();
-        Assert.Single(aRecords);
-        Assert.Equal("2.2.2.2", aRecords[0].ResourceRecords[0].Value);
+        aRecords.ShouldHaveSingleItem();
+        aRecords[0].ResourceRecords[0].Value.ShouldBe("2.2.2.2");
     }
 
     [Fact]
@@ -818,7 +817,7 @@ public sealed class Route53Tests : IClassFixture<MicroStackFixture>, IAsyncLifet
             },
         });
 
-        var ex = await Assert.ThrowsAsync<InvalidChangeBatchException>(() =>
+        var ex = await Should.ThrowAsync<InvalidChangeBatchException>(() =>
             _r53.ChangeResourceRecordSetsAsync(new ChangeResourceRecordSetsRequest
             {
                 HostedZoneId = zoneId,
@@ -840,7 +839,7 @@ public sealed class Route53Tests : IClassFixture<MicroStackFixture>, IAsyncLifet
                     ],
                 },
             }));
-        Assert.Contains("InvalidChangeBatch", ex.ErrorCode);
+        ex.ErrorCode.ShouldContain("InvalidChangeBatch");
     }
 
     [Fact]
@@ -850,7 +849,7 @@ public sealed class Route53Tests : IClassFixture<MicroStackFixture>, IAsyncLifet
         await CreateZone("count-test-2.com", "ref-count-2");
 
         var resp = await _r53.GetHostedZoneCountAsync(new GetHostedZoneCountRequest());
-        Assert.True(resp.HostedZoneCount >= 2);
+        (resp.HostedZoneCount >= 2).ShouldBe(true);
     }
 
     [Fact]
@@ -879,7 +878,7 @@ public sealed class Route53Tests : IClassFixture<MicroStackFixture>, IAsyncLifet
         });
 
         // Same CallerReference → same health check returned
-        Assert.Equal(resp1.HealthCheck.Id, resp2.HealthCheck.Id);
+        resp2.HealthCheck.Id.ShouldBe(resp1.HealthCheck.Id);
     }
 
     [Fact]
@@ -904,8 +903,8 @@ public sealed class Route53Tests : IClassFixture<MicroStackFixture>, IAsyncLifet
             ResourcePath = "/new-path",
         });
 
-        Assert.Equal("/new-path", updateResp.HealthCheck.HealthCheckConfig.ResourcePath);
-        Assert.Equal(2, updateResp.HealthCheck.HealthCheckVersion);
+        updateResp.HealthCheck.HealthCheckConfig.ResourcePath.ShouldBe("/new-path");
+        updateResp.HealthCheck.HealthCheckVersion.ShouldBe(2);
     }
 
     [Fact]
@@ -959,7 +958,7 @@ public sealed class Route53Tests : IClassFixture<MicroStackFixture>, IAsyncLifet
         });
 
         // Second delete fails
-        var ex = await Assert.ThrowsAsync<InvalidChangeBatchException>(() =>
+        var ex = await Should.ThrowAsync<InvalidChangeBatchException>(() =>
             _r53.ChangeResourceRecordSetsAsync(new ChangeResourceRecordSetsRequest
             {
                 HostedZoneId = zoneId,
@@ -981,13 +980,13 @@ public sealed class Route53Tests : IClassFixture<MicroStackFixture>, IAsyncLifet
                     ],
                 },
             }));
-        Assert.Contains("InvalidChangeBatch", ex.ErrorCode);
+        ex.ErrorCode.ShouldContain("InvalidChangeBatch");
     }
 
     [Fact]
     public async Task ChangeRecordSetsOnNonExistentZoneFails()
     {
-        var ex = await Assert.ThrowsAsync<NoSuchHostedZoneException>(() =>
+        var ex = await Should.ThrowAsync<NoSuchHostedZoneException>(() =>
             _r53.ChangeResourceRecordSetsAsync(new ChangeResourceRecordSetsRequest
             {
                 HostedZoneId = "ZNOTEXIST1234",
@@ -1009,18 +1008,18 @@ public sealed class Route53Tests : IClassFixture<MicroStackFixture>, IAsyncLifet
                     ],
                 },
             }));
-        Assert.Contains("NoSuchHostedZone", ex.ErrorCode);
+        ex.ErrorCode.ShouldContain("NoSuchHostedZone");
     }
 
     [Fact]
     public async Task ListResourceRecordSetsOnNonExistentZoneFails()
     {
-        var ex = await Assert.ThrowsAsync<NoSuchHostedZoneException>(() =>
+        var ex = await Should.ThrowAsync<NoSuchHostedZoneException>(() =>
             _r53.ListResourceRecordSetsAsync(new ListResourceRecordSetsRequest
             {
                 HostedZoneId = "ZNOTEXIST1234",
             }));
-        Assert.Contains("NoSuchHostedZone", ex.ErrorCode);
+        ex.ErrorCode.ShouldContain("NoSuchHostedZone");
     }
 
     [Fact]
@@ -1037,8 +1036,8 @@ public sealed class Route53Tests : IClassFixture<MicroStackFixture>, IAsyncLifet
             },
         });
 
-        Assert.Equal("configured.com.", resp.HostedZone.Name);
-        Assert.Equal("My test zone", resp.HostedZone.Config.Comment);
+        resp.HostedZone.Name.ShouldBe("configured.com.");
+        resp.HostedZone.Config.Comment.ShouldBe("My test zone");
     }
 
     [Fact]
@@ -1107,13 +1106,13 @@ public sealed class Route53Tests : IClassFixture<MicroStackFixture>, IAsyncLifet
         });
 
         var types = listResp.ResourceRecordSets.Select(rrs => rrs.Type.Value).ToList();
-        Assert.Contains("A", types);
-        Assert.Contains("AAAA", types);
-        Assert.Contains("MX", types);
-        Assert.Contains("TXT", types);
-        Assert.Contains("SOA", types);
-        Assert.Contains("NS", types);
-        Assert.Equal(6, listResp.ResourceRecordSets.Count);
+        types.ShouldContain("A");
+        types.ShouldContain("AAAA");
+        types.ShouldContain("MX");
+        types.ShouldContain("TXT");
+        types.ShouldContain("SOA");
+        types.ShouldContain("NS");
+        listResp.ResourceRecordSets.Count.ShouldBe(6);
     }
 
     [Fact]
@@ -1149,7 +1148,7 @@ public sealed class Route53Tests : IClassFixture<MicroStackFixture>, IAsyncLifet
         });
         var cnameRecords = listResp.ResourceRecordSets
             .Where(rrs => rrs.Type == RRType.CNAME).ToList();
-        Assert.Single(cnameRecords);
-        Assert.Equal("target.example.com.", cnameRecords[0].ResourceRecords[0].Value);
+        cnameRecords.ShouldHaveSingleItem();
+        cnameRecords[0].ResourceRecords[0].Value.ShouldBe("target.example.com.");
     }
 }
