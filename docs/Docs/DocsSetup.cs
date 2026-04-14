@@ -81,7 +81,6 @@ public static class DocsSetup
                     new SidebarItem { Label = "Step Functions",    Link = "/docs/services/step-functions" },
                     new SidebarItem { Label = "STS",               Link = "/docs/services/sts" },
                     new SidebarItem { Label = "WAF v2",            Link = "/docs/services/waf" },
-                    new SidebarItem { Label = "All Services",      Link = "/docs/services/all" },
                 ],
             },
             new SidebarItem
