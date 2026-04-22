@@ -1,4 +1,3 @@
-using System.Text.Json;
 using MicroStack.Internal;
 using MicroStack.Services.DynamoDb;
 using MicroStack.Services.Sqs;
