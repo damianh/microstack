@@ -1,0 +1,17 @@
+**/bin/
+**/obj/
+**/.vs/
+**/.weave/
+**/node_modules/
+**/*.user
+**/*.suo
+**/TestResults/
+.git/
+docs/
+tests/
+*.md
+*.txt
+*.ncrunchsolution
+*.ncrunchsolution.user
+*.DotSettings.user
+assets/

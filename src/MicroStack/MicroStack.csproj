@@ -18,7 +18,7 @@
   <!-- OCI container image publishing via 'dotnet publish /t:PublishContainer' -->
   <!-- AOT produces a fully self-contained native binary; bare Alpine is sufficient -->
   <PropertyGroup>
-    <ContainerBaseImage>alpine:3.21</ContainerBaseImage>
+    <ContainerBaseImage>docker.io/alpine:3.21</ContainerBaseImage>
     <ContainerRepository>microstack</ContainerRepository>
     <ContainerImageTags>$(MinVerVersion);latest</ContainerImageTags>
     <!-- Multi-arch: amd64 + arm64 -->
