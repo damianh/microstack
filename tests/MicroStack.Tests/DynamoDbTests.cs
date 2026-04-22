@@ -2,7 +2,6 @@ using Amazon;
 using Amazon.DynamoDBv2;
 using Amazon.DynamoDBv2.Model;
 using Amazon.Runtime;
-using Microsoft.AspNetCore.Mvc.Testing;
 
 namespace MicroStack.Tests;
 
@@ -12,16 +11,9 @@ namespace MicroStack.Tests;
 ///
 /// Mirrors coverage from ministack/tests/test_dynamodb.py.
 /// </summary>
-public sealed class DynamoDbTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
+public sealed class DynamoDbTests(MicroStackFixture fixture) : IClassFixture<MicroStackFixture>, IAsyncLifetime
 {
-    private readonly MicroStackFixture _fixture;
-    private readonly AmazonDynamoDBClient _ddb;
-
-    public DynamoDbTests(MicroStackFixture fixture)
-    {
-        _fixture = fixture;
-        _ddb = CreateDdbClient(fixture);
-    }
+    private readonly AmazonDynamoDBClient _ddb = CreateDdbClient(fixture);
 
     private static AmazonDynamoDBClient CreateDdbClient(MicroStackFixture fixture)
     {
@@ -41,15 +33,15 @@ public sealed class DynamoDbTests : IClassFixture<MicroStackFixture>, IAsyncLife
         return new AmazonDynamoDBClient(new BasicAWSCredentials("test", "test"), config);
     }
 
-    public async Task InitializeAsync()
+    public async ValueTask InitializeAsync()
     {
-        await _fixture.HttpClient.PostAsync("/_ministack/reset", null);
+        await fixture.HttpClient.PostAsync("/_microstack/reset", null);
     }
 
-    public Task DisposeAsync()
+    public ValueTask DisposeAsync()
     {
         _ddb.Dispose();
-        return Task.CompletedTask;
+        return ValueTask.CompletedTask;
     }
 
     // ── Helpers ─────────────────────────────────────────────────────────────────

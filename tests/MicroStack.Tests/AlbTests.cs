@@ -5,16 +5,9 @@ using Amazon.Runtime;
 
 namespace MicroStack.Tests;
 
-public sealed class AlbTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
+public sealed class AlbTests(MicroStackFixture fixture) : IClassFixture<MicroStackFixture>, IAsyncLifetime
 {
-    private readonly MicroStackFixture _fixture;
-    private readonly AmazonElasticLoadBalancingV2Client _elb;
-
-    public AlbTests(MicroStackFixture fixture)
-    {
-        _fixture = fixture;
-        _elb = CreateElbClient(fixture);
-    }
+    private readonly AmazonElasticLoadBalancingV2Client _elb = CreateElbClient(fixture);
 
     private static AmazonElasticLoadBalancingV2Client CreateElbClient(MicroStackFixture fixture)
     {
@@ -33,15 +26,15 @@ public sealed class AlbTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             new BasicAWSCredentials("test", "test"), config);
     }
 
-    public async Task InitializeAsync()
+    public async ValueTask InitializeAsync()
     {
-        await _fixture.HttpClient.PostAsync("/_ministack/reset", null);
+        await fixture.HttpClient.PostAsync("/_microstack/reset", null);
     }
 
-    public Task DisposeAsync()
+    public ValueTask DisposeAsync()
     {
         _elb.Dispose();
-        return Task.CompletedTask;
+        return ValueTask.CompletedTask;
     }
 
     // ── Load Balancer CRUD ──────────────────────────────────────────────────

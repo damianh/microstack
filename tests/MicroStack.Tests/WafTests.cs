@@ -11,16 +11,9 @@ namespace MicroStack.Tests;
 ///
 /// Mirrors coverage from ministack/tests/test_waf.py.
 /// </summary>
-public sealed class WafTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
+public sealed class WafTests(MicroStackFixture fixture) : IClassFixture<MicroStackFixture>, IAsyncLifetime
 {
-    private readonly MicroStackFixture _fixture;
-    private readonly AmazonWAFV2Client _waf;
-
-    public WafTests(MicroStackFixture fixture)
-    {
-        _fixture = fixture;
-        _waf = CreateWafClient(fixture);
-    }
+    private readonly AmazonWAFV2Client _waf = CreateWafClient(fixture);
 
     private static AmazonWAFV2Client CreateWafClient(MicroStackFixture fixture)
     {
@@ -41,15 +34,15 @@ public sealed class WafTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             new BasicAWSCredentials("test", "test"), config);
     }
 
-    public async Task InitializeAsync()
+    public async ValueTask InitializeAsync()
     {
-        await _fixture.HttpClient.PostAsync("/_ministack/reset", null);
+        await fixture.HttpClient.PostAsync("/_microstack/reset", null);
     }
 
-    public Task DisposeAsync()
+    public ValueTask DisposeAsync()
     {
         _waf.Dispose();
-        return Task.CompletedTask;
+        return ValueTask.CompletedTask;
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

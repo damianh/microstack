@@ -5,16 +5,9 @@ using Amazon.Runtime;
 
 namespace MicroStack.Tests;
 
-public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
+public sealed class Ec2Tests(MicroStackFixture fixture) : IClassFixture<MicroStackFixture>, IAsyncLifetime
 {
-    private readonly MicroStackFixture _fixture;
-    private readonly AmazonEC2Client _ec2;
-
-    public Ec2Tests(MicroStackFixture fixture)
-    {
-        _fixture = fixture;
-        _ec2 = CreateEc2Client(fixture);
-    }
+    private readonly AmazonEC2Client _ec2 = CreateEc2Client(fixture);
 
     private static AmazonEC2Client CreateEc2Client(MicroStackFixture fixture)
     {
@@ -32,15 +25,15 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         return new AmazonEC2Client(new BasicAWSCredentials("test", "test"), config);
     }
 
-    public async Task InitializeAsync()
+    public async ValueTask InitializeAsync()
     {
-        await _fixture.HttpClient.PostAsync("/_ministack/reset", null);
+        await fixture.HttpClient.PostAsync("/_microstack/reset", null);
     }
 
-    public Task DisposeAsync()
+    public ValueTask DisposeAsync()
     {
         _ec2.Dispose();
-        return Task.CompletedTask;
+        return ValueTask.CompletedTask;
     }
 
     // ── VPC Tests ───────────────────────────────────────────────────────────────

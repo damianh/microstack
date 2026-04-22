@@ -11,16 +11,9 @@ namespace MicroStack.Tests;
 ///
 /// Mirrors coverage from ministack/tests/test_route53.py.
 /// </summary>
-public sealed class Route53Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
+public sealed class Route53Tests(MicroStackFixture fixture) : IClassFixture<MicroStackFixture>, IAsyncLifetime
 {
-    private readonly MicroStackFixture _fixture;
-    private readonly AmazonRoute53Client _r53;
-
-    public Route53Tests(MicroStackFixture fixture)
-    {
-        _fixture = fixture;
-        _r53 = CreateClient(fixture);
-    }
+    private readonly AmazonRoute53Client _r53 = CreateClient(fixture);
 
     private static AmazonRoute53Client CreateClient(MicroStackFixture fixture)
     {
@@ -41,15 +34,15 @@ public sealed class Route53Tests : IClassFixture<MicroStackFixture>, IAsyncLifet
             new BasicAWSCredentials("test", "test"), config);
     }
 
-    public async Task InitializeAsync()
+    public async ValueTask InitializeAsync()
     {
-        await _fixture.HttpClient.PostAsync("/_ministack/reset", null);
+        await fixture.HttpClient.PostAsync("/_microstack/reset", null);
     }
 
-    public Task DisposeAsync()
+    public ValueTask DisposeAsync()
     {
         _r53.Dispose();
-        return Task.CompletedTask;
+        return ValueTask.CompletedTask;
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────────

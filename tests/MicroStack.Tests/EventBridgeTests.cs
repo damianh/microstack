@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Amazon;
 using Amazon.EventBridge;
 using Amazon.EventBridge.Model;
@@ -12,16 +11,9 @@ namespace MicroStack.Tests;
 ///
 /// Mirrors coverage from ministack/tests/test_eventbridge.py.
 /// </summary>
-public sealed class EventBridgeTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
+public sealed class EventBridgeTests(MicroStackFixture fixture) : IClassFixture<MicroStackFixture>, IAsyncLifetime
 {
-    private readonly MicroStackFixture _fixture;
-    private readonly AmazonEventBridgeClient _eb;
-
-    public EventBridgeTests(MicroStackFixture fixture)
-    {
-        _fixture = fixture;
-        _eb = CreateEventBridgeClient(fixture);
-    }
+    private readonly AmazonEventBridgeClient _eb = CreateEventBridgeClient(fixture);
 
     private static AmazonEventBridgeClient CreateEventBridgeClient(MicroStackFixture fixture)
     {
@@ -41,15 +33,15 @@ public sealed class EventBridgeTests : IClassFixture<MicroStackFixture>, IAsyncL
         return new AmazonEventBridgeClient(new BasicAWSCredentials("test", "test"), config);
     }
 
-    public async Task InitializeAsync()
+    public async ValueTask InitializeAsync()
     {
-        await _fixture.HttpClient.PostAsync("/_ministack/reset", null);
+        await fixture.HttpClient.PostAsync("/_microstack/reset", null);
     }
 
-    public Task DisposeAsync()
+    public ValueTask DisposeAsync()
     {
         _eb.Dispose();
-        return Task.CompletedTask;
+        return ValueTask.CompletedTask;
     }
 
     // ── Event bus lifecycle ─────────────────────────────────────────────────────

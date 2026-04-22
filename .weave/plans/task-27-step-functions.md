@@ -39,9 +39,9 @@ Test file: `test_sfn.py` (2,213 lines, 68 tests). We port ~55 tests initially (s
 - For direct service integrations (SQS, SNS, DynamoDB), call handlers directly
 
 ### Mock Config
-- Python uses `_ministack_config` endpoint to set `stepfunctions._sfn_mock_config` at runtime
+- Python uses `_microstack_config` endpoint to set `stepfunctions._sfn_mock_config` at runtime
 - C# approach: Expose internal `SetMockConfig(Dictionary<string, object?> config)` method
-- Wire up `/_ministack/config` endpoint to route SFN mock config to the handler
+- Wire up `/_microstack/config` endpoint to route SFN mock config to the handler
 - Tests that use mock config: `test_sfn_mock_config_return`, `test_sfn_mock_config_throw` — these need the config endpoint enhanced
 
 ### Tests to Skip (dependencies not yet ported)
@@ -55,7 +55,7 @@ These tests depend on ECS or RDS handlers which are Phase 5/6:
 - `test_sfn_aws_sdk_rds_not_found_error` (rds)
 - `test_sfn_aws_sdk_query_acronym_param_mapping` (rds)
 
-Also these use `_ministack_config` which needs special handling:
+Also these use `_microstack_config` which needs special handling:
 - `test_sfn_mock_config_return`
 - `test_sfn_mock_config_throw`
 
@@ -227,7 +227,7 @@ These are pure unit tests of helper functions — port as C# tests:
 - Build and verify 0 warnings
 
 ### Step 10: Mock Config Support
-**What**: Wire up the `/_ministack/config` endpoint to set SFN mock config at runtime.
+**What**: Wire up the `/_microstack/config` endpoint to set SFN mock config at runtime.
 
 **Files**:
 - `src/MicroStack/Services/StepFunctions/StepFunctionsServiceHandler.cs` — add `SetMockConfig` method
@@ -254,7 +254,7 @@ These are pure unit tests of helper functions — port as C# tests:
   - For sync client, the SDK adds `sync-` prefix to hostname — need to disable. Check if `AmazonStepFunctionsConfig.DisableHostPrefixInjection` is available, or use custom `HttpClientFactory`
 - `_sqs`, `_ddb`, `_sns`, `_lambda`, `_sm` (SecretsManager), `_ssm` clients for integration tests
 - `WaitForExecution` polling helper
-- `InitializeAsync` calls `/_ministack/reset`
+- `InitializeAsync` calls `/_microstack/reset`
 - Build and verify 0 warnings
 
 ### Step 12: Core Tests (State Machine CRUD + Execution)

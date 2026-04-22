@@ -12,7 +12,7 @@ MicroStack exposes internal endpoints for health checking, state management, and
 ## Health Check
 
 ```bash
-curl http://localhost:4566/_ministack/health
+curl http://localhost:4566/_microstack/health
 ```
 
 Returns JSON with service availability, edition, and version:
@@ -39,7 +39,7 @@ curl http://localhost:4566/health
 ## Reset State
 
 ```bash
-curl -X POST http://localhost:4566/_ministack/reset
+curl -X POST http://localhost:4566/_microstack/reset
 ```
 
 Wipes all in-memory state across every service. Returns `200 OK` on success.
@@ -50,7 +50,7 @@ This is the recommended way to get a clean environment between test runs without
 public async Task InitializeAsync()
 {
     using var http = new HttpClient { BaseAddress = new Uri(connectionString) };
-    await http.PostAsync("/_ministack/reset", null);
+    await http.PostAsync("/_microstack/reset", null);
 }
 ```
 
@@ -59,7 +59,7 @@ If state persistence is enabled (`PERSIST_STATE=1`), reset also deletes the pers
 ## Runtime Config
 
 ```bash
-curl -X POST http://localhost:4566/_ministack/config \
+curl -X POST http://localhost:4566/_microstack/config \
   -H "Content-Type: application/json" \
   -d '{"stepfunctions._sfn_mock_config": "{...}"}'
 ```

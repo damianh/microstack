@@ -449,7 +449,7 @@
 **Key implementation details:**
 - Internal `__scalar__` and `__list__` wrapper conventions for representing non-dict results in the `Dictionary<string, object?>` internal model
 - `SerializeOutput` + `UnwrapForSerialization` recursively unwrap these wrappers at serialization boundaries
-- Mock config endpoint at `/_ministack/config` accepts `{"stepfunctions": {"_sfn_mock_config": {...}}}` with PascalCase keys (StateMachines, TestCases, MockedResponses)
+- Mock config endpoint at `/_microstack/config` accepts `{"stepfunctions": {"_sfn_mock_config": {...}}}` with PascalCase keys (StateMachines, TestCases, MockedResponses)
 - Background execution thread with `Thread.IsBackground = true` for async StartExecution
 - Service dispatch via `DispatchToService` calling handler's `HandleAsync` directly (in-process)
 - SNS integration skipped in tests (SNS uses query/XML protocol, SFN sends JSON — protocol mismatch)

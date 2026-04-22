@@ -11,16 +11,9 @@ namespace MicroStack.Tests;
 ///
 /// Mirrors coverage from ministack/tests/test_logs.py.
 /// </summary>
-public sealed class CloudWatchLogsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
+public sealed class CloudWatchLogsTests(MicroStackFixture fixture) : IClassFixture<MicroStackFixture>, IAsyncLifetime
 {
-    private readonly MicroStackFixture _fixture;
-    private readonly AmazonCloudWatchLogsClient _logs;
-
-    public CloudWatchLogsTests(MicroStackFixture fixture)
-    {
-        _fixture = fixture;
-        _logs = CreateLogsClient(fixture);
-    }
+    private readonly AmazonCloudWatchLogsClient _logs = CreateLogsClient(fixture);
 
     private static AmazonCloudWatchLogsClient CreateLogsClient(MicroStackFixture fixture)
     {
@@ -41,15 +34,15 @@ public sealed class CloudWatchLogsTests : IClassFixture<MicroStackFixture>, IAsy
             new BasicAWSCredentials("test", "test"), config);
     }
 
-    public async Task InitializeAsync()
+    public async ValueTask InitializeAsync()
     {
-        await _fixture.HttpClient.PostAsync("/_ministack/reset", null);
+        await fixture.HttpClient.PostAsync("/_microstack/reset", null);
     }
 
-    public Task DisposeAsync()
+    public ValueTask DisposeAsync()
     {
         _logs.Dispose();
-        return Task.CompletedTask;
+        return ValueTask.CompletedTask;
     }
 
     // -- PutLogEvents / GetLogEvents ------------------------------------------

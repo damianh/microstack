@@ -12,16 +12,9 @@ namespace MicroStack.Tests;
 ///
 /// Mirrors coverage from ministack/tests/test_firehose.py.
 /// </summary>
-public sealed class FirehoseTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
+public sealed class FirehoseTests(MicroStackFixture fixture) : IClassFixture<MicroStackFixture>, IAsyncLifetime
 {
-    private readonly MicroStackFixture _fixture;
-    private readonly AmazonKinesisFirehoseClient _fh;
-
-    public FirehoseTests(MicroStackFixture fixture)
-    {
-        _fixture = fixture;
-        _fh = CreateClient(fixture);
-    }
+    private readonly AmazonKinesisFirehoseClient _fh = CreateClient(fixture);
 
     private static AmazonKinesisFirehoseClient CreateClient(MicroStackFixture fixture)
     {
@@ -42,15 +35,15 @@ public sealed class FirehoseTests : IClassFixture<MicroStackFixture>, IAsyncLife
             new BasicAWSCredentials("test", "test"), config);
     }
 
-    public async Task InitializeAsync()
+    public async ValueTask InitializeAsync()
     {
-        await _fixture.HttpClient.PostAsync("/_ministack/reset", null);
+        await fixture.HttpClient.PostAsync("/_microstack/reset", null);
     }
 
-    public Task DisposeAsync()
+    public ValueTask DisposeAsync()
     {
         _fh.Dispose();
-        return Task.CompletedTask;
+        return ValueTask.CompletedTask;
     }
 
     // -- CreateDeliveryStream / DescribeDeliveryStream -------------------------

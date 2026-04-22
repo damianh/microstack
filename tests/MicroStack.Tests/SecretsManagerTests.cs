@@ -11,16 +11,9 @@ namespace MicroStack.Tests;
 ///
 /// Mirrors coverage from ministack/services/secretsmanager.py.
 /// </summary>
-public sealed class SecretsManagerTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
+public sealed class SecretsManagerTests(MicroStackFixture fixture) : IClassFixture<MicroStackFixture>, IAsyncLifetime
 {
-    private readonly MicroStackFixture _fixture;
-    private readonly AmazonSecretsManagerClient _sm;
-
-    public SecretsManagerTests(MicroStackFixture fixture)
-    {
-        _fixture = fixture;
-        _sm = CreateClient(fixture);
-    }
+    private readonly AmazonSecretsManagerClient _sm = CreateClient(fixture);
 
     private static AmazonSecretsManagerClient CreateClient(MicroStackFixture fixture)
     {
@@ -41,15 +34,15 @@ public sealed class SecretsManagerTests : IClassFixture<MicroStackFixture>, IAsy
             new BasicAWSCredentials("test", "test"), config);
     }
 
-    public async Task InitializeAsync()
+    public async ValueTask InitializeAsync()
     {
-        await _fixture.HttpClient.PostAsync("/_ministack/reset", null);
+        await fixture.HttpClient.PostAsync("/_microstack/reset", null);
     }
 
-    public Task DisposeAsync()
+    public ValueTask DisposeAsync()
     {
         _sm.Dispose();
-        return Task.CompletedTask;
+        return ValueTask.CompletedTask;
     }
 
     // -- CreateSecret / GetSecretValue -----------------------------------------

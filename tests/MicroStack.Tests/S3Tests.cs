@@ -11,16 +11,9 @@ namespace MicroStack.Tests;
 ///
 /// Mirrors coverage from ministack/tests/test_s3.py.
 /// </summary>
-public sealed class S3Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
+public sealed class S3Tests(MicroStackFixture fixture) : IClassFixture<MicroStackFixture>, IAsyncLifetime
 {
-    private readonly MicroStackFixture _fixture;
-    private readonly AmazonS3Client _s3;
-
-    public S3Tests(MicroStackFixture fixture)
-    {
-        _fixture = fixture;
-        _s3 = CreateS3Client(fixture);
-    }
+    private readonly AmazonS3Client _s3 = CreateS3Client(fixture);
 
     private static AmazonS3Client CreateS3Client(MicroStackFixture fixture)
     {
@@ -41,15 +34,15 @@ public sealed class S3Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         return new AmazonS3Client(new BasicAWSCredentials("test", "test"), config);
     }
 
-    public async Task InitializeAsync()
+    public async ValueTask InitializeAsync()
     {
-        await _fixture.HttpClient.PostAsync("/_ministack/reset", null);
+        await fixture.HttpClient.PostAsync("/_microstack/reset", null);
     }
 
-    public Task DisposeAsync()
+    public ValueTask DisposeAsync()
     {
         _s3.Dispose();
-        return Task.CompletedTask;
+        return ValueTask.CompletedTask;
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────────

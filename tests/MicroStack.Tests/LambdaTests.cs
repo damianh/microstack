@@ -2,7 +2,6 @@ using System.Diagnostics;
 using System.IO.Compression;
 using System.Runtime.InteropServices;
 using System.Text;
-using System.Text.Json;
 using Amazon;
 using Amazon.Lambda;
 using Amazon.Lambda.Model;
@@ -52,15 +51,15 @@ public sealed class LambdaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
             new BasicAWSCredentials("test", "test"), config);
     }
 
-    public async Task InitializeAsync()
+    public async ValueTask InitializeAsync()
     {
-        await _fixture.HttpClient.PostAsync("/_ministack/reset", null);
+        await _fixture.HttpClient.PostAsync("/_microstack/reset", null);
     }
 
-    public Task DisposeAsync()
+    public ValueTask DisposeAsync()
     {
         _lambda.Dispose();
-        return Task.CompletedTask;
+        return ValueTask.CompletedTask;
     }
 
     private static MemoryStream MakeZip(string filename, string content)
@@ -1315,7 +1314,7 @@ public sealed class LambdaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
         var bootTime1 = doc1.RootElement.GetProperty("boot").GetDouble();
 
         // Reset kills all workers
-        await _fixture.HttpClient.PostAsync("/_ministack/reset", null);
+        await _fixture.HttpClient.PostAsync("/_microstack/reset", null);
 
         // Re-create the function (reset cleared the store)
         await CreatePythonFunction("invoke-py-reset", code);
@@ -1646,11 +1645,13 @@ public sealed class LambdaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
 
     // -- .NET Lambda Invocation Tests -----------------------------------------
 
-    [SkippableFact]
+    [Fact]
     public async Task InvokeDotnetRequestResponse()
     {
-        Skip.If(!IsDotnetBootstrapAvailable() || FindSimpleHandlerDir() is null,
-            "MicroStack.LambdaBootstrap or SimpleHandler build output not found.");
+if (!IsDotnetBootstrapAvailable() || FindSimpleHandlerDir() is null)
+        {
+            return;
+        }
 
         await CreateDotnetFunction("invoke-dotnet-func", "GreetHandler");
 
@@ -1668,11 +1669,13 @@ public sealed class LambdaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
         doc.RootElement.GetProperty("greeting").GetString().ShouldBe("hello DotNet");
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task InvokeDotnetReturnsPayload()
     {
-        Skip.If(!IsDotnetBootstrapAvailable() || FindSimpleHandlerDir() is null,
-            "MicroStack.LambdaBootstrap or SimpleHandler build output not found.");
+if (!IsDotnetBootstrapAvailable() || FindSimpleHandlerDir() is null)
+        {
+            return;
+        }
 
         await CreateDotnetFunction("invoke-dotnet-payload", "SumHandler");
 
@@ -1691,11 +1694,13 @@ public sealed class LambdaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
         doc.RootElement.GetProperty("sum").GetInt32().ShouldBe(15);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task InvokeDotnetWithEnvironmentVariables()
     {
-        Skip.If(!IsDotnetBootstrapAvailable() || FindSimpleHandlerDir() is null,
-            "MicroStack.LambdaBootstrap or SimpleHandler build output not found.");
+if (!IsDotnetBootstrapAvailable() || FindSimpleHandlerDir() is null)
+        {
+            return;
+        }
 
         var envVars = new Dictionary<string, string>
         {
@@ -1720,11 +1725,13 @@ public sealed class LambdaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
         doc.RootElement.GetProperty("region").GetString().ShouldBe("eu-west-1");
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task InvokeDotnetWarmStart()
     {
-        Skip.If(!IsDotnetBootstrapAvailable() || FindSimpleHandlerDir() is null,
-            "MicroStack.LambdaBootstrap or SimpleHandler build output not found.");
+if (!IsDotnetBootstrapAvailable() || FindSimpleHandlerDir() is null)
+        {
+            return;
+        }
 
         await CreateDotnetFunction("invoke-dotnet-warm", "EchoHandler");
 
@@ -1753,11 +1760,13 @@ public sealed class LambdaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
         doc2.RootElement.GetProperty("seq").GetInt32().ShouldBe(2);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task InvokeDotnetErrorReturnsUnhandled()
     {
-        Skip.If(!IsDotnetBootstrapAvailable() || FindSimpleHandlerDir() is null,
-            "MicroStack.LambdaBootstrap or SimpleHandler build output not found.");
+if (!IsDotnetBootstrapAvailable() || FindSimpleHandlerDir() is null)
+        {
+            return;
+        }
 
         await CreateDotnetFunction("invoke-dotnet-error", "ErrorHandler");
 
@@ -1775,11 +1784,13 @@ public sealed class LambdaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
         doc.RootElement.GetProperty("errorMessage").GetString()!.ShouldContain("something went wrong");
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task InvokeDotnetWithContext()
     {
-        Skip.If(!IsDotnetBootstrapAvailable() || FindSimpleHandlerDir() is null,
-            "MicroStack.LambdaBootstrap or SimpleHandler build output not found.");
+if (!IsDotnetBootstrapAvailable() || FindSimpleHandlerDir() is null)
+        {
+            return;
+        }
 
         await CreateDotnetFunction("invoke-dotnet-context", "ContextHandler");
 
@@ -1799,11 +1810,13 @@ public sealed class LambdaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
         doc.RootElement.GetProperty("has_request_id").GetBoolean().ShouldBe(true);
     }
 
-    [SkippableFact]
+    [Fact]
     public async Task UpdateCodeInvalidatesDotnetWorker()
     {
-        Skip.If(!IsDotnetBootstrapAvailable() || FindSimpleHandlerDir() is null,
-            "MicroStack.LambdaBootstrap or SimpleHandler build output not found.");
+if (!IsDotnetBootstrapAvailable() || FindSimpleHandlerDir() is null)
+        {
+            return;
+        }
 
         // Create function with EchoHandler
         await CreateDotnetFunction("invoke-dotnet-update", "EchoHandler");

@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Amazon;
 using Amazon.IdentityManagement;
 using Amazon.IdentityManagement.Model;
@@ -12,16 +11,9 @@ namespace MicroStack.Tests;
 ///
 /// Mirrors coverage from ministack/tests/test_iam.py.
 /// </summary>
-public sealed class IamTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
+public sealed class IamTests(MicroStackFixture fixture) : IClassFixture<MicroStackFixture>, IAsyncLifetime
 {
-    private readonly MicroStackFixture _fixture;
-    private readonly AmazonIdentityManagementServiceClient _iam;
-
-    public IamTests(MicroStackFixture fixture)
-    {
-        _fixture = fixture;
-        _iam = CreateIamClient(fixture);
-    }
+    private readonly AmazonIdentityManagementServiceClient _iam = CreateIamClient(fixture);
 
     private static AmazonIdentityManagementServiceClient CreateIamClient(MicroStackFixture fixture)
     {
@@ -42,15 +34,15 @@ public sealed class IamTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             new BasicAWSCredentials("test", "test"), config);
     }
 
-    public async Task InitializeAsync()
+    public async ValueTask InitializeAsync()
     {
-        await _fixture.HttpClient.PostAsync("/_ministack/reset", null);
+        await fixture.HttpClient.PostAsync("/_microstack/reset", null);
     }
 
-    public Task DisposeAsync()
+    public ValueTask DisposeAsync()
     {
         _iam.Dispose();
-        return Task.CompletedTask;
+        return ValueTask.CompletedTask;
     }
 
     // ── Helpers ─────────────────────────────────────────────────────────────────

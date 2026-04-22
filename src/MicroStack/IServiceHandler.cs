@@ -13,7 +13,7 @@ public interface IServiceHandler
     /// <summary>Handle an incoming AWS request and return the response.</summary>
     Task<ServiceResponse> HandleAsync(ServiceRequest request);
 
-    /// <summary>Reset all in-memory state (called by /_ministack/reset).</summary>
+    /// <summary>Reset all in-memory state (called by /_microstack/reset).</summary>
     void Reset();
 
     /// <summary>Serialize current state for persistence. Returns null if this handler has no persistent state.</summary>

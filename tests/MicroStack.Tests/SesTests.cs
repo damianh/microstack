@@ -1,6 +1,5 @@
 using Amazon;
 using Amazon.SimpleEmail;
-using Amazon.SimpleEmail.Model;
 using Amazon.SimpleEmailV2;
 using Amazon.SimpleEmailV2.Model;
 using Amazon.Runtime;
@@ -15,18 +14,10 @@ namespace MicroStack.Tests;
 ///
 /// Mirrors coverage from ministack/tests/test_ses.py.
 /// </summary>
-public sealed class SesTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
+public sealed class SesTests(MicroStackFixture fixture) : IClassFixture<MicroStackFixture>, IAsyncLifetime
 {
-    private readonly MicroStackFixture _fixture;
-    private readonly AmazonSimpleEmailServiceClient _ses;
-    private readonly AmazonSimpleEmailServiceV2Client _sesV2;
-
-    public SesTests(MicroStackFixture fixture)
-    {
-        _fixture = fixture;
-        _ses = CreateSesClient(fixture);
-        _sesV2 = CreateSesV2Client(fixture);
-    }
+    private readonly AmazonSimpleEmailServiceClient _ses = CreateSesClient(fixture);
+    private readonly AmazonSimpleEmailServiceV2Client _sesV2 = CreateSesV2Client(fixture);
 
     private static AmazonSimpleEmailServiceClient CreateSesClient(MicroStackFixture fixture)
     {
@@ -66,16 +57,16 @@ public sealed class SesTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             new BasicAWSCredentials("test", "test"), config);
     }
 
-    public async Task InitializeAsync()
+    public async ValueTask InitializeAsync()
     {
-        await _fixture.HttpClient.PostAsync("/_ministack/reset", null);
+        await fixture.HttpClient.PostAsync("/_microstack/reset", null);
     }
 
-    public Task DisposeAsync()
+    public ValueTask DisposeAsync()
     {
         _ses.Dispose();
         _sesV2.Dispose();
-        return Task.CompletedTask;
+        return ValueTask.CompletedTask;
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

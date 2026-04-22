@@ -11,16 +11,9 @@ namespace MicroStack.Tests;
 ///
 /// Mirrors coverage from ministack/tests/test_ssm.py.
 /// </summary>
-public sealed class SsmTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
+public sealed class SsmTests(MicroStackFixture fixture) : IClassFixture<MicroStackFixture>, IAsyncLifetime
 {
-    private readonly MicroStackFixture _fixture;
-    private readonly AmazonSimpleSystemsManagementClient _ssm;
-
-    public SsmTests(MicroStackFixture fixture)
-    {
-        _fixture = fixture;
-        _ssm = CreateSsmClient(fixture);
-    }
+    private readonly AmazonSimpleSystemsManagementClient _ssm = CreateSsmClient(fixture);
 
     private static AmazonSimpleSystemsManagementClient CreateSsmClient(MicroStackFixture fixture)
     {
@@ -41,15 +34,15 @@ public sealed class SsmTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             new BasicAWSCredentials("test", "test"), config);
     }
 
-    public async Task InitializeAsync()
+    public async ValueTask InitializeAsync()
     {
-        await _fixture.HttpClient.PostAsync("/_ministack/reset", null);
+        await fixture.HttpClient.PostAsync("/_microstack/reset", null);
     }
 
-    public Task DisposeAsync()
+    public ValueTask DisposeAsync()
     {
         _ssm.Dispose();
-        return Task.CompletedTask;
+        return ValueTask.CompletedTask;
     }
 
     // -- PutParameter / GetParameter ------------------------------------------

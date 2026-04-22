@@ -82,7 +82,7 @@ The registry (`src/MicroStack/Internal/ServiceRegistry.cs`) maps service names t
 - Handlers register at startup in `Program.cs`.
 - The `SERVICES` environment variable filters which handlers are active.
 - Service name aliases are supported (e.g., `cloudwatch` -> `monitoring`, `eventbridge` -> `events`).
-- Provides `ResetAll()` for the `/_ministack/reset` endpoint and `GetServiceStatus()` for health checks.
+- Provides `ResetAll()` for the `/_microstack/reset` endpoint and `GetServiceStatus()` for health checks.
 
 ### IServiceHandler
 
@@ -126,9 +126,9 @@ MicroStack handles four AWS API protocols:
 
 Three admin endpoints are registered before the AWS middleware:
 
-- `GET /_ministack/health` — Returns service status and version. Also available at `/health` and `/_localstack/health`.
-- `POST /_ministack/reset` — Clears all in-memory state and deletes persisted state files.
-- `POST /_ministack/config` — Applies runtime configuration (currently supports Step Functions mock config).
+- `GET /_microstack/health` — Returns service status and version. Also available at `/health` and `/_localstack/health`.
+- `POST /_microstack/reset` — Clears all in-memory state and deletes persisted state files.
+- `POST /_microstack/config` — Applies runtime configuration (currently supports Step Functions mock config).
 
 ## Startup Flow
 

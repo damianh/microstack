@@ -12,16 +12,9 @@ namespace MicroStack.Tests;
 ///
 /// Mirrors coverage from ministack/services/ecs.py.
 /// </summary>
-public sealed class EcsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
+public sealed class EcsTests(MicroStackFixture fixture) : IClassFixture<MicroStackFixture>, IAsyncLifetime
 {
-    private readonly MicroStackFixture _fixture;
-    private readonly AmazonECSClient _ecs;
-
-    public EcsTests(MicroStackFixture fixture)
-    {
-        _fixture = fixture;
-        _ecs = CreateClient(fixture);
-    }
+    private readonly AmazonECSClient _ecs = CreateClient(fixture);
 
     private static AmazonECSClient CreateClient(MicroStackFixture fixture)
     {
@@ -42,15 +35,15 @@ public sealed class EcsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             new BasicAWSCredentials("test", "test"), config);
     }
 
-    public async Task InitializeAsync()
+    public async ValueTask InitializeAsync()
     {
-        await _fixture.HttpClient.PostAsync("/_ministack/reset", null);
+        await fixture.HttpClient.PostAsync("/_microstack/reset", null);
     }
 
-    public Task DisposeAsync()
+    public ValueTask DisposeAsync()
     {
         _ecs.Dispose();
-        return Task.CompletedTask;
+        return ValueTask.CompletedTask;
     }
 
     // -- Cluster tests ---------------------------------------------------------

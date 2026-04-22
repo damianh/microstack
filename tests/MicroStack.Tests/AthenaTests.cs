@@ -11,16 +11,9 @@ namespace MicroStack.Tests;
 ///
 /// Mirrors coverage from ministack/tests/test_athena.py.
 /// </summary>
-public sealed class AthenaTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
+public sealed class AthenaTests(MicroStackFixture fixture) : IClassFixture<MicroStackFixture>, IAsyncLifetime
 {
-    private readonly MicroStackFixture _fixture;
-    private readonly AmazonAthenaClient _athena;
-
-    public AthenaTests(MicroStackFixture fixture)
-    {
-        _fixture = fixture;
-        _athena = CreateClient(fixture);
-    }
+    private readonly AmazonAthenaClient _athena = CreateClient(fixture);
 
     private static AmazonAthenaClient CreateClient(MicroStackFixture fixture)
     {
@@ -40,15 +33,15 @@ public sealed class AthenaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
         return new AmazonAthenaClient(new BasicAWSCredentials("test", "test"), config);
     }
 
-    public async Task InitializeAsync()
+    public async ValueTask InitializeAsync()
     {
-        await _fixture.HttpClient.PostAsync("/_ministack/reset", null);
+        await fixture.HttpClient.PostAsync("/_microstack/reset", null);
     }
 
-    public Task DisposeAsync()
+    public ValueTask DisposeAsync()
     {
         _athena.Dispose();
-        return Task.CompletedTask;
+        return ValueTask.CompletedTask;
     }
 
     // -- Query Execution -------------------------------------------------------

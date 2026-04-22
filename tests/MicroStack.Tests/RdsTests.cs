@@ -5,16 +5,9 @@ using Amazon.Runtime;
 
 namespace MicroStack.Tests;
 
-public sealed class RdsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
+public sealed class RdsTests(MicroStackFixture fixture) : IClassFixture<MicroStackFixture>, IAsyncLifetime
 {
-    private readonly MicroStackFixture _fixture;
-    private readonly AmazonRDSClient _rds;
-
-    public RdsTests(MicroStackFixture fixture)
-    {
-        _fixture = fixture;
-        _rds = CreateRdsClient(fixture);
-    }
+    private readonly AmazonRDSClient _rds = CreateRdsClient(fixture);
 
     private static AmazonRDSClient CreateRdsClient(MicroStackFixture fixture)
     {
@@ -32,15 +25,15 @@ public sealed class RdsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         return new AmazonRDSClient(new BasicAWSCredentials("test", "test"), config);
     }
 
-    public async Task InitializeAsync()
+    public async ValueTask InitializeAsync()
     {
-        await _fixture.HttpClient.PostAsync("/_ministack/reset", null);
+        await fixture.HttpClient.PostAsync("/_microstack/reset", null);
     }
 
-    public Task DisposeAsync()
+    public ValueTask DisposeAsync()
     {
         _rds.Dispose();
-        return Task.CompletedTask;
+        return ValueTask.CompletedTask;
     }
 
     // ── DB Instance CRUD ────────────────────────────────────────────────────────

@@ -13,18 +13,10 @@ namespace MicroStack.Tests;
 ///
 /// Mirrors coverage from ministack/tests/test_sts.py.
 /// </summary>
-public sealed class StsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
+public sealed class StsTests(MicroStackFixture fixture) : IClassFixture<MicroStackFixture>, IAsyncLifetime
 {
-    private readonly MicroStackFixture _fixture;
-    private readonly AmazonSecurityTokenServiceClient _sts;
-    private readonly AmazonIdentityManagementServiceClient _iam;
-
-    public StsTests(MicroStackFixture fixture)
-    {
-        _fixture = fixture;
-        _sts = CreateStsClient(fixture);
-        _iam = CreateIamClient(fixture);
-    }
+    private readonly AmazonSecurityTokenServiceClient _sts = CreateStsClient(fixture);
+    private readonly AmazonIdentityManagementServiceClient _iam = CreateIamClient(fixture);
 
     private static AmazonSecurityTokenServiceClient CreateStsClient(MicroStackFixture fixture)
     {
@@ -64,16 +56,16 @@ public sealed class StsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
             new BasicAWSCredentials("test", "test"), config);
     }
 
-    public async Task InitializeAsync()
+    public async ValueTask InitializeAsync()
     {
-        await _fixture.HttpClient.PostAsync("/_ministack/reset", null);
+        await fixture.HttpClient.PostAsync("/_microstack/reset", null);
     }
 
-    public Task DisposeAsync()
+    public ValueTask DisposeAsync()
     {
         _sts.Dispose();
         _iam.Dispose();
-        return Task.CompletedTask;
+        return ValueTask.CompletedTask;
     }
 
     [Fact]

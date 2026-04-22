@@ -11,16 +11,9 @@ namespace MicroStack.Tests;
 ///
 /// Mirrors coverage from ministack/tests/test_cloudfront.py.
 /// </summary>
-public sealed class CloudFrontTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
+public sealed class CloudFrontTests(MicroStackFixture fixture) : IClassFixture<MicroStackFixture>, IAsyncLifetime
 {
-    private readonly MicroStackFixture _fixture;
-    private readonly AmazonCloudFrontClient _cf;
-
-    public CloudFrontTests(MicroStackFixture fixture)
-    {
-        _fixture = fixture;
-        _cf = CreateCloudFrontClient(fixture);
-    }
+    private readonly AmazonCloudFrontClient _cf = CreateCloudFrontClient(fixture);
 
     private static AmazonCloudFrontClient CreateCloudFrontClient(MicroStackFixture fixture)
     {
@@ -41,15 +34,15 @@ public sealed class CloudFrontTests : IClassFixture<MicroStackFixture>, IAsyncLi
             new BasicAWSCredentials("test", "test"), config);
     }
 
-    public async Task InitializeAsync()
+    public async ValueTask InitializeAsync()
     {
-        await _fixture.HttpClient.PostAsync("/_ministack/reset", null);
+        await fixture.HttpClient.PostAsync("/_microstack/reset", null);
     }
 
-    public Task DisposeAsync()
+    public ValueTask DisposeAsync()
     {
         _cf.Dispose();
-        return Task.CompletedTask;
+        return ValueTask.CompletedTask;
     }
 
     private static DistributionConfig MakeDistConfig(string callerRef, string comment, bool enabled = true)

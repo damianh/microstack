@@ -1,13 +1,10 @@
 using System.IO.Compression;
-using System.Net;
-using System.Text;
 using Amazon;
 using Amazon.APIGateway;
 using Amazon.APIGateway.Model;
 using Amazon.Lambda;
 using Amazon.Lambda.Model;
 using Amazon.Runtime;
-using Microsoft.AspNetCore.Mvc.Testing;
 
 namespace MicroStack.Tests;
 
@@ -75,17 +72,17 @@ public sealed class ApiGatewayV1Tests : IClassFixture<MicroStackFixture>, IAsync
             new BasicAWSCredentials("test", "test"), config);
     }
 
-    public async Task InitializeAsync()
+    public async ValueTask InitializeAsync()
     {
-        await _fixture.HttpClient.PostAsync("/_ministack/reset", null);
+        await _fixture.HttpClient.PostAsync("/_microstack/reset", null);
     }
 
-    public Task DisposeAsync()
+    public ValueTask DisposeAsync()
     {
         _apigw.Dispose();
         _lambda.Dispose();
         _rawHttp.Dispose();
-        return Task.CompletedTask;
+        return ValueTask.CompletedTask;
     }
 
     // -- Helper: Create a Lambda zip with simple Python handler ----------------

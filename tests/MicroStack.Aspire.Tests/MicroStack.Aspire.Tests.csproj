@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Aspire.Hosting.Testing" Version="13.2.2" />
+    <PackageReference Include="xunit.v3.core.mtp-v2" Version="3.2.2" />
+    <PackageReference Include="Shouldly" Version="4.3.0" />
+    <PackageReference Include="AWSSDK.S3" Version="4.*" />
+    <PackageReference Include="AWSSDK.SQS" Version="4.*" />
+    <PackageReference Include="AWSSDK.SimpleNotificationService" Version="4.*" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\MicroStack.Aspire.Tests.AppHost\MicroStack.Aspire.Tests.AppHost.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="System.Net" />
+    <Using Include="Aspire.Hosting.ApplicationModel" />
+    <Using Include="Aspire.Hosting" />
+    <Using Include="Aspire.Hosting.Testing" />
+    <Using Include="Xunit" />
+    <Using Include="Shouldly" />
+  </ItemGroup>
+
+</Project>

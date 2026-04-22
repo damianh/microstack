@@ -48,7 +48,7 @@ internal sealed class LambdaServiceHandler : IServiceHandler
         var method = request.Method.ToUpperInvariant();
 
         // Lambda layer content download
-        if (path.StartsWith("/_ministack/lambda-layers/", StringComparison.OrdinalIgnoreCase) && method == "GET")
+        if (path.StartsWith("/_microstack/lambda-layers/", StringComparison.OrdinalIgnoreCase) && method == "GET")
         {
             return Task.FromResult(HandleLayerContentDownload(path));
         }
@@ -1371,7 +1371,7 @@ internal sealed class LambdaServiceHandler : IServiceHandler
                 {
                     ["CodeSha256"] = codeSha256,
                     ["CodeSize"] = codeSize,
-                    ["Location"] = $"/_ministack/lambda-layers/{accountId}/{layerName}/{versionNum}",
+                    ["Location"] = $"/_microstack/lambda-layers/{accountId}/{layerName}/{versionNum}",
                 },
             }, 201);
         }
@@ -1407,7 +1407,7 @@ internal sealed class LambdaServiceHandler : IServiceHandler
                 {
                     ["CodeSha256"] = version.CodeSha256,
                     ["CodeSize"] = version.CodeSize,
-                    ["Location"] = $"/_ministack/lambda-layers/{accountId}/{layerName}/{versionNum}",
+                    ["Location"] = $"/_microstack/lambda-layers/{accountId}/{layerName}/{versionNum}",
                 },
             });
         }
@@ -1491,7 +1491,7 @@ internal sealed class LambdaServiceHandler : IServiceHandler
 
     private ServiceResponse HandleLayerContentDownload(string path)
     {
-        // /_ministack/lambda-layers/{accountId}/{layerName}/{version}
+        // /_microstack/lambda-layers/{accountId}/{layerName}/{version}
         var segments = path.Split('/', StringSplitOptions.RemoveEmptyEntries);
         if (segments.Length < 5)
         {

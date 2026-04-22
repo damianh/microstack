@@ -56,7 +56,7 @@ docker run -p 4566:4566 ghcr.io/damianh/microstack:latest
 Verify it's running:
 
 ```bash
-curl http://localhost:4566/_ministack/health
+curl http://localhost:4566/_microstack/health
 ```
 
 ## Quick Start with .NET

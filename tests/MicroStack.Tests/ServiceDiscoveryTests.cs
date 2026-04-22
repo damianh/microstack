@@ -13,18 +13,10 @@ namespace MicroStack.Tests;
 ///
 /// Mirrors coverage from ministack/tests/test_servicediscovery.py.
 /// </summary>
-public sealed class ServiceDiscoveryTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
+public sealed class ServiceDiscoveryTests(MicroStackFixture fixture) : IClassFixture<MicroStackFixture>, IAsyncLifetime
 {
-    private readonly MicroStackFixture _fixture;
-    private readonly AmazonServiceDiscoveryClient _sd;
-    private readonly AmazonRoute53Client _r53;
-
-    public ServiceDiscoveryTests(MicroStackFixture fixture)
-    {
-        _fixture = fixture;
-        _sd = CreateServiceDiscoveryClient(fixture);
-        _r53 = CreateRoute53Client(fixture);
-    }
+    private readonly AmazonServiceDiscoveryClient _sd = CreateServiceDiscoveryClient(fixture);
+    private readonly AmazonRoute53Client _r53 = CreateRoute53Client(fixture);
 
     private static AmazonServiceDiscoveryClient CreateServiceDiscoveryClient(MicroStackFixture fixture)
     {
@@ -64,16 +56,16 @@ public sealed class ServiceDiscoveryTests : IClassFixture<MicroStackFixture>, IA
             new BasicAWSCredentials("test", "test"), config);
     }
 
-    public async Task InitializeAsync()
+    public async ValueTask InitializeAsync()
     {
-        await _fixture.HttpClient.PostAsync("/_ministack/reset", null);
+        await fixture.HttpClient.PostAsync("/_microstack/reset", null);
     }
 
-    public Task DisposeAsync()
+    public ValueTask DisposeAsync()
     {
         _sd.Dispose();
         _r53.Dispose();
-        return Task.CompletedTask;
+        return ValueTask.CompletedTask;
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────────

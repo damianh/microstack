@@ -1,7 +1,6 @@
 using System.Text.Json;
 using System.Text;
 using System.Web;
-using System.Xml.Linq;
 using MicroStack.Internal;
 
 namespace MicroStack.Services.Ec2;

@@ -1,11 +1,9 @@
-using System.Text.Json;
 using Amazon;
 using Amazon.Runtime;
 using Amazon.SimpleNotificationService;
 using Amazon.SimpleNotificationService.Model;
 using Amazon.SQS;
 using Amazon.SQS.Model;
-using Microsoft.AspNetCore.Mvc.Testing;
 
 namespace MicroStack.Tests;
 
@@ -16,18 +14,10 @@ namespace MicroStack.Tests;
 /// Mirrors coverage from ministack/tests/test_sns.py.
 /// Lambda-dependent tests are skipped until the Lambda handler is ported.
 /// </summary>
-public sealed class SnsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
+public sealed class SnsTests(MicroStackFixture fixture) : IClassFixture<MicroStackFixture>, IAsyncLifetime
 {
-    private readonly MicroStackFixture _fixture;
-    private readonly AmazonSimpleNotificationServiceClient _sns;
-    private readonly AmazonSQSClient _sqs;
-
-    public SnsTests(MicroStackFixture fixture)
-    {
-        _fixture = fixture;
-        _sns = CreateSnsClient(fixture);
-        _sqs = CreateSqsClient(fixture);
-    }
+    private readonly AmazonSimpleNotificationServiceClient _sns = CreateSnsClient(fixture);
+    private readonly AmazonSQSClient _sqs = CreateSqsClient(fixture);
 
     private static AmazonSimpleNotificationServiceClient CreateSnsClient(MicroStackFixture fixture)
     {
@@ -66,16 +56,16 @@ public sealed class SnsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         return new AmazonSQSClient(new BasicAWSCredentials("test", "test"), config);
     }
 
-    public async Task InitializeAsync()
+    public async ValueTask InitializeAsync()
     {
-        await _fixture.HttpClient.PostAsync("/_ministack/reset", null);
+        await fixture.HttpClient.PostAsync("/_microstack/reset", null);
     }
 
-    public Task DisposeAsync()
+    public ValueTask DisposeAsync()
     {
         _sns.Dispose();
         _sqs.Dispose();
-        return Task.CompletedTask;
+        return ValueTask.CompletedTask;
     }
 
     // ── Topic CRUD ──────────────────────────────────────────────────────────────

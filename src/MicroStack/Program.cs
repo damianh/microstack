@@ -40,6 +40,12 @@ using MicroStack.Services.S3Files;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Configure JSON serialization for minimal API endpoints (required for native AOT)
+builder.Services.ConfigureHttpJsonOptions(jsonOptions =>
+{
+    jsonOptions.SerializerOptions.TypeInfoResolverChain.Insert(0, MicroStackJsonContext.Default);
+});
+
 // Bind all environment variables into strongly-typed options (single source of truth)
 var options = MicroStackOptions.BindFromEnvironment();
 builder.Services.AddSingleton(options);
@@ -117,7 +123,7 @@ registry.Register(new CloudFormationServiceHandler(registry));
 registry.Register(new S3FilesServiceHandler());
 
 // Health endpoint (multiple aliases for LocalStack compatibility)
-foreach (var healthPath in new[] { "/_ministack/health", "/health", "/_localstack/health" })
+foreach (var healthPath in new[] { "/_microstack/health", "/health", "/_localstack/health" })
 {
     app.MapGet(healthPath, () =>
     {
@@ -127,7 +133,7 @@ foreach (var healthPath in new[] { "/_ministack/health", "/health", "/_localstac
 }
 
 // Reset endpoint
-app.MapPost("/_ministack/reset", () =>
+app.MapPost("/_microstack/reset", () =>
 {
     registry.ResetAll();
     persistence.DeleteAll();
@@ -135,7 +141,7 @@ app.MapPost("/_ministack/reset", () =>
 });
 
 // Config endpoint (stub — populated when services implement it)
-app.MapPost("/_ministack/config", async (HttpContext ctx) =>
+app.MapPost("/_microstack/config", async (HttpContext ctx) =>
 {
     using var reader = new StreamReader(ctx.Request.Body);
     var bodyText = await reader.ReadToEndAsync();

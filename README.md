@@ -45,7 +45,7 @@ dotnet run --project src/MicroStack/MicroStack.csproj
 **Verify:**
 
 ```bash
-curl http://localhost:4566/_ministack/health
+curl http://localhost:4566/_microstack/health
 ```
 
 ## Usage
@@ -107,13 +107,13 @@ See [Services Overview](https://damianh.github.io/microstack/services/overview) 
 
 ```bash
 # Health check — service status
-curl http://localhost:4566/_ministack/health
+curl http://localhost:4566/_microstack/health
 
 # Reset all state — useful between test runs
-curl -X POST http://localhost:4566/_ministack/reset
+curl -X POST http://localhost:4566/_microstack/reset
 
 # Runtime config — change settings without restart
-curl -X POST http://localhost:4566/_ministack/config \
+curl -X POST http://localhost:4566/_microstack/config \
   -H "Content-Type: application/json" \
   -d '{"stepfunctions._sfn_mock_config": "{...}"}'
 ```

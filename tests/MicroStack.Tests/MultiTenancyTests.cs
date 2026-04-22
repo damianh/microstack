@@ -3,7 +3,6 @@ using Amazon.DynamoDBv2;
 using Amazon.DynamoDBv2.Model;
 using Amazon.Runtime;
 using Amazon.S3;
-using Amazon.S3.Model;
 using Amazon.SecurityToken;
 using Amazon.SecurityToken.Model;
 using Amazon.SQS;
@@ -20,27 +19,20 @@ namespace MicroStack.Tests;
 ///
 /// Mirrors coverage from ministack/tests/test_multitenancy.py.
 /// </summary>
-public sealed class MultiTenancyTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
+public sealed class MultiTenancyTests(MicroStackFixture fixture) : IClassFixture<MicroStackFixture>, IAsyncLifetime
 {
-    private readonly MicroStackFixture _fixture;
-
-    public MultiTenancyTests(MicroStackFixture fixture)
+    public async ValueTask InitializeAsync()
     {
-        _fixture = fixture;
+        await fixture.HttpClient.PostAsync("/_microstack/reset", null);
     }
 
-    public async Task InitializeAsync()
-    {
-        await _fixture.HttpClient.PostAsync("/_ministack/reset", null);
-    }
-
-    public Task DisposeAsync() => Task.CompletedTask;
+    public ValueTask DisposeAsync() => ValueTask.CompletedTask;
 
     // ── Client factory helpers ────────────────────────────────────────────────
 
     private AmazonSecurityTokenServiceClient CreateStsClient(string accessKey)
     {
-        var innerHandler = _fixture.Factory.Server.CreateHandler();
+        var innerHandler = fixture.Factory.Server.CreateHandler();
         var httpClient = new HttpClient(new CanonicalizeUriHandler(innerHandler))
         {
             BaseAddress = new Uri("http://localhost/"),
@@ -59,7 +51,7 @@ public sealed class MultiTenancyTests : IClassFixture<MicroStackFixture>, IAsync
 
     private AmazonSQSClient CreateSqsClient(string accessKey)
     {
-        var innerHandler = _fixture.Factory.Server.CreateHandler();
+        var innerHandler = fixture.Factory.Server.CreateHandler();
         var httpClient = new HttpClient(new CanonicalizeUriHandler(innerHandler))
         {
             BaseAddress = new Uri("http://localhost/"),
@@ -77,7 +69,7 @@ public sealed class MultiTenancyTests : IClassFixture<MicroStackFixture>, IAsync
 
     private AmazonS3Client CreateS3Client(string accessKey)
     {
-        var innerHandler = _fixture.Factory.Server.CreateHandler();
+        var innerHandler = fixture.Factory.Server.CreateHandler();
         var httpClient = new HttpClient(new CanonicalizeUriHandler(innerHandler))
         {
             BaseAddress = new Uri("http://localhost/"),
@@ -96,7 +88,7 @@ public sealed class MultiTenancyTests : IClassFixture<MicroStackFixture>, IAsync
 
     private AmazonDynamoDBClient CreateDdbClient(string accessKey)
     {
-        var innerHandler = _fixture.Factory.Server.CreateHandler();
+        var innerHandler = fixture.Factory.Server.CreateHandler();
         var httpClient = new HttpClient(new CanonicalizeUriHandler(innerHandler))
         {
             BaseAddress = new Uri("http://localhost/"),
@@ -287,7 +279,7 @@ public sealed class MultiTenancyTests : IClassFixture<MicroStackFixture>, IAsync
         listB.QueueUrls.ShouldContain(u => u.Contains("reset-test-b"));
 
         // Reset
-        await _fixture.HttpClient.PostAsync("/_ministack/reset", null);
+        await fixture.HttpClient.PostAsync("/_microstack/reset", null);
 
         // Both should be empty after reset
         listA = await sqsA.ListQueuesAsync(new ListQueuesRequest());

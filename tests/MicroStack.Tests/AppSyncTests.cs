@@ -12,16 +12,9 @@ namespace MicroStack.Tests;
 /// Mirrors management-plane coverage from ministack/tests/test_appsync.py.
 /// GraphQL data-plane tests are excluded as they use raw HTTP against localhost:4566.
 /// </summary>
-public sealed class AppSyncTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
+public sealed class AppSyncTests(MicroStackFixture fixture) : IClassFixture<MicroStackFixture>, IAsyncLifetime
 {
-    private readonly MicroStackFixture _fixture;
-    private readonly AmazonAppSyncClient _appsync;
-
-    public AppSyncTests(MicroStackFixture fixture)
-    {
-        _fixture = fixture;
-        _appsync = CreateAppSyncClient(fixture);
-    }
+    private readonly AmazonAppSyncClient _appsync = CreateAppSyncClient(fixture);
 
     private static AmazonAppSyncClient CreateAppSyncClient(MicroStackFixture fixture)
     {
@@ -42,15 +35,15 @@ public sealed class AppSyncTests : IClassFixture<MicroStackFixture>, IAsyncLifet
             new BasicAWSCredentials("test", "test"), config);
     }
 
-    public async Task InitializeAsync()
+    public async ValueTask InitializeAsync()
     {
-        await _fixture.HttpClient.PostAsync("/_ministack/reset", null);
+        await fixture.HttpClient.PostAsync("/_microstack/reset", null);
     }
 
-    public Task DisposeAsync()
+    public ValueTask DisposeAsync()
     {
         _appsync.Dispose();
-        return Task.CompletedTask;
+        return ValueTask.CompletedTask;
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
