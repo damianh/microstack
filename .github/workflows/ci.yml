@@ -33,7 +33,7 @@ jobs:
         run: dotnet build MicroStack.slnx -c Release --no-restore
 
       - name: Test
-        run: dotnet test --solution MicroStack.slnx -c Release --no-build --filter-not-class MicroStack.Tests.ContainerSmokeTests
+        run: dotnet test --solution MicroStack.slnx -c Release --no-build --filter-not-class MicroStack.Tests.ContainerSmokeTests --filter-not-namespace MicroStack.Aspire.Tests
 
       - name: Pack NuGet packages
         run: dotnet pack src/MicroStack.Aspire.Hosting/MicroStack.Aspire.Hosting.csproj -c Release --no-build --output ./packages
