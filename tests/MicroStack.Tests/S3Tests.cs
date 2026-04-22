@@ -41,15 +41,15 @@ public sealed class S3Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         return new AmazonS3Client(new BasicAWSCredentials("test", "test"), config);
     }
 
-    public async Task InitializeAsync()
+    public async ValueTask InitializeAsync()
     {
         await _fixture.HttpClient.PostAsync("/_ministack/reset", null);
     }
 
-    public Task DisposeAsync()
+    public ValueTask DisposeAsync()
     {
         _s3.Dispose();
-        return Task.CompletedTask;
+        return ValueTask.CompletedTask;
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────────

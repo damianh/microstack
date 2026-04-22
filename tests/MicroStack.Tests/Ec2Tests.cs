@@ -32,15 +32,15 @@ public sealed class Ec2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
         return new AmazonEC2Client(new BasicAWSCredentials("test", "test"), config);
     }
 
-    public async Task InitializeAsync()
+    public async ValueTask InitializeAsync()
     {
         await _fixture.HttpClient.PostAsync("/_ministack/reset", null);
     }
 
-    public Task DisposeAsync()
+    public ValueTask DisposeAsync()
     {
         _ec2.Dispose();
-        return Task.CompletedTask;
+        return ValueTask.CompletedTask;
     }
 
     // ── VPC Tests ───────────────────────────────────────────────────────────────

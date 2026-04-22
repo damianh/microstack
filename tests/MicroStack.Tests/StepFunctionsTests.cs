@@ -116,18 +116,18 @@ public sealed class StepFunctionsTests : IClassFixture<MicroStackFixture>, IAsyn
             new BasicAWSCredentials("test", "test"), config);
     }
 
-    public async Task InitializeAsync()
+    public async ValueTask InitializeAsync()
     {
         await _fixture.HttpClient.PostAsync("/_ministack/reset", null);
     }
 
-    public Task DisposeAsync()
+    public ValueTask DisposeAsync()
     {
         _sfn.Dispose();
         _sqs.Dispose();
         _ddb.Dispose();
         _sns.Dispose();
-        return Task.CompletedTask;
+        return ValueTask.CompletedTask;
     }
 
     // ── Helpers ────────────────────────────────────────────────────────────────

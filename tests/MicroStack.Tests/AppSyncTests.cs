@@ -42,15 +42,15 @@ public sealed class AppSyncTests : IClassFixture<MicroStackFixture>, IAsyncLifet
             new BasicAWSCredentials("test", "test"), config);
     }
 
-    public async Task InitializeAsync()
+    public async ValueTask InitializeAsync()
     {
         await _fixture.HttpClient.PostAsync("/_ministack/reset", null);
     }
 
-    public Task DisposeAsync()
+    public ValueTask DisposeAsync()
     {
         _appsync.Dispose();
-        return Task.CompletedTask;
+        return ValueTask.CompletedTask;
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

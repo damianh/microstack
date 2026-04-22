@@ -64,16 +64,16 @@ public sealed class ServiceDiscoveryTests : IClassFixture<MicroStackFixture>, IA
             new BasicAWSCredentials("test", "test"), config);
     }
 
-    public async Task InitializeAsync()
+    public async ValueTask InitializeAsync()
     {
         await _fixture.HttpClient.PostAsync("/_ministack/reset", null);
     }
 
-    public Task DisposeAsync()
+    public ValueTask DisposeAsync()
     {
         _sd.Dispose();
         _r53.Dispose();
-        return Task.CompletedTask;
+        return ValueTask.CompletedTask;
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────────

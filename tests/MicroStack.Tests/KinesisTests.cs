@@ -41,15 +41,15 @@ public sealed class KinesisTests : IClassFixture<MicroStackFixture>, IAsyncLifet
         return new AmazonKinesisClient(new BasicAWSCredentials("test", "test"), config);
     }
 
-    public async Task InitializeAsync()
+    public async ValueTask InitializeAsync()
     {
         await _fixture.HttpClient.PostAsync("/_ministack/reset", null);
     }
 
-    public Task DisposeAsync()
+    public ValueTask DisposeAsync()
     {
         _kin.Dispose();
-        return Task.CompletedTask;
+        return ValueTask.CompletedTask;
     }
 
     // ── Stream lifecycle ────────────────────────────────────────────────────────

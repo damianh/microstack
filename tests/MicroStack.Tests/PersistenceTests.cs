@@ -39,18 +39,18 @@ public sealed class PersistenceTests : IClassFixture<MicroStackFixture>, IAsyncL
         _sm = CreateSmClient(fixture);
     }
 
-    public async Task InitializeAsync()
+    public async ValueTask InitializeAsync()
     {
         await _fixture.HttpClient.PostAsync("/_ministack/reset", null);
     }
 
-    public Task DisposeAsync()
+    public ValueTask DisposeAsync()
     {
         _sqs.Dispose();
         _sns.Dispose();
         _ssm.Dispose();
         _sm.Dispose();
-        return Task.CompletedTask;
+        return ValueTask.CompletedTask;
     }
 
     // ── SDK client helpers ──────────────────────────────────────────────────────

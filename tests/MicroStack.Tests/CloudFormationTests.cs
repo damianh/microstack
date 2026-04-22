@@ -74,12 +74,12 @@ public sealed class CloudFormationTests : IClassFixture<MicroStackFixture>, IAsy
             config)!;
     }
 
-    public async Task InitializeAsync()
+    public async ValueTask InitializeAsync()
     {
         await _fixture.HttpClient.PostAsync("/_ministack/reset", null);
     }
 
-    public Task DisposeAsync()
+    public ValueTask DisposeAsync()
     {
         _cfn.Dispose();
         _s3.Dispose();
@@ -92,7 +92,7 @@ public sealed class CloudFormationTests : IClassFixture<MicroStackFixture>, IAsy
         _kinesis.Dispose();
         _ecr.Dispose();
         _elbv2.Dispose();
-        return Task.CompletedTask;
+        return ValueTask.CompletedTask;
     }
 
     private static string ToJson(object obj)

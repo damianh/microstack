@@ -27,12 +27,12 @@ public sealed class RdsDataTests : IClassFixture<MicroStackFixture>, IAsyncLifet
         _fixture = fixture;
     }
 
-    public async Task InitializeAsync()
+    public async ValueTask InitializeAsync()
     {
         await _fixture.HttpClient.PostAsync("/_ministack/reset", null);
     }
 
-    public Task DisposeAsync() => Task.CompletedTask;
+    public ValueTask DisposeAsync() => ValueTask.CompletedTask;
 
     private async Task<(HttpStatusCode StatusCode, JsonElement Body)> RawPost(string path, object body)
     {

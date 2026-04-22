@@ -43,12 +43,12 @@ public sealed class UnicodeTests : IClassFixture<MicroStackFixture>, IAsyncLifet
         _r53 = CreateR53Client(fixture);
     }
 
-    public async Task InitializeAsync()
+    public async ValueTask InitializeAsync()
     {
         await _fixture.HttpClient.PostAsync("/_ministack/reset", null);
     }
 
-    public Task DisposeAsync()
+    public ValueTask DisposeAsync()
     {
         _s3.Dispose();
         _sqs.Dispose();
@@ -56,7 +56,7 @@ public sealed class UnicodeTests : IClassFixture<MicroStackFixture>, IAsyncLifet
         _sm.Dispose();
         _ssm.Dispose();
         _r53.Dispose();
-        return Task.CompletedTask;
+        return ValueTask.CompletedTask;
     }
 
     // ── Client factory helpers ────────────────────────────────────────────────

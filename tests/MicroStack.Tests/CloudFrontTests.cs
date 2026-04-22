@@ -41,15 +41,15 @@ public sealed class CloudFrontTests : IClassFixture<MicroStackFixture>, IAsyncLi
             new BasicAWSCredentials("test", "test"), config);
     }
 
-    public async Task InitializeAsync()
+    public async ValueTask InitializeAsync()
     {
         await _fixture.HttpClient.PostAsync("/_ministack/reset", null);
     }
 
-    public Task DisposeAsync()
+    public ValueTask DisposeAsync()
     {
         _cf.Dispose();
-        return Task.CompletedTask;
+        return ValueTask.CompletedTask;
     }
 
     private static DistributionConfig MakeDistConfig(string callerRef, string comment, bool enabled = true)

@@ -69,16 +69,16 @@ public sealed class ApiGatewayV2Tests : IClassFixture<MicroStackFixture>, IAsync
             new BasicAWSCredentials("test", "test"), config);
     }
 
-    public async Task InitializeAsync()
+    public async ValueTask InitializeAsync()
     {
         await _fixture.HttpClient.PostAsync("/_ministack/reset", null);
     }
 
-    public Task DisposeAsync()
+    public ValueTask DisposeAsync()
     {
         _apigw.Dispose();
         _lambda.Dispose();
-        return Task.CompletedTask;
+        return ValueTask.CompletedTask;
     }
 
     private static MemoryStream MakeZip(string filename, string content)

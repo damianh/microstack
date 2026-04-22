@@ -29,12 +29,12 @@ public sealed class MultiTenancyTests : IClassFixture<MicroStackFixture>, IAsync
         _fixture = fixture;
     }
 
-    public async Task InitializeAsync()
+    public async ValueTask InitializeAsync()
     {
         await _fixture.HttpClient.PostAsync("/_ministack/reset", null);
     }
 
-    public Task DisposeAsync() => Task.CompletedTask;
+    public ValueTask DisposeAsync() => ValueTask.CompletedTask;
 
     // ── Client factory helpers ────────────────────────────────────────────────
 
