@@ -1,0 +1,13 @@
+<Project Sdk="Aspire.AppHost.Sdk/13.2.2">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\MicroStack.Aspire.Hosting\MicroStack.Aspire.Hosting.csproj"
+                      IsAspireProjectResource="false" />
+  </ItemGroup>
+
+</Project>

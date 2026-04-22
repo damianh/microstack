@@ -6,6 +6,8 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/MicroStack.Tests/MicroStack.Tests.csproj" />
+    <Project Path="tests/MicroStack.Aspire.Tests.AppHost/MicroStack.Aspire.Tests.AppHost.csproj" />
+    <Project Path="tests/MicroStack.Aspire.Tests/MicroStack.Aspire.Tests.csproj" />
     <Project Path="tests/TestLambdaFunctions/SimpleHandler/SimpleHandler.csproj" />
   </Folder>
 </Solution>

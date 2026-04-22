@@ -57,7 +57,7 @@ public sealed class MicroStackSmokeTests : IAsyncLifetime
     {
         var httpClient = _app!.CreateHttpClient("microstack");
 
-        using var response = await httpClient.GetAsync("/_ministack/health");
+        using var response = await httpClient.GetAsync("/_microstack/health");
 
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
     }
