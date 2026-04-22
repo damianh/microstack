@@ -44,15 +44,15 @@ jobs:
           name: nuget-packages
           path: ./packages/*.nupkg
 
-      - name: Install musl toolchain
-        run: sudo apt-get update && sudo apt-get install -y musl-tools
+      - name: Build container image
+        run: docker build -t microstack:ci .
 
-      - name: Publish container image (local)
-        run: >
-          dotnet publish src/MicroStack/MicroStack.csproj
-          /t:PublishContainer
-          -r linux-musl-x64
-          -c Release
+      - name: Smoke test container
+        run: |
+          docker run --rm -d --name microstack-smoke -p 4566:4566 microstack:ci
+          sleep 3
+          curl -sf http://localhost:4566/_microstack/health || (docker logs microstack-smoke && exit 1)
+          docker stop microstack-smoke
 
       - name: Report container image size
         run: docker images microstack

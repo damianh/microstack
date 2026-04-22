@@ -79,9 +79,6 @@ jobs:
           name: nuget-packages-${{ inputs.version }}
           path: ./packages/*.nupkg
 
-      - name: Install musl toolchain
-        run: sudo apt-get update && sudo apt-get install -y musl-tools
-
       - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
@@ -89,15 +86,24 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Publish container image to GHCR
+      - name: Build container image
         run: >
-          dotnet publish src/MicroStack/MicroStack.csproj
-          /t:PublishContainer
-          -r linux-musl-x64
-          -c Release
-          -p:ContainerRegistry=ghcr.io
-          -p:ContainerRepository=${{ github.repository_owner }}/microstack
-          -p:ContainerImageTags='"${{ inputs.version }};latest"'
+          docker build
+          -t ghcr.io/${{ github.repository_owner }}/microstack:${{ inputs.version }}
+          -t ghcr.io/${{ github.repository_owner }}/microstack:latest
+          .
+
+      - name: Smoke test container
+        run: |
+          docker run --rm -d --name microstack-smoke -p 4566:4566 ghcr.io/${{ github.repository_owner }}/microstack:${{ inputs.version }}
+          sleep 3
+          curl -sf http://localhost:4566/_microstack/health || (docker logs microstack-smoke && exit 1)
+          docker stop microstack-smoke
+
+      - name: Push container image to GHCR
+        run: |
+          docker push ghcr.io/${{ github.repository_owner }}/microstack:${{ inputs.version }}
+          docker push ghcr.io/${{ github.repository_owner }}/microstack:latest
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
