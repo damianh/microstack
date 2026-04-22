@@ -2,7 +2,6 @@ using Amazon;
 using Amazon.Runtime;
 using Amazon.SQS;
 using Amazon.SQS.Model;
-using Microsoft.AspNetCore.Mvc.Testing;
 
 namespace MicroStack.Tests;
 
@@ -12,16 +11,9 @@ namespace MicroStack.Tests;
 ///
 /// Mirrors coverage from ministack/tests/test_sqs.py.
 /// </summary>
-public sealed class SqsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
+public sealed class SqsTests(MicroStackFixture fixture) : IClassFixture<MicroStackFixture>, IAsyncLifetime
 {
-    private readonly MicroStackFixture _fixture;
-    private readonly AmazonSQSClient _sqs;
-
-    public SqsTests(MicroStackFixture fixture)
-    {
-        _fixture = fixture;
-        _sqs = CreateSqsClient(fixture);
-    }
+    private readonly AmazonSQSClient _sqs = CreateSqsClient(fixture);
 
     private static AmazonSQSClient CreateSqsClient(MicroStackFixture fixture)
     {
@@ -49,7 +41,7 @@ public sealed class SqsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
     public async ValueTask InitializeAsync()
     {
         // Reset state before each test class run
-        await _fixture.HttpClient.PostAsync("/_ministack/reset", null);
+        await fixture.HttpClient.PostAsync("/_microstack/reset", null);
     }
 
     public ValueTask DisposeAsync()

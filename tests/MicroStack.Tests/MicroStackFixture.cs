@@ -13,7 +13,7 @@ public sealed class MicroStackFixture : IDisposable
 
     public MicroStackFixture()
     {
-        Factory    = new WebApplicationFactory<Program>();
+        Factory = new WebApplicationFactory<Program>();
         HttpClient = Factory.CreateClient();
     }
 

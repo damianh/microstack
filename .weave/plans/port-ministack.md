@@ -62,7 +62,7 @@ Create a fully functional .NET 10 port of MiniStack that passes equivalent integ
 ### Definition of Done
 - [ ] `dotnet build` succeeds with zero warnings
 - [ ] `dotnet test` passes all integration tests
-- [ ] Health endpoint returns service list at `http://localhost:4566/_ministack/health`
+- [ ] Health endpoint returns service list at `http://localhost:4566/_microstack/health`
 - [ ] AWS SDK for .NET clients can connect and perform CRUD operations on all ported services
 
 ### Guardrails (Must NOT)
@@ -123,7 +123,7 @@ Create a fully functional .NET 10 port of MiniStack that passes equivalent integ
   Source reference: `ministack/app.py` lines 193-552 (ASGI app function)
 
 - [x] 6 Special Route Handling (Pre-Router)
-  **What**: Implement the special routing paths that are handled before general service dispatch in `app.py`: (a) S3 virtual-hosted style (`{bucket}.localhost` or `{bucket}.s3.localhost`), (b) API Gateway execute-api data plane (`{apiId}.execute-api.localhost`), (c) ALB data plane (`{lb}.alb.localhost` or `/_alb/{lb}/...`), (d) S3 Control API (`/v20180820/...`), (e) RDS Data API REST paths (`/Execute`, `/BeginTransaction`, etc.), (f) SES v2 REST paths (`/v2/email/...`), (g) Cognito well-known endpoints (`/.well-known/jwks.json`, `/.well-known/openid-configuration`), (h) Lambda layer content download (`/_ministack/lambda-layers/...`). For Phase 1, stub these routes to return 501 — they'll be implemented when their respective services are ported.
+  **What**: Implement the special routing paths that are handled before general service dispatch in `app.py`: (a) S3 virtual-hosted style (`{bucket}.localhost` or `{bucket}.s3.localhost`), (b) API Gateway execute-api data plane (`{apiId}.execute-api.localhost`), (c) ALB data plane (`{lb}.alb.localhost` or `/_alb/{lb}/...`), (d) S3 Control API (`/v20180820/...`), (e) RDS Data API REST paths (`/Execute`, `/BeginTransaction`, etc.), (f) SES v2 REST paths (`/v2/email/...`), (g) Cognito well-known endpoints (`/.well-known/jwks.json`, `/.well-known/openid-configuration`), (h) Lambda layer content download (`/_microstack/lambda-layers/...`). For Phase 1, stub these routes to return 501 — they'll be implemented when their respective services are ported.
   **Files**:
     - `src/MicroStack/Internal/AwsRequestMiddleware.cs` (extend)
   **Acceptance**: Virtual-hosted S3 request to `mybucket.localhost:4566/key` is recognized and routed (to stub). Execute-api host header is recognized.
@@ -131,11 +131,11 @@ Create a fully functional .NET 10 port of MiniStack that passes equivalent integ
   Source reference: `ministack/app.py` lines 263-513 (pre-router special cases)
 
 - [x] 7 Admin Endpoints (Health, Reset, Config)
-  **What**: Implement the three admin endpoints: (a) `GET /_ministack/health` (and aliases `/health`, `/_localstack/health`) returns JSON `{"services": {...}, "edition": "light", "version": "0.1.0"}` listing all registered service handlers, (b) `POST /_ministack/reset` calls `Reset()` on all registered service handlers and wipes persistence files, (c) `POST /_ministack/config` accepts JSON body with allowed config keys (stub for now). Register these as minimal API endpoints or handle in middleware before service dispatch.
+  **What**: Implement the three admin endpoints: (a) `GET /_microstack/health` (and aliases `/health`, `/_localstack/health`) returns JSON `{"services": {...}, "edition": "light", "version": "0.1.0"}` listing all registered service handlers, (b) `POST /_microstack/reset` calls `Reset()` on all registered service handlers and wipes persistence files, (c) `POST /_microstack/config` accepts JSON body with allowed config keys (stub for now). Register these as minimal API endpoints or handle in middleware before service dispatch.
   **Files**:
     - `src/MicroStack/Internal/AdminEndpoints.cs`
     - `src/MicroStack/Program.cs` (wire up)
-  **Acceptance**: `curl http://localhost:4566/_ministack/health` returns 200 with services JSON. `curl -X POST http://localhost:4566/_ministack/reset` returns 200 with `{"reset":"ok"}`.
+  **Acceptance**: `curl http://localhost:4566/_microstack/health` returns 200 with services JSON. `curl -X POST http://localhost:4566/_microstack/reset` returns 200 with `{"reset":"ok"}`.
 
   Source reference: `ministack/app.py` lines 289-321, 399-408, 750-819
 
@@ -630,12 +630,12 @@ Create a fully functional .NET 10 port of MiniStack that passes equivalent integ
   Source reference: `ministack/tests/test_multitenancy.py`
 
 - [x] 62 Persistence Integration Test
-  **What**: Port `test_ministack_persist.py` (272 lines). Verify that with `PERSIST_STATE=1`, service state survives server restart.
+  **What**: Port `test_microstack_persist.py` (272 lines). Verify that with `PERSIST_STATE=1`, service state survives server restart.
   **Files**:
     - `tests/MicroStack.Tests/PersistenceTests.cs`
   **Acceptance**: Create resources, restart server, resources still exist.
 
-  Source reference: `ministack/tests/test_ministack_persist.py`
+  Source reference: `ministack/tests/test_microstack_persist.py`
 
 - [ ] 63 Unicode Handling Test
   **What**: Port `test_unicode.py` (64 lines). Verify Unicode characters in S3 keys, SQS messages, DynamoDB items, SNS messages are handled correctly.
@@ -650,8 +650,8 @@ Create a fully functional .NET 10 port of MiniStack that passes equivalent integ
 - [ ] `dotnet build src/MicroStack/MicroStack.csproj` succeeds with zero warnings
 - [ ] `dotnet build tests/MicroStack.Tests/MicroStack.Tests.csproj` succeeds with zero warnings
 - [ ] `dotnet test tests/MicroStack.Tests/` — all integration tests pass
-- [ ] Health endpoint at `http://localhost:4566/_ministack/health` returns all services
-- [ ] Reset endpoint at `http://localhost:4566/_ministack/reset` clears all state
+- [ ] Health endpoint at `http://localhost:4566/_microstack/health` returns all services
+- [ ] Reset endpoint at `http://localhost:4566/_microstack/reset` clears all state
 - [ ] AWS SDK for .NET clients with `ServiceURL=http://localhost:4566` can perform operations on all services
 - [ ] Docker build succeeds and container runs correctly
 - [ ] No public types in `*.Internal.*` namespaces

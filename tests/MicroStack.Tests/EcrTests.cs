@@ -10,16 +10,9 @@ namespace MicroStack.Tests;
 /// Integration tests for the ECR service handler.
 /// Mirrors coverage from ministack/tests/test_ecr.py.
 /// </summary>
-public sealed class EcrTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
+public sealed class EcrTests(MicroStackFixture fixture) : IClassFixture<MicroStackFixture>, IAsyncLifetime
 {
-    private readonly MicroStackFixture _fixture;
-    private readonly AmazonECRClient _ecr;
-
-    public EcrTests(MicroStackFixture fixture)
-    {
-        _fixture = fixture;
-        _ecr = CreateClient(fixture);
-    }
+    private readonly AmazonECRClient _ecr = CreateClient(fixture);
 
     private static AmazonECRClient CreateClient(MicroStackFixture fixture)
     {
@@ -40,7 +33,7 @@ public sealed class EcrTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
 
     public async ValueTask InitializeAsync()
     {
-        await _fixture.HttpClient.PostAsync("/_ministack/reset", null);
+        await fixture.HttpClient.PostAsync("/_microstack/reset", null);
     }
 
     public ValueTask DisposeAsync()

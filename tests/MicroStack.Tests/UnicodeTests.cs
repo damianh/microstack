@@ -5,7 +5,6 @@ using Amazon.Runtime;
 using Amazon.S3;
 using Amazon.S3.Model;
 using Amazon.SecretsManager;
-using Amazon.SecretsManager.Model;
 using Amazon.SimpleSystemsManagement;
 using Amazon.SimpleSystemsManagement.Model;
 using Amazon.SQS;
@@ -22,30 +21,18 @@ namespace MicroStack.Tests;
 ///
 /// Mirrors coverage from ministack/tests/test_unicode.py.
 /// </summary>
-public sealed class UnicodeTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
+public sealed class UnicodeTests(MicroStackFixture fixture) : IClassFixture<MicroStackFixture>, IAsyncLifetime
 {
-    private readonly MicroStackFixture _fixture;
-    private readonly AmazonS3Client _s3;
-    private readonly AmazonSQSClient _sqs;
-    private readonly AmazonDynamoDBClient _ddb;
-    private readonly AmazonSecretsManagerClient _sm;
-    private readonly AmazonSimpleSystemsManagementClient _ssm;
-    private readonly AmazonRoute53Client _r53;
-
-    public UnicodeTests(MicroStackFixture fixture)
-    {
-        _fixture = fixture;
-        _s3 = CreateS3Client(fixture);
-        _sqs = CreateSqsClient(fixture);
-        _ddb = CreateDdbClient(fixture);
-        _sm = CreateSmClient(fixture);
-        _ssm = CreateSsmClient(fixture);
-        _r53 = CreateR53Client(fixture);
-    }
+    private readonly AmazonS3Client _s3 = CreateS3Client(fixture);
+    private readonly AmazonSQSClient _sqs = CreateSqsClient(fixture);
+    private readonly AmazonDynamoDBClient _ddb = CreateDdbClient(fixture);
+    private readonly AmazonSecretsManagerClient _sm = CreateSmClient(fixture);
+    private readonly AmazonSimpleSystemsManagementClient _ssm = CreateSsmClient(fixture);
+    private readonly AmazonRoute53Client _r53 = CreateR53Client(fixture);
 
     public async ValueTask InitializeAsync()
     {
-        await _fixture.HttpClient.PostAsync("/_ministack/reset", null);
+        await fixture.HttpClient.PostAsync("/_microstack/reset", null);
     }
 
     public ValueTask DisposeAsync()

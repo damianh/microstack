@@ -20,36 +20,19 @@ namespace MicroStack.Tests;
 /// Uses the AWS SDK for .NET v4 pointed at the in-process MicroStack server.
 /// Mirrors coverage from ministack/tests/test_cfn.py.
 /// </summary>
-public sealed class CloudFormationTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
+public sealed class CloudFormationTests(MicroStackFixture fixture) : IClassFixture<MicroStackFixture>, IAsyncLifetime
 {
-    private readonly MicroStackFixture _fixture;
-    private readonly AmazonCloudFormationClient _cfn;
-    private readonly AmazonS3Client _s3;
-    private readonly AmazonSQSClient _sqs;
-    private readonly AmazonSimpleNotificationServiceClient _sns;
-    private readonly AmazonIdentityManagementServiceClient _iam;
-    private readonly AmazonLambdaClient _lambda;
-    private readonly AmazonSimpleSystemsManagementClient _ssm;
-    private readonly AmazonDynamoDBClient _ddb;
-    private readonly AmazonKinesisClient _kinesis;
-    private readonly AmazonECRClient _ecr;
-    private readonly AmazonElasticLoadBalancingV2Client _elbv2;
-
-    public CloudFormationTests(MicroStackFixture fixture)
-    {
-        _fixture = fixture;
-        _cfn = CreateClient<AmazonCloudFormationClient, AmazonCloudFormationConfig>(fixture);
-        _s3 = CreateClient<AmazonS3Client, AmazonS3Config>(fixture);
-        _sqs = CreateClient<AmazonSQSClient, AmazonSQSConfig>(fixture);
-        _sns = CreateClient<AmazonSimpleNotificationServiceClient, AmazonSimpleNotificationServiceConfig>(fixture);
-        _iam = CreateClient<AmazonIdentityManagementServiceClient, AmazonIdentityManagementServiceConfig>(fixture);
-        _lambda = CreateClient<AmazonLambdaClient, AmazonLambdaConfig>(fixture);
-        _ssm = CreateClient<AmazonSimpleSystemsManagementClient, AmazonSimpleSystemsManagementConfig>(fixture);
-        _ddb = CreateClient<AmazonDynamoDBClient, AmazonDynamoDBConfig>(fixture);
-        _kinesis = CreateClient<AmazonKinesisClient, AmazonKinesisConfig>(fixture);
-        _ecr = CreateClient<AmazonECRClient, AmazonECRConfig>(fixture);
-        _elbv2 = CreateClient<AmazonElasticLoadBalancingV2Client, AmazonElasticLoadBalancingV2Config>(fixture);
-    }
+    private readonly AmazonCloudFormationClient _cfn = CreateClient<AmazonCloudFormationClient, AmazonCloudFormationConfig>(fixture);
+    private readonly AmazonS3Client _s3 = CreateClient<AmazonS3Client, AmazonS3Config>(fixture);
+    private readonly AmazonSQSClient _sqs = CreateClient<AmazonSQSClient, AmazonSQSConfig>(fixture);
+    private readonly AmazonSimpleNotificationServiceClient _sns = CreateClient<AmazonSimpleNotificationServiceClient, AmazonSimpleNotificationServiceConfig>(fixture);
+    private readonly AmazonIdentityManagementServiceClient _iam = CreateClient<AmazonIdentityManagementServiceClient, AmazonIdentityManagementServiceConfig>(fixture);
+    private readonly AmazonLambdaClient _lambda = CreateClient<AmazonLambdaClient, AmazonLambdaConfig>(fixture);
+    private readonly AmazonSimpleSystemsManagementClient _ssm = CreateClient<AmazonSimpleSystemsManagementClient, AmazonSimpleSystemsManagementConfig>(fixture);
+    private readonly AmazonDynamoDBClient _ddb = CreateClient<AmazonDynamoDBClient, AmazonDynamoDBConfig>(fixture);
+    private readonly AmazonKinesisClient _kinesis = CreateClient<AmazonKinesisClient, AmazonKinesisConfig>(fixture);
+    private readonly AmazonECRClient _ecr = CreateClient<AmazonECRClient, AmazonECRConfig>(fixture);
+    private readonly AmazonElasticLoadBalancingV2Client _elbv2 = CreateClient<AmazonElasticLoadBalancingV2Client, AmazonElasticLoadBalancingV2Config>(fixture);
 
     private static TClient CreateClient<TClient, TConfig>(MicroStackFixture fixture)
         where TClient : AmazonServiceClient
@@ -76,7 +59,7 @@ public sealed class CloudFormationTests : IClassFixture<MicroStackFixture>, IAsy
 
     public async ValueTask InitializeAsync()
     {
-        await _fixture.HttpClient.PostAsync("/_ministack/reset", null);
+        await fixture.HttpClient.PostAsync("/_microstack/reset", null);
     }
 
     public ValueTask DisposeAsync()

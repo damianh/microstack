@@ -32,7 +32,7 @@ public static class MicroStackBuilderExtensions
             .WithImage(MicroStackContainerImageTags.Image, MicroStackContainerImageTags.Tag)
             .WithImageRegistry(MicroStackContainerImageTags.Registry)
             .WithHttpEndpoint(targetPort: DefaultContainerPort, name: MicroStackResource.HttpEndpointName)
-            .WithHttpHealthCheck("/_ministack/health");
+            .WithHttpHealthCheck("/_microstack/health");
     }
 
     /// <summary>
@@ -56,7 +56,7 @@ public static class MicroStackBuilderExtensions
             .WithImage(MicroStackContainerImageTags.Image, MicroStackContainerImageTags.Tag)
             .WithImageRegistry(MicroStackContainerImageTags.Registry)
             .WithHttpEndpoint(port: port, targetPort: DefaultContainerPort, name: MicroStackResource.HttpEndpointName)
-            .WithHttpHealthCheck("/_ministack/health");
+            .WithHttpHealthCheck("/_microstack/health");
     }
 
     /// <summary>

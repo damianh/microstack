@@ -160,7 +160,7 @@ internal sealed class AwsRequestMiddleware
         }
 
         // Lambda layer content download
-        if (path.StartsWith("/_ministack/lambda-layers/", StringComparison.OrdinalIgnoreCase) && method == "GET")
+        if (path.StartsWith("/_microstack/lambda-layers/", StringComparison.OrdinalIgnoreCase) && method == "GET")
         {
             await DispatchToService(context, serviceRequest, "lambda");
             return;

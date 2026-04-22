@@ -35,7 +35,7 @@ Make MicroStack (.NET 10 ASP.NET Core app emulating 39 AWS services) compatible 
 
 7. **Program.cs** — 3 anonymous types in `Results.Ok(new { ... })`.
 
-8. **Program.cs `/_ministack/config`** — `JsonElementToDict()` / `JsonElementToObject()` helper converts `JsonElement` → `Dictionary<string, object?>` → passed to `sfnHandler.SetMockConfig()`.
+8. **Program.cs `/_microstack/config`** — `JsonElementToDict()` / `JsonElementToObject()` helper converts `JsonElement` → `Dictionary<string, object?>` → passed to `sfnHandler.SetMockConfig()`.
 
 **Critical insight about the `Dictionary<string, object?>` pattern:**
 
@@ -329,10 +329,10 @@ Enable Native AOT publishing for MicroStack with zero trim warnings and all 1,17
 - [x] 17. Verify AOT binary runs correctly
   **What**: Run the AOT-compiled binary and execute a smoke test:
   1. Start the binary
-  2. Hit `/_ministack/health` endpoint
+  2. Hit `/_microstack/health` endpoint
   3. Create an SQS queue via AWS SDK
   4. Send/receive a message
-  5. Hit `/_ministack/reset`
+  5. Hit `/_microstack/reset`
   6. Verify health returns clean state
   **Acceptance**: AOT binary starts, serves requests, returns correct responses
 

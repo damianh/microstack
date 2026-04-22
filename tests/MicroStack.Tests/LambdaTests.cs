@@ -2,7 +2,6 @@ using System.Diagnostics;
 using System.IO.Compression;
 using System.Runtime.InteropServices;
 using System.Text;
-using System.Text.Json;
 using Amazon;
 using Amazon.Lambda;
 using Amazon.Lambda.Model;
@@ -54,7 +53,7 @@ public sealed class LambdaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
 
     public async ValueTask InitializeAsync()
     {
-        await _fixture.HttpClient.PostAsync("/_ministack/reset", null);
+        await _fixture.HttpClient.PostAsync("/_microstack/reset", null);
     }
 
     public ValueTask DisposeAsync()
@@ -1315,7 +1314,7 @@ public sealed class LambdaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
         var bootTime1 = doc1.RootElement.GetProperty("boot").GetDouble();
 
         // Reset kills all workers
-        await _fixture.HttpClient.PostAsync("/_ministack/reset", null);
+        await _fixture.HttpClient.PostAsync("/_microstack/reset", null);
 
         // Re-create the function (reset cleared the store)
         await CreatePythonFunction("invoke-py-reset", code);
@@ -1651,7 +1650,6 @@ public sealed class LambdaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
     {
 if (!IsDotnetBootstrapAvailable() || FindSimpleHandlerDir() is null)
         {
-            TestContext.Current.CancelCurrentTest();
             return;
         }
 
@@ -1676,7 +1674,6 @@ if (!IsDotnetBootstrapAvailable() || FindSimpleHandlerDir() is null)
     {
 if (!IsDotnetBootstrapAvailable() || FindSimpleHandlerDir() is null)
         {
-            TestContext.Current.CancelCurrentTest();
             return;
         }
 
@@ -1702,7 +1699,6 @@ if (!IsDotnetBootstrapAvailable() || FindSimpleHandlerDir() is null)
     {
 if (!IsDotnetBootstrapAvailable() || FindSimpleHandlerDir() is null)
         {
-            TestContext.Current.CancelCurrentTest();
             return;
         }
 
@@ -1734,7 +1730,6 @@ if (!IsDotnetBootstrapAvailable() || FindSimpleHandlerDir() is null)
     {
 if (!IsDotnetBootstrapAvailable() || FindSimpleHandlerDir() is null)
         {
-            TestContext.Current.CancelCurrentTest();
             return;
         }
 
@@ -1770,7 +1765,6 @@ if (!IsDotnetBootstrapAvailable() || FindSimpleHandlerDir() is null)
     {
 if (!IsDotnetBootstrapAvailable() || FindSimpleHandlerDir() is null)
         {
-            TestContext.Current.CancelCurrentTest();
             return;
         }
 
@@ -1795,7 +1789,6 @@ if (!IsDotnetBootstrapAvailable() || FindSimpleHandlerDir() is null)
     {
 if (!IsDotnetBootstrapAvailable() || FindSimpleHandlerDir() is null)
         {
-            TestContext.Current.CancelCurrentTest();
             return;
         }
 
@@ -1822,7 +1815,6 @@ if (!IsDotnetBootstrapAvailable() || FindSimpleHandlerDir() is null)
     {
 if (!IsDotnetBootstrapAvailable() || FindSimpleHandlerDir() is null)
         {
-            TestContext.Current.CancelCurrentTest();
             return;
         }
 

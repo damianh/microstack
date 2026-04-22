@@ -3,7 +3,6 @@ using Amazon.Runtime;
 using Amazon.SecretsManager;
 using Amazon.SecretsManager.Model;
 using Amazon.SimpleNotificationService;
-using Amazon.SimpleNotificationService.Model;
 using Amazon.SimpleSystemsManagement;
 using Amazon.SimpleSystemsManagement.Model;
 using Amazon.SQS;
@@ -18,30 +17,19 @@ namespace MicroStack.Tests;
 ///
 /// Pattern: create resource via SDK → GetState() → Reset() → verify gone → RestoreState() → verify back.
 ///
-/// Port of ministack/tests/test_ministack_persist.py.
+/// Port of ministack/tests/test_microstack_persist.py.
 /// </summary>
-public sealed class PersistenceTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
+public sealed class PersistenceTests(MicroStackFixture fixture) : IClassFixture<MicroStackFixture>, IAsyncLifetime
 {
-    private readonly MicroStackFixture _fixture;
-    private readonly ServiceRegistry _registry;
-    private readonly AmazonSQSClient _sqs;
-    private readonly AmazonSimpleNotificationServiceClient _sns;
-    private readonly AmazonSimpleSystemsManagementClient _ssm;
-    private readonly AmazonSecretsManagerClient _sm;
-
-    public PersistenceTests(MicroStackFixture fixture)
-    {
-        _fixture = fixture;
-        _registry = (ServiceRegistry)fixture.Factory.Services.GetService(typeof(ServiceRegistry))!;
-        _sqs = CreateSqsClient(fixture);
-        _sns = CreateSnsClient(fixture);
-        _ssm = CreateSsmClient(fixture);
-        _sm = CreateSmClient(fixture);
-    }
+    private readonly ServiceRegistry _registry = (ServiceRegistry)fixture.Factory.Services.GetService(typeof(ServiceRegistry))!;
+    private readonly AmazonSQSClient _sqs = CreateSqsClient(fixture);
+    private readonly AmazonSimpleNotificationServiceClient _sns = CreateSnsClient(fixture);
+    private readonly AmazonSimpleSystemsManagementClient _ssm = CreateSsmClient(fixture);
+    private readonly AmazonSecretsManagerClient _sm = CreateSmClient(fixture);
 
     public async ValueTask InitializeAsync()
     {
-        await _fixture.HttpClient.PostAsync("/_ministack/reset", null);
+        await fixture.HttpClient.PostAsync("/_microstack/reset", null);
     }
 
     public ValueTask DisposeAsync()
@@ -296,7 +284,7 @@ public sealed class PersistenceTests : IClassFixture<MicroStackFixture>, IAsyncL
         });
 
         // Hit the reset endpoint
-        var response = await _fixture.HttpClient.PostAsync("/_ministack/reset", null);
+        var response = await fixture.HttpClient.PostAsync("/_microstack/reset", null);
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
 
         // Verify all resources are gone

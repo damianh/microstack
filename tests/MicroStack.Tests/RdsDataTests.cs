@@ -1,7 +1,4 @@
-using System.Net;
-using System.Net.Http.Json;
 using System.Text;
-using System.Text.Json;
 using Task = System.Threading.Tasks.Task;
 
 namespace MicroStack.Tests;
@@ -13,23 +10,16 @@ namespace MicroStack.Tests;
 ///
 /// Mirrors coverage from ministack/tests/test_rds_data.py.
 /// </summary>
-public sealed class RdsDataTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
+public sealed class RdsDataTests(MicroStackFixture fixture) : IClassFixture<MicroStackFixture>, IAsyncLifetime
 {
     private const string Region = "us-east-1";
     private const string AccountId = "000000000000";
-    private static readonly string FakeClusterArn = $"arn:aws:rds:{Region}:{AccountId}:cluster:nonexistent-cluster";
-    private static readonly string FakeSecretArn = $"arn:aws:secretsmanager:{Region}:{AccountId}:secret:nonexistent-secret";
-
-    private readonly MicroStackFixture _fixture;
-
-    public RdsDataTests(MicroStackFixture fixture)
-    {
-        _fixture = fixture;
-    }
+    private const string FakeClusterArn = $"arn:aws:rds:{Region}:{AccountId}:cluster:nonexistent-cluster";
+    private const string FakeSecretArn = $"arn:aws:secretsmanager:{Region}:{AccountId}:secret:nonexistent-secret";
 
     public async ValueTask InitializeAsync()
     {
-        await _fixture.HttpClient.PostAsync("/_ministack/reset", null);
+        await fixture.HttpClient.PostAsync("/_microstack/reset", null);
     }
 
     public ValueTask DisposeAsync() => ValueTask.CompletedTask;
@@ -38,7 +28,7 @@ public sealed class RdsDataTests : IClassFixture<MicroStackFixture>, IAsyncLifet
     {
         var json = JsonSerializer.Serialize(body);
         using var content = new StringContent(json, Encoding.UTF8, "application/json");
-        var response = await _fixture.HttpClient.PostAsync(path, content);
+        var response = await fixture.HttpClient.PostAsync(path, content);
         var responseBody = await response.Content.ReadAsStringAsync();
         using var doc = JsonDocument.Parse(responseBody);
         return (response.StatusCode, doc.RootElement.Clone());
@@ -47,7 +37,7 @@ public sealed class RdsDataTests : IClassFixture<MicroStackFixture>, IAsyncLifet
     private async Task<(HttpStatusCode StatusCode, JsonElement Body)> RawPostRaw(string path, string rawBody)
     {
         using var content = new StringContent(rawBody, Encoding.UTF8, "application/json");
-        var response = await _fixture.HttpClient.PostAsync(path, content);
+        var response = await fixture.HttpClient.PostAsync(path, content);
         var responseBody = await response.Content.ReadAsStringAsync();
         using var doc = JsonDocument.Parse(responseBody);
         return (response.StatusCode, doc.RootElement.Clone());

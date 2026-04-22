@@ -18,18 +18,10 @@ namespace MicroStack.Tests;
 ///
 /// Port of ministack tests/test_cognito.py (1102 lines, ~50 test cases).
 /// </summary>
-public sealed class CognitoTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
+public sealed class CognitoTests(MicroStackFixture fixture) : IClassFixture<MicroStackFixture>, IAsyncLifetime
 {
-    private readonly MicroStackFixture _fixture;
-    private readonly AmazonCognitoIdentityProviderClient _idp;
-    private readonly AmazonCognitoIdentityClient _identity;
-
-    public CognitoTests(MicroStackFixture fixture)
-    {
-        _fixture = fixture;
-        _idp = CreateIdpClient(fixture);
-        _identity = CreateIdentityClient(fixture);
-    }
+    private readonly AmazonCognitoIdentityProviderClient _idp = CreateIdpClient(fixture);
+    private readonly AmazonCognitoIdentityClient _identity = CreateIdentityClient(fixture);
 
     private static AmazonCognitoIdentityProviderClient CreateIdpClient(MicroStackFixture fixture)
     {
@@ -67,7 +59,7 @@ public sealed class CognitoTests : IClassFixture<MicroStackFixture>, IAsyncLifet
 
     public async ValueTask InitializeAsync()
     {
-        await _fixture.HttpClient.PostAsync("/_ministack/reset", null);
+        await fixture.HttpClient.PostAsync("/_microstack/reset", null);
     }
 
     public ValueTask DisposeAsync()
@@ -1713,7 +1705,7 @@ public sealed class CognitoTests : IClassFixture<MicroStackFixture>, IAsyncLifet
         var pool = (await _idp.CreateUserPoolAsync(new CreateUserPoolRequest { PoolName = "JwksPool" })).UserPool;
         var poolId = pool.Id;
 
-        var resp = await _fixture.HttpClient.GetAsync($"/{poolId}/.well-known/jwks.json");
+        var resp = await fixture.HttpClient.GetAsync($"/{poolId}/.well-known/jwks.json");
         resp.StatusCode.ShouldBe(System.Net.HttpStatusCode.OK);
 
         var json = await resp.Content.ReadAsStringAsync();
@@ -1731,7 +1723,7 @@ public sealed class CognitoTests : IClassFixture<MicroStackFixture>, IAsyncLifet
         var pool = (await _idp.CreateUserPoolAsync(new CreateUserPoolRequest { PoolName = "OidcConfigPool" })).UserPool;
         var poolId = pool.Id;
 
-        var resp = await _fixture.HttpClient.GetAsync($"/{poolId}/.well-known/openid-configuration");
+        var resp = await fixture.HttpClient.GetAsync($"/{poolId}/.well-known/openid-configuration");
         resp.StatusCode.ShouldBe(System.Net.HttpStatusCode.OK);
 
         var json = await resp.Content.ReadAsStringAsync();

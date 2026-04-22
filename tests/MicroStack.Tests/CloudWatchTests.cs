@@ -11,16 +11,9 @@ namespace MicroStack.Tests;
 ///
 /// Mirrors coverage from ministack/tests/test_cloudwatch.py.
 /// </summary>
-public sealed class CloudWatchTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
+public sealed class CloudWatchTests(MicroStackFixture fixture) : IClassFixture<MicroStackFixture>, IAsyncLifetime
 {
-    private readonly MicroStackFixture _fixture;
-    private readonly AmazonCloudWatchClient _cw;
-
-    public CloudWatchTests(MicroStackFixture fixture)
-    {
-        _fixture = fixture;
-        _cw = CreateCloudWatchClient(fixture);
-    }
+    private readonly AmazonCloudWatchClient _cw = CreateCloudWatchClient(fixture);
 
     private static AmazonCloudWatchClient CreateCloudWatchClient(MicroStackFixture fixture)
     {
@@ -43,7 +36,7 @@ public sealed class CloudWatchTests : IClassFixture<MicroStackFixture>, IAsyncLi
 
     public async ValueTask InitializeAsync()
     {
-        await _fixture.HttpClient.PostAsync("/_ministack/reset", null);
+        await fixture.HttpClient.PostAsync("/_microstack/reset", null);
     }
 
     public ValueTask DisposeAsync()

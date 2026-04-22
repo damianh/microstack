@@ -1,12 +1,10 @@
 using System.IO.Compression;
-using System.Text;
 using Amazon;
 using Amazon.ApiGatewayV2;
 using Amazon.ApiGatewayV2.Model;
 using Amazon.Lambda;
 using Amazon.Lambda.Model;
 using Amazon.Runtime;
-using Microsoft.AspNetCore.Mvc.Testing;
 
 namespace MicroStack.Tests;
 
@@ -16,20 +14,12 @@ namespace MicroStack.Tests;
 ///
 /// Ports coverage from ministack/tests/test_apigw.py (~45 tests).
 /// </summary>
-public sealed class ApiGatewayV2Tests : IClassFixture<MicroStackFixture>, IAsyncLifetime
+public sealed class ApiGatewayV2Tests(MicroStackFixture fixture) : IClassFixture<MicroStackFixture>, IAsyncLifetime
 {
-    private readonly MicroStackFixture _fixture;
-    private readonly AmazonApiGatewayV2Client _apigw;
-    private readonly AmazonLambdaClient _lambda;
+    private readonly AmazonApiGatewayV2Client _apigw = CreateApigwClient(fixture);
+    private readonly AmazonLambdaClient _lambda = CreateLambdaClient(fixture);
 
     private const string LambdaRole = "arn:aws:iam::000000000000:role/lambda-role";
-
-    public ApiGatewayV2Tests(MicroStackFixture fixture)
-    {
-        _fixture = fixture;
-        _apigw = CreateApigwClient(fixture);
-        _lambda = CreateLambdaClient(fixture);
-    }
 
     private static AmazonApiGatewayV2Client CreateApigwClient(MicroStackFixture fixture)
     {
@@ -71,7 +61,7 @@ public sealed class ApiGatewayV2Tests : IClassFixture<MicroStackFixture>, IAsync
 
     public async ValueTask InitializeAsync()
     {
-        await _fixture.HttpClient.PostAsync("/_ministack/reset", null);
+        await fixture.HttpClient.PostAsync("/_microstack/reset", null);
     }
 
     public ValueTask DisposeAsync()
@@ -154,7 +144,7 @@ public sealed class ApiGatewayV2Tests : IClassFixture<MicroStackFixture>, IAsync
     {
         var request = new HttpRequestMessage(method, path);
         request.Headers.Host = $"{apiId}.execute-api.localhost";
-        return await _fixture.HttpClient.SendAsync(request);
+        return await fixture.HttpClient.SendAsync(request);
     }
 
     private async Task<HttpResponseMessage> ExecuteApiRequest(
@@ -167,7 +157,7 @@ public sealed class ApiGatewayV2Tests : IClassFixture<MicroStackFixture>, IAsync
         {
             request.Headers.TryAddWithoutValidation(key, value);
         }
-        return await _fixture.HttpClient.SendAsync(request);
+        return await fixture.HttpClient.SendAsync(request);
     }
 
     // ── Control Plane: API CRUD ─────────────────────────────────────────────────

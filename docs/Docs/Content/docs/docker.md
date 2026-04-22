@@ -44,7 +44,7 @@ volumes:
 ## Health Check
 
 ```bash
-curl http://localhost:4566/_ministack/health
+curl http://localhost:4566/_microstack/health
 ```
 
 Returns JSON with all available services:
@@ -65,7 +65,7 @@ Returns JSON with all available services:
 ## Resetting State
 
 ```bash
-curl -X POST http://localhost:4566/_ministack/reset
+curl -X POST http://localhost:4566/_microstack/reset
 ```
 
 Clears all in-memory state across all services.

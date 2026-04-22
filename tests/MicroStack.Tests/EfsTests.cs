@@ -11,16 +11,9 @@ namespace MicroStack.Tests;
 ///
 /// Mirrors coverage from ministack/tests/test_efs.py.
 /// </summary>
-public sealed class EfsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
+public sealed class EfsTests(MicroStackFixture fixture) : IClassFixture<MicroStackFixture>, IAsyncLifetime
 {
-    private readonly MicroStackFixture _fixture;
-    private readonly AmazonElasticFileSystemClient _efs;
-
-    public EfsTests(MicroStackFixture fixture)
-    {
-        _fixture = fixture;
-        _efs = CreateEfsClient(fixture);
-    }
+    private readonly AmazonElasticFileSystemClient _efs = CreateEfsClient(fixture);
 
     private static AmazonElasticFileSystemClient CreateEfsClient(MicroStackFixture fixture)
     {
@@ -43,7 +36,7 @@ public sealed class EfsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
 
     public async ValueTask InitializeAsync()
     {
-        await _fixture.HttpClient.PostAsync("/_ministack/reset", null);
+        await fixture.HttpClient.PostAsync("/_microstack/reset", null);
     }
 
     public ValueTask DisposeAsync()

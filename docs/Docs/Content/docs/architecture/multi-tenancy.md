@@ -109,4 +109,4 @@ When persistence is enabled, `AccountScopedDictionary.ToRaw()` serializes **all*
 
 ## Reset Behavior
 
-The `POST /_ministack/reset` endpoint calls `Clear()` on all `AccountScopedDictionary` instances, which removes data for **all** accounts. There is no per-account reset.
+The `POST /_microstack/reset` endpoint calls `Clear()` on all `AccountScopedDictionary` instances, which removes data for **all** accounts. There is no per-account reset.

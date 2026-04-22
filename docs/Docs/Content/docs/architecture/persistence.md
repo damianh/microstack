@@ -41,7 +41,7 @@ The `StatePersistence` class (`src/MicroStack/Internal/StatePersistence.cs`) man
 
 ### Reset
 
-The `POST /_ministack/reset` endpoint calls:
+The `POST /_microstack/reset` endpoint calls:
 - `registry.ResetAll()` — clears all in-memory state.
 - `persistence.DeleteAll()` — deletes all `.json` files in `STATE_DIR`.
 

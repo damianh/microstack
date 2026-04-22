@@ -11,16 +11,9 @@ namespace MicroStack.Tests;
 ///
 /// Mirrors coverage from ministack tests/test_kms.py (33 test cases).
 /// </summary>
-public sealed class KmsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
+public sealed class KmsTests(MicroStackFixture fixture) : IClassFixture<MicroStackFixture>, IAsyncLifetime
 {
-    private readonly MicroStackFixture _fixture;
-    private readonly AmazonKeyManagementServiceClient _kms;
-
-    public KmsTests(MicroStackFixture fixture)
-    {
-        _fixture = fixture;
-        _kms = CreateClient(fixture);
-    }
+    private readonly AmazonKeyManagementServiceClient _kms = CreateClient(fixture);
 
     private static AmazonKeyManagementServiceClient CreateClient(MicroStackFixture fixture)
     {
@@ -43,7 +36,7 @@ public sealed class KmsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
 
     public async ValueTask InitializeAsync()
     {
-        await _fixture.HttpClient.PostAsync("/_ministack/reset", null);
+        await fixture.HttpClient.PostAsync("/_microstack/reset", null);
     }
 
     public ValueTask DisposeAsync()

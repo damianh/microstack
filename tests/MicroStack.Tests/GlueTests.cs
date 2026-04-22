@@ -11,16 +11,9 @@ namespace MicroStack.Tests;
 ///
 /// Mirrors coverage from ministack/tests/test_glue.py.
 /// </summary>
-public sealed class GlueTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
+public sealed class GlueTests(MicroStackFixture fixture) : IClassFixture<MicroStackFixture>, IAsyncLifetime
 {
-    private readonly MicroStackFixture _fixture;
-    private readonly AmazonGlueClient _glue;
-
-    public GlueTests(MicroStackFixture fixture)
-    {
-        _fixture = fixture;
-        _glue = CreateClient(fixture);
-    }
+    private readonly AmazonGlueClient _glue = CreateClient(fixture);
 
     private static AmazonGlueClient CreateClient(MicroStackFixture fixture)
     {
@@ -42,7 +35,7 @@ public sealed class GlueTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
 
     public async ValueTask InitializeAsync()
     {
-        await _fixture.HttpClient.PostAsync("/_ministack/reset", null);
+        await fixture.HttpClient.PostAsync("/_microstack/reset", null);
     }
 
     public ValueTask DisposeAsync()

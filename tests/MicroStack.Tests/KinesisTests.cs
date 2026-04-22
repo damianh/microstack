@@ -12,16 +12,9 @@ namespace MicroStack.Tests;
 ///
 /// Mirrors coverage from ministack/tests/test_kinesis.py.
 /// </summary>
-public sealed class KinesisTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
+public sealed class KinesisTests(MicroStackFixture fixture) : IClassFixture<MicroStackFixture>, IAsyncLifetime
 {
-    private readonly MicroStackFixture _fixture;
-    private readonly AmazonKinesisClient _kin;
-
-    public KinesisTests(MicroStackFixture fixture)
-    {
-        _fixture = fixture;
-        _kin = CreateKinesisClient(fixture);
-    }
+    private readonly AmazonKinesisClient _kin = CreateKinesisClient(fixture);
 
     private static AmazonKinesisClient CreateKinesisClient(MicroStackFixture fixture)
     {
@@ -43,7 +36,7 @@ public sealed class KinesisTests : IClassFixture<MicroStackFixture>, IAsyncLifet
 
     public async ValueTask InitializeAsync()
     {
-        await _fixture.HttpClient.PostAsync("/_ministack/reset", null);
+        await fixture.HttpClient.PostAsync("/_microstack/reset", null);
     }
 
     public ValueTask DisposeAsync()

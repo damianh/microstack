@@ -1,6 +1,4 @@
-using System.Net.Http.Json;
 using System.Text;
-using System.Text.Json;
 using Amazon;
 using Amazon.DynamoDBv2;
 using Amazon.DynamoDBv2.Model;
@@ -118,7 +116,7 @@ public sealed class StepFunctionsTests : IClassFixture<MicroStackFixture>, IAsyn
 
     public async ValueTask InitializeAsync()
     {
-        await _fixture.HttpClient.PostAsync("/_ministack/reset", null);
+        await _fixture.HttpClient.PostAsync("/_microstack/reset", null);
     }
 
     public ValueTask DisposeAsync()
@@ -1744,7 +1742,7 @@ public sealed class StepFunctionsTests : IClassFixture<MicroStackFixture>, IAsyn
             }
         }
         """;
-        await _fixture.HttpClient.PostAsync("/_ministack/config",
+        await _fixture.HttpClient.PostAsync("/_microstack/config",
             new StringContent(mockCfgJson, Encoding.UTF8, new System.Net.Http.Headers.MediaTypeHeaderValue("application/json")));
 
         var definition = """
@@ -1779,7 +1777,7 @@ public sealed class StepFunctionsTests : IClassFixture<MicroStackFixture>, IAsyn
         output.GetProperty("value").GetInt32().ShouldBe(42);
 
         // Clean up
-        await _fixture.HttpClient.PostAsJsonAsync("/_ministack/config",
+        await _fixture.HttpClient.PostAsJsonAsync("/_microstack/config",
             new { stepfunctions = new { _sfn_mock_config = new { } } });
     }
 
@@ -1806,7 +1804,7 @@ public sealed class StepFunctionsTests : IClassFixture<MicroStackFixture>, IAsyn
             }
         }
         """;
-        await _fixture.HttpClient.PostAsync("/_ministack/config",
+        await _fixture.HttpClient.PostAsync("/_microstack/config",
             new StringContent(mockCfgJson, Encoding.UTF8, new System.Net.Http.Headers.MediaTypeHeaderValue("application/json")));
 
         var definition = """
@@ -1838,7 +1836,7 @@ public sealed class StepFunctionsTests : IClassFixture<MicroStackFixture>, IAsyn
         desc.Status.ShouldBe(ExecutionStatus.FAILED);
 
         // Clean up
-        await _fixture.HttpClient.PostAsJsonAsync("/_ministack/config",
+        await _fixture.HttpClient.PostAsJsonAsync("/_microstack/config",
             new { stepfunctions = new { _sfn_mock_config = new { } } });
     }
 

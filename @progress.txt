@@ -342,3 +342,20 @@ Actions: CreateFileSystem, GetFileSystem, ListFileSystems, DeleteFileSystem, Cre
 
 **Build result:** 0 warnings, 0 errors
 **Test result:** 1160 passed, 1 skipped (pre-existing), 0 failed (16 new tests: 9 multi-tenancy + 7 unicode)
+
+### 2026-04-22 - Fix xunit v2→v3 breaking changes (44 files)
+
+**Problem:** Package references were updated from xunit 2.9.3 to xunit.v3.core.mtp-v2 3.2.2, causing ~80+ compilation errors.
+
+**Changes made:**
+1. **Both test csproj files** — Added `<OutputType>Exe</OutputType>` (required by xunit v3)
+2. **42 test .cs files** — Changed `IAsyncLifetime` methods from `Task` to `ValueTask`:
+   - `public async Task InitializeAsync()` → `public async ValueTask InitializeAsync()`
+   - `public async Task DisposeAsync()` → `public async ValueTask DisposeAsync()`
+   - `public Task DisposeAsync() => Task.CompletedTask;` → `public ValueTask DisposeAsync() => ValueTask.CompletedTask;`
+   - `return Task.CompletedTask;` → `return ValueTask.CompletedTask;` in DisposeAsync block bodies
+3. **LambdaTests.cs** — Replaced incorrect `Assert.SkipUnless(...)` calls with conditional `TestContext.Current.CancelCurrentTest()` (Assert class not available in xunit.v3.core.mtp-v2 without xunit.v3.assert package)
+
+**Files changed:** 44 (2 csproj + 42 .cs files including MicroStackSmokeTests.cs in Aspire project)
+
+**Build result:** 0 warnings, 0 errors

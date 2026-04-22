@@ -10,16 +10,9 @@ namespace MicroStack.Tests;
 /// Integration tests for the ElastiCache service handler.
 /// Mirrors coverage from ministack/tests/test_elasticache.py.
 /// </summary>
-public sealed class ElastiCacheTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
+public sealed class ElastiCacheTests(MicroStackFixture fixture) : IClassFixture<MicroStackFixture>, IAsyncLifetime
 {
-    private readonly MicroStackFixture _fixture;
-    private readonly AmazonElastiCacheClient _ec;
-
-    public ElastiCacheTests(MicroStackFixture fixture)
-    {
-        _fixture = fixture;
-        _ec = CreateClient(fixture);
-    }
+    private readonly AmazonElastiCacheClient _ec = CreateClient(fixture);
 
     private static AmazonElastiCacheClient CreateClient(MicroStackFixture fixture)
     {
@@ -40,7 +33,7 @@ public sealed class ElastiCacheTests : IClassFixture<MicroStackFixture>, IAsyncL
 
     public async ValueTask InitializeAsync()
     {
-        await _fixture.HttpClient.PostAsync("/_ministack/reset", null);
+        await fixture.HttpClient.PostAsync("/_microstack/reset", null);
     }
 
     public ValueTask DisposeAsync()

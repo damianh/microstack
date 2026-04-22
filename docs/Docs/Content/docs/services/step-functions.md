@@ -25,7 +25,7 @@ MicroStack includes a full AWS States Language (ASL) execution engine supporting
 Configure mock responses for Task states via the config endpoint:
 
 ```bash
-curl -X POST http://localhost:4566/_ministack/config \
+curl -X POST http://localhost:4566/_microstack/config \
   -H 'Content-Type: application/json' \
   -d '{
     "stepfunctions": {

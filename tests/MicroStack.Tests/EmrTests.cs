@@ -11,16 +11,9 @@ namespace MicroStack.Tests;
 ///
 /// Mirrors coverage from ministack/tests/test_emr.py.
 /// </summary>
-public sealed class EmrTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
+public sealed class EmrTests(MicroStackFixture fixture) : IClassFixture<MicroStackFixture>, IAsyncLifetime
 {
-    private readonly MicroStackFixture _fixture;
-    private readonly AmazonElasticMapReduceClient _emr;
-
-    public EmrTests(MicroStackFixture fixture)
-    {
-        _fixture = fixture;
-        _emr = CreateEmrClient(fixture);
-    }
+    private readonly AmazonElasticMapReduceClient _emr = CreateEmrClient(fixture);
 
     private static AmazonElasticMapReduceClient CreateEmrClient(MicroStackFixture fixture)
     {
@@ -43,7 +36,7 @@ public sealed class EmrTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
 
     public async ValueTask InitializeAsync()
     {
-        await _fixture.HttpClient.PostAsync("/_ministack/reset", null);
+        await fixture.HttpClient.PostAsync("/_microstack/reset", null);
     }
 
     public ValueTask DisposeAsync()

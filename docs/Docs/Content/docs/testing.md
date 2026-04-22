@@ -121,7 +121,7 @@ public sealed class SqsTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
     {
         // Reset state between tests
         using var http = new HttpClient { BaseAddress = new Uri(_fixture.ConnectionString) };
-        await http.PostAsync("/_ministack/reset", null);
+        await http.PostAsync("/_microstack/reset", null);
     }
 
     public Task DisposeAsync()

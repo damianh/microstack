@@ -1,27 +1,20 @@
-using Microsoft.AspNetCore.Mvc.Testing;
-
 namespace MicroStack.Tests;
 
-public sealed class HealthTests : IClassFixture<MicroStackFixture>
+public sealed class HealthTests(MicroStackFixture fixture) : IClassFixture<MicroStackFixture>
 {
-    private readonly HttpClient _client;
-
-    public HealthTests(MicroStackFixture fixture)
-    {
-        _client = fixture.HttpClient;
-    }
+    private readonly HttpClient _client = fixture.HttpClient;
 
     [Fact]
     public async Task HealthEndpointReturns200()
     {
-        var response = await _client.GetAsync("/_ministack/health");
+        var response = await _client.GetAsync("/_microstack/health");
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
     }
 
     [Fact]
     public async Task HealthEndpointReturnsEditionAndVersion()
     {
-        var response = await _client.GetAsync("/_ministack/health");
+        var response = await _client.GetAsync("/_microstack/health");
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
 
         body.GetProperty("edition").GetString().ShouldBe("light");
@@ -31,7 +24,7 @@ public sealed class HealthTests : IClassFixture<MicroStackFixture>
     [Fact]
     public async Task HealthEndpointReturnsServicesDict()
     {
-        var response = await _client.GetAsync("/_ministack/health");
+        var response = await _client.GetAsync("/_microstack/health");
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
 
         body.GetProperty("services").ValueKind.ShouldBe(JsonValueKind.Object);
@@ -54,7 +47,7 @@ public sealed class HealthTests : IClassFixture<MicroStackFixture>
     [Fact]
     public async Task ResetEndpointReturnsOk()
     {
-        var response = await _client.PostAsync("/_ministack/reset", null);
+        var response = await _client.PostAsync("/_microstack/reset", null);
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
 
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
@@ -64,7 +57,7 @@ public sealed class HealthTests : IClassFixture<MicroStackFixture>
     [Fact]
     public async Task OptionsRequestReturnsCorsHeaders()
     {
-        var request = new HttpRequestMessage(HttpMethod.Options, "/_ministack/health");
+        var request = new HttpRequestMessage(HttpMethod.Options, "/_microstack/health");
         var response = await _client.SendAsync(request);
 
         response.Headers.Contains("Access-Control-Allow-Origin").ShouldBe(true, "Expected Access-Control-Allow-Origin CORS header on OPTIONS response");
