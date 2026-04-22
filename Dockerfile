@@ -10,9 +10,10 @@ RUN dotnet restore src/MicroStack/MicroStack.csproj -r linux-musl-x64
 
 # Copy source and publish
 COPY src/MicroStack/ src/MicroStack/
-RUN dotnet publish src/MicroStack/MicroStack.csproj -c Release -r linux-musl-x64 -o /app --no-restore
+RUN dotnet publish src/MicroStack/MicroStack.csproj -c Release -r linux-musl-x64 -o /app
 
 FROM alpine:3.21
+RUN apk add --no-cache libstdc++ libgcc
 COPY --from=build /app /app
 ENV ASPNETCORE_HTTP_PORTS=4566
 EXPOSE 4566
