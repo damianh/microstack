@@ -1435,4 +1435,65 @@ public sealed class DynamoDbTests(MicroStackFixture fixture) : IClassFixture<Mic
         var get = await _ddb.GetItemAsync(tableName, StrAttr("pk", "k1"));
         get.Item.ShouldBeNull();
     }
+
+    // ── High-level DynamoDBContext ───────────────────────────────────────────────
+
+    [Fact]
+    public async Task DynamoDBContext_SaveAndLoad_RoundtripsAllAttributes()
+    {
+        await _ddb.CreateTableAsync(new CreateTableRequest
+        {
+            TableName            = "t_ctx_roundtrip",
+            KeySchema            = [new KeySchemaElement("PK", KeyType.HASH), new KeySchemaElement("SK", KeyType.RANGE)],
+            AttributeDefinitions = [new AttributeDefinition("PK", ScalarAttributeType.S), new AttributeDefinition("SK", ScalarAttributeType.S)],
+            BillingMode          = BillingMode.PAY_PER_REQUEST,
+        });
+
+        var ctx = new Amazon.DynamoDBv2.DataModel.DynamoDBContextBuilder()
+            .WithDynamoDBClient(() => _ddb)
+            .Build();
+
+        var item = new TestDynamoDbItem
+        {
+            PK = "pk1",
+            SK = "sk1",
+            Data = "{\"foo\":\"bar\"}",
+            Description = "test item",
+            Count = 42,
+        };
+
+        await ctx.SaveAsync(item, new Amazon.DynamoDBv2.DataModel.SaveConfig
+        {
+            OverrideTableName = "t_ctx_roundtrip",
+            SkipVersionCheck = true,
+        });
+
+        // Verify via low-level GetItem
+        var lowLevel = await _ddb.GetItemAsync("t_ctx_roundtrip", new Dictionary<string, AttributeValue>
+        {
+            ["PK"] = new() { S = "pk1" },
+            ["SK"] = new() { S = "sk1" },
+        });
+        lowLevel.Item.ShouldNotBeNull();
+
+        foreach (var kv in lowLevel.Item)
+            Console.WriteLine($"  {kv.Key}: {kv.Value.S ?? kv.Value.N ?? "(other)"}");
+
+        lowLevel.Item.ShouldContainKey("Data");
+        lowLevel.Item["Data"].S.ShouldBe("{\"foo\":\"bar\"}");
+        lowLevel.Item.ShouldContainKey("Description");
+        lowLevel.Item["Description"].S.ShouldBe("test item");
+        lowLevel.Item.ShouldContainKey("Count");
+        lowLevel.Item["Count"].N.ShouldBe("42");
+    }
+}
+
+[Amazon.DynamoDBv2.DataModel.DynamoDBTable("unused")]
+public sealed class TestDynamoDbItem
+{
+    [Amazon.DynamoDBv2.DataModel.DynamoDBHashKey]  public string PK { get; set; } = null!;
+    [Amazon.DynamoDBv2.DataModel.DynamoDBRangeKey]  public string SK { get; set; } = null!;
+    public string Data { get; set; } = null!;
+    public string Description { get; set; } = null!;
+    public int Count { get; set; }
 }

@@ -452,6 +452,13 @@ internal sealed class DynamoDbServiceHandler : IServiceHandler
                 item = ApplyUpdateExpression(item, updateExpr, eav, ean);
             }
 
+            // Legacy AttributeUpdates support (used by SDK v4 DynamoDBContext.SaveAsync)
+            var attrUpdates = data["AttributeUpdates"]?.AsObject();
+            if (attrUpdates is not null && string.IsNullOrEmpty(updateExpr))
+            {
+                item = ApplyAttributeUpdates(item, attrUpdates);
+            }
+
             SetItemInternal(table, pkVal, skVal, item);
             UpdateCounts(table);
             EmitStreamEvent(name, table, oldItem is null ? "INSERT" : "MODIFY", oldItem, item);
@@ -1487,6 +1494,64 @@ internal sealed class DynamoDbServiceHandler : IServiceHandler
             }
         }
         return true;
+    }
+
+    // ── Legacy AttributeUpdates ──────────────────────────────────────────────────
+
+    /// <summary>
+    /// Applies legacy <c>AttributeUpdates</c> format used by SDK v4's <c>DynamoDBContext.SaveAsync</c>.
+    /// Format: <c>{ "attrName": { "Action": "PUT"|"DELETE"|"ADD", "Value": {"S":"..."} } }</c>
+    /// </summary>
+    private static JsonObject ApplyAttributeUpdates(JsonObject item, JsonObject attrUpdates)
+    {
+        item = (JsonObject)item.DeepClone();
+
+        foreach (var kv in attrUpdates)
+        {
+            var attrName = kv.Key;
+            var update = kv.Value?.AsObject();
+            if (update is null) continue;
+
+            var action = update["Action"]?.GetValue<string>() ?? "PUT";
+
+            switch (action)
+            {
+                case "PUT":
+                    var value = update["Value"];
+                    if (value is not null)
+                        item[attrName] = value.DeepClone();
+                    break;
+                case "DELETE":
+                    item.Remove(attrName);
+                    break;
+                case "ADD":
+                    var addVal = update["Value"];
+                    if (addVal is not null)
+                    {
+                        if (item.TryGetPropertyValue(attrName, out var existing) && existing is JsonObject existingObj)
+                        {
+                            // Numeric ADD
+                            if (existingObj.ContainsKey("N") && addVal is JsonObject addObj && addObj.ContainsKey("N"))
+                            {
+                                var current = decimal.Parse(existingObj["N"]!.GetValue<string>());
+                                var delta = decimal.Parse(addObj["N"]!.GetValue<string>());
+                                item[attrName] = new JsonObject { ["N"] = (current + delta).ToString() };
+                            }
+                            else
+                            {
+                                item[attrName] = addVal.DeepClone();
+                            }
+                        }
+                        else
+                        {
+                            item[attrName] = addVal.DeepClone();
+                        }
+                    }
+                    break;
+            }
+        }
+
+        return item;
     }
 
     // ── Update expression ─────────────────────────────────────────────────────────
