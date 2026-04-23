@@ -1100,6 +1100,182 @@ public sealed class DynamoDbTests(MicroStackFixture fixture) : IClassFixture<Mic
             item["gsi_pk"].S.ShouldBe("shared_gsi");
     }
 
+    // ── Query with legacy KeyConditions ──────────────────────────────────────────
+
+    [Fact]
+    public async Task Query_LegacyKeyConditions_PkOnly()
+    {
+        await _ddb.CreateTableAsync(new CreateTableRequest
+        {
+            TableName            = "t_legkc_pk",
+            KeySchema            = [new KeySchemaElement("pk", KeyType.HASH), new KeySchemaElement("sk", KeyType.RANGE)],
+            AttributeDefinitions = [new AttributeDefinition("pk", ScalarAttributeType.S), new AttributeDefinition("sk", ScalarAttributeType.S)],
+            BillingMode          = BillingMode.PAY_PER_REQUEST,
+        });
+
+        for (var i = 0; i < 3; i++)
+            await _ddb.PutItemAsync("t_legkc_pk", new Dictionary<string, AttributeValue>
+            {
+                ["pk"] = new() { S = "legkc_pk" },
+                ["sk"] = new() { S = $"sk_{i}" },
+            });
+
+        var resp = await _ddb.QueryAsync(new QueryRequest
+        {
+            TableName     = "t_legkc_pk",
+            KeyConditions = new Dictionary<string, Condition>
+            {
+                ["pk"] = new()
+                {
+                    ComparisonOperator = ComparisonOperator.EQ,
+                    AttributeValueList = [new AttributeValue { S = "legkc_pk" }],
+                },
+            },
+        });
+        resp.Count.ShouldBe(3);
+    }
+
+    [Fact]
+    public async Task Query_LegacyKeyConditions_PkAndSk_BeginsWith()
+    {
+        await _ddb.CreateTableAsync(new CreateTableRequest
+        {
+            TableName            = "t_legkc_bw",
+            KeySchema            = [new KeySchemaElement("pk", KeyType.HASH), new KeySchemaElement("sk", KeyType.RANGE)],
+            AttributeDefinitions = [new AttributeDefinition("pk", ScalarAttributeType.S), new AttributeDefinition("sk", ScalarAttributeType.S)],
+            BillingMode          = BillingMode.PAY_PER_REQUEST,
+        });
+
+        await _ddb.PutItemAsync("t_legkc_bw", new Dictionary<string, AttributeValue>
+        {
+            ["pk"] = new() { S = "bw_pk" }, ["sk"] = new() { S = "META#typeA" },
+        });
+        await _ddb.PutItemAsync("t_legkc_bw", new Dictionary<string, AttributeValue>
+        {
+            ["pk"] = new() { S = "bw_pk" }, ["sk"] = new() { S = "META#typeB" },
+        });
+        await _ddb.PutItemAsync("t_legkc_bw", new Dictionary<string, AttributeValue>
+        {
+            ["pk"] = new() { S = "bw_pk" }, ["sk"] = new() { S = "OTHER#x" },
+        });
+
+        var resp = await _ddb.QueryAsync(new QueryRequest
+        {
+            TableName     = "t_legkc_bw",
+            KeyConditions = new Dictionary<string, Condition>
+            {
+                ["pk"] = new()
+                {
+                    ComparisonOperator = ComparisonOperator.EQ,
+                    AttributeValueList = [new AttributeValue { S = "bw_pk" }],
+                },
+                ["sk"] = new()
+                {
+                    ComparisonOperator = ComparisonOperator.BEGINS_WITH,
+                    AttributeValueList = [new AttributeValue { S = "META#" }],
+                },
+            },
+        });
+        resp.Count.ShouldBe(2);
+        foreach (var item in resp.Items)
+            item["sk"].S.ShouldStartWith("META#");
+    }
+
+    [Fact]
+    public async Task Query_LegacyKeyConditions_OnGsi()
+    {
+        await _ddb.CreateTableAsync(new CreateTableRequest
+        {
+            TableName            = "t_legkc_gsi",
+            KeySchema            = [new KeySchemaElement("pk", KeyType.HASH), new KeySchemaElement("sk", KeyType.RANGE)],
+            AttributeDefinitions = [
+                new AttributeDefinition("pk", ScalarAttributeType.S),
+                new AttributeDefinition("sk", ScalarAttributeType.S),
+                new AttributeDefinition("gsi_pk", ScalarAttributeType.S),
+                new AttributeDefinition("gsi_sk", ScalarAttributeType.S),
+            ],
+            GlobalSecondaryIndexes = [new GlobalSecondaryIndex
+            {
+                IndexName  = "GSI1",
+                KeySchema  = [new KeySchemaElement("gsi_pk", KeyType.HASH), new KeySchemaElement("gsi_sk", KeyType.RANGE)],
+                Projection = new Projection { ProjectionType = ProjectionType.ALL },
+            }],
+            BillingMode = BillingMode.PAY_PER_REQUEST,
+        });
+
+        for (var i = 0; i < 4; i++)
+            await _ddb.PutItemAsync("t_legkc_gsi", new Dictionary<string, AttributeValue>
+            {
+                ["pk"]     = new() { S = $"main_{i}" },
+                ["sk"]     = new() { S = "s" },
+                ["gsi_pk"] = new() { S = "SUBJECT#alice" },
+                ["gsi_sk"] = new() { S = $"sort_{i}" },
+            });
+
+        await _ddb.PutItemAsync("t_legkc_gsi", new Dictionary<string, AttributeValue>
+        {
+            ["pk"]     = new() { S = "main_other" },
+            ["sk"]     = new() { S = "s" },
+            ["gsi_pk"] = new() { S = "SUBJECT#bob" },
+            ["gsi_sk"] = new() { S = "sort_0" },
+        });
+
+        var resp = await _ddb.QueryAsync(new QueryRequest
+        {
+            TableName     = "t_legkc_gsi",
+            IndexName     = "GSI1",
+            KeyConditions = new Dictionary<string, Condition>
+            {
+                ["gsi_pk"] = new()
+                {
+                    ComparisonOperator = ComparisonOperator.EQ,
+                    AttributeValueList = [new AttributeValue { S = "SUBJECT#alice" }],
+                },
+            },
+        });
+        resp.Count.ShouldBe(4);
+        foreach (var item in resp.Items)
+            item["gsi_pk"].S.ShouldBe("SUBJECT#alice");
+    }
+
+    [Fact]
+    public async Task Query_LegacyKeyConditions_Between()
+    {
+        await _ddb.CreateTableAsync(new CreateTableRequest
+        {
+            TableName            = "t_legkc_btw",
+            KeySchema            = [new KeySchemaElement("pk", KeyType.HASH), new KeySchemaElement("sk", KeyType.RANGE)],
+            AttributeDefinitions = [new AttributeDefinition("pk", ScalarAttributeType.S), new AttributeDefinition("sk", ScalarAttributeType.N)],
+            BillingMode          = BillingMode.PAY_PER_REQUEST,
+        });
+
+        for (var i = 1; i <= 10; i++)
+            await _ddb.PutItemAsync("t_legkc_btw", new Dictionary<string, AttributeValue>
+            {
+                ["pk"] = new() { S = "btw_pk" },
+                ["sk"] = new() { N = i.ToString() },
+            });
+
+        var resp = await _ddb.QueryAsync(new QueryRequest
+        {
+            TableName     = "t_legkc_btw",
+            KeyConditions = new Dictionary<string, Condition>
+            {
+                ["pk"] = new()
+                {
+                    ComparisonOperator = ComparisonOperator.EQ,
+                    AttributeValueList = [new AttributeValue { S = "btw_pk" }],
+                },
+                ["sk"] = new()
+                {
+                    ComparisonOperator = ComparisonOperator.BETWEEN,
+                    AttributeValueList = [new AttributeValue { N = "3" }, new AttributeValue { N = "7" }],
+                },
+            },
+        });
+        resp.Count.ShouldBe(5);
+    }
+
     // ── TTL ──────────────────────────────────────────────────────────────────────
 
     [Fact]

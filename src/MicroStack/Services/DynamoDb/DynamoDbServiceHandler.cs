@@ -483,6 +483,13 @@ internal sealed class DynamoDbServiceHandler : IServiceHandler
             var ean        = data["ExpressionAttributeNames"]?.AsObject() ?? new JsonObject();
             var keyCond    = data["KeyConditionExpression"]?.GetValue<string>() ?? "";
             var filterExpr = data["FilterExpression"]?.GetValue<string>() ?? "";
+
+            // Legacy KeyConditions support: convert to KeyConditionExpression + EAV
+            var legacyKeyConditions = data["KeyConditions"]?.AsObject();
+            if (string.IsNullOrEmpty(keyCond) && legacyKeyConditions is not null)
+            {
+                (keyCond, eav) = ConvertKeyConditionsToExpression(legacyKeyConditions);
+            }
             var limit      = data["Limit"]?.GetValue<int>();
             var scanFwd    = data["ScanIndexForward"]?.GetValue<bool>() ?? true;
             var esk        = data["ExclusiveStartKey"]?.AsObject();
@@ -1274,6 +1281,65 @@ internal sealed class DynamoDbServiceHandler : IServiceHandler
                 return ExtractKeyVal(v2);
         }
         return null;
+    }
+
+    /// <summary>
+    /// Converts legacy <c>KeyConditions</c> format to a <c>KeyConditionExpression</c> string
+    /// plus <c>ExpressionAttributeValues</c>. The legacy format is:
+    /// <c>{ "attrName": { "ComparisonOperator": "EQ", "AttributeValueList": [{"S":"val"}] } }</c>
+    /// </summary>
+    private static (string keyCond, JsonObject eav) ConvertKeyConditionsToExpression(
+        JsonObject keyConditions)
+    {
+        var parts = new List<string>();
+        var eav = new JsonObject();
+        var idx = 0;
+
+        foreach (var kv in keyConditions)
+        {
+            var attrName = kv.Key;
+            var condition = kv.Value?.AsObject() ?? new JsonObject();
+            var op = condition["ComparisonOperator"]?.GetValue<string>() ?? "";
+            var attrVals = condition["AttributeValueList"]?.AsArray() ?? [];
+
+            var placeholder = $":kcv{idx++}";
+
+            switch (op)
+            {
+                case "EQ":
+                    parts.Add($"{attrName} = {placeholder}");
+                    if (attrVals.Count > 0) eav[placeholder] = attrVals[0]?.DeepClone();
+                    break;
+                case "LE":
+                    parts.Add($"{attrName} <= {placeholder}");
+                    if (attrVals.Count > 0) eav[placeholder] = attrVals[0]?.DeepClone();
+                    break;
+                case "LT":
+                    parts.Add($"{attrName} < {placeholder}");
+                    if (attrVals.Count > 0) eav[placeholder] = attrVals[0]?.DeepClone();
+                    break;
+                case "GE":
+                    parts.Add($"{attrName} >= {placeholder}");
+                    if (attrVals.Count > 0) eav[placeholder] = attrVals[0]?.DeepClone();
+                    break;
+                case "GT":
+                    parts.Add($"{attrName} > {placeholder}");
+                    if (attrVals.Count > 0) eav[placeholder] = attrVals[0]?.DeepClone();
+                    break;
+                case "BEGINS_WITH":
+                    parts.Add($"begins_with({attrName}, {placeholder})");
+                    if (attrVals.Count > 0) eav[placeholder] = attrVals[0]?.DeepClone();
+                    break;
+                case "BETWEEN":
+                    var placeholder2 = $":kcv{idx++}";
+                    parts.Add($"{attrName} BETWEEN {placeholder} AND {placeholder2}");
+                    if (attrVals.Count > 0) eav[placeholder] = attrVals[0]?.DeepClone();
+                    if (attrVals.Count > 1) eav[placeholder2] = attrVals[1]?.DeepClone();
+                    break;
+            }
+        }
+
+        return (string.Join(" AND ", parts), eav);
     }
 
     private static JsonObject BuildKey(JsonObject item, string? pkName, string? skName)
