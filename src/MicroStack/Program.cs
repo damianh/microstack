@@ -199,6 +199,24 @@ app.UseEndpoints(_ => { });
 var lifetime = app.Services.GetRequiredService<IHostApplicationLifetime>();
 lifetime.ApplicationStopping.Register(() => persistence.SaveAll());
 
+// Print ASCII art banner on startup
+lifetime.ApplicationStarted.Register(() =>
+{
+    var logger = app.Services.GetRequiredService<ILogger<Program>>();
+    var enabledServices = registry.GetServiceStatus();
+    var serviceCount = enabledServices.Count;
+
+    const string banner =
+        "        _                __ _             _    \n" +
+        "  /\\/\\ (_) ___ _ __ ___ / _\\ |_ __ _  ___| | __\n" +
+        " /    \\| |/ __| '__/ _ \\\\ \\| __/ _` |/ __| |/ /\n" +
+        "/ /\\/\\ \\ | (__| | | (_) |\\ \\ || (_| | (__|   < \n" +
+        "\\/    \\/_|\\___|_|  \\___/\\__/\\__\\__,_|\\___|_|\\_\\";
+
+    logger.LogInformation(banner);
+    logger.LogInformation("Services enabled: {ServiceCount}", serviceCount);
+});
+
 app.Run();
 
 // Expose Program for WebApplicationFactory in tests
