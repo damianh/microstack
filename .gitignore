@@ -419,3 +419,6 @@ FodyWeavers.xsd
 
 # Atoll docs build output
 docs/Docs/dist/
+
+# Weave AI agent working directory
+.weave/
