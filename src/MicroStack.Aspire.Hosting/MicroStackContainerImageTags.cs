@@ -10,5 +10,5 @@ internal static class MicroStackContainerImageTags
 {
     internal const string Registry = "ghcr.io";
     internal const string Image = "damianh/microstack";
-    internal const string Tag = "0.2.7";
+    internal const string Tag = "latest";
 }
