@@ -326,7 +326,7 @@ internal sealed partial class S3ServiceHandler : IServiceHandler
         var root = new XElement(Ns + "ListAllMyBucketsResult",
             new XElement(Ns + "Owner",
                 new XElement(Ns + "ID", "owner-id"),
-                new XElement(Ns + "DisplayName", "ministack")),
+                new XElement(Ns + "DisplayName", "microstack")),
             new XElement(Ns + "Buckets",
                 _buckets.Items
                     .OrderBy(kv => kv.Key, StringComparer.Ordinal)
@@ -572,10 +572,10 @@ internal sealed partial class S3ServiceHandler : IServiceHandler
         var bodyBytes = Encoding.UTF8.GetBytes(
             XmlDecl +
             $"<AccessControlPolicy xmlns=\"{S3Ns}\">" +
-            "<Owner><ID>owner-id</ID><DisplayName>ministack</DisplayName></Owner>" +
+            "<Owner><ID>owner-id</ID><DisplayName>microstack</DisplayName></Owner>" +
             "<AccessControlList><Grant>" +
             "<Grantee xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xsi:type=\"CanonicalUser\">" +
-            "<ID>owner-id</ID><DisplayName>ministack</DisplayName></Grantee>" +
+            "<ID>owner-id</ID><DisplayName>microstack</DisplayName></Grantee>" +
             "<Permission>FULL_CONTROL</Permission>" +
             "</Grant></AccessControlList></AccessControlPolicy>");
         return (200, new Dictionary<string, string>(StringComparer.Ordinal) { ["Content-Type"] = "application/xml" }, bodyBytes);
@@ -1428,7 +1428,7 @@ internal sealed partial class S3ServiceHandler : IServiceHandler
                 new XElement(Ns + "StorageClass", "STANDARD"),
                 new XElement(Ns + "Owner",
                     new XElement(Ns + "ID", "owner-id"),
-                    new XElement(Ns + "DisplayName", "ministack"))));
+                    new XElement(Ns + "DisplayName", "microstack"))));
         }
 
         return XmlOk(root);
@@ -1544,7 +1544,7 @@ internal sealed partial class S3ServiceHandler : IServiceHandler
                 new XElement(Ns + "StorageClass", "STANDARD"),
                 new XElement(Ns + "Owner",
                     new XElement(Ns + "ID", "owner-id"),
-                    new XElement(Ns + "DisplayName", "ministack"))));
+                    new XElement(Ns + "DisplayName", "microstack"))));
         }
 
         foreach (var cp in commonPrefixes)
@@ -1628,7 +1628,7 @@ internal sealed partial class S3ServiceHandler : IServiceHandler
             {
                 contentsEl.Add(new XElement(Ns + "Owner",
                     new XElement(Ns + "ID", "owner-id"),
-                    new XElement(Ns + "DisplayName", "ministack")));
+                    new XElement(Ns + "DisplayName", "microstack")));
             }
             root.Add(contentsEl);
         }
@@ -1993,10 +1993,10 @@ internal sealed partial class S3ServiceHandler : IServiceHandler
                 new XElement(Ns + "UploadId", uid),
                 new XElement(Ns + "Initiator",
                     new XElement(Ns + "ID", "owner-id"),
-                    new XElement(Ns + "DisplayName", "ministack")),
+                    new XElement(Ns + "DisplayName", "microstack")),
                 new XElement(Ns + "Owner",
                     new XElement(Ns + "ID", "owner-id"),
-                    new XElement(Ns + "DisplayName", "ministack")),
+                    new XElement(Ns + "DisplayName", "microstack")),
                 new XElement(Ns + "StorageClass", "STANDARD"),
                 new XElement(Ns + "Initiated", upload.Created)));
         }
@@ -2033,10 +2033,10 @@ internal sealed partial class S3ServiceHandler : IServiceHandler
             new XElement(Ns + "UploadId", uploadId),
             new XElement(Ns + "Initiator",
                 new XElement(Ns + "ID", "owner-id"),
-                new XElement(Ns + "DisplayName", "ministack")),
+                new XElement(Ns + "DisplayName", "microstack")),
             new XElement(Ns + "Owner",
                 new XElement(Ns + "ID", "owner-id"),
-                new XElement(Ns + "DisplayName", "ministack")),
+                new XElement(Ns + "DisplayName", "microstack")),
             new XElement(Ns + "StorageClass", "STANDARD"),
             new XElement(Ns + "PartNumberMarker", partMarker),
             new XElement(Ns + "MaxParts", maxParts));

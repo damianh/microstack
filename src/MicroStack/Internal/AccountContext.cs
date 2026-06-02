@@ -26,7 +26,7 @@ internal static partial class AccountContext
     /// <summary>
     /// Set the per-request account ID from the AWS access key.
     /// If the access key is a 12-digit number it is used directly as the account ID;
-    /// otherwise falls back to MINISTACK_ACCOUNT_ID env var or "000000000000".
+    /// otherwise falls back to MICROSTACK_ACCOUNT_ID env var or "000000000000".
     /// </summary>
     internal static void SetFromAccessKey(string? accessKeyId)
     {

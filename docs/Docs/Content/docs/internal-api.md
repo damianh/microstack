@@ -76,8 +76,8 @@ Region and account ID are set via environment variables at startup, not via the 
 
 ```bash
 docker run -p 4566:4566 \
-  -e MINISTACK_REGION=eu-west-1 \
-  -e MINISTACK_ACCOUNT_ID=123456789012 \
+  -e MICROSTACK_REGION=eu-west-1 \
+  -e MICROSTACK_ACCOUNT_ID=123456789012 \
   ghcr.io/damianh/microstack:latest
 ```
 

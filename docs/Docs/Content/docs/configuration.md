@@ -15,11 +15,11 @@ MicroStack is configured via environment variables. All settings are consolidate
 |----------|---------|-------------|
 | `GATEWAY_PORT` | `4566` | Port to listen on |
 | `EDGE_PORT` | `4566` | Alias for `GATEWAY_PORT` (LocalStack compatibility) |
-| `MINISTACK_HOST` | `localhost` | Hostname for URL generation |
-| `MINISTACK_REGION` | `us-east-1` | Default AWS region |
-| `MINISTACK_ACCOUNT_ID` | `000000000000` | Default AWS account ID |
+| `MICROSTACK_HOST` | `localhost` | Hostname for URL generation |
+| `MICROSTACK_REGION` | `us-east-1` | Default AWS region |
+| `MICROSTACK_ACCOUNT_ID` | `000000000000` | Default AWS account ID |
 | `PERSIST_STATE` | `0` | Set to `1` to enable JSON state persistence |
-| `STATE_DIR` | `<temp>/ministack-state` | Directory for persisted state files |
+| `STATE_DIR` | `<temp>/microstack-state` | Directory for persisted state files |
 | `SERVICES` | *(all)* | Comma-separated list of services to enable |
 | `S3_PERSIST` | `0` | Set to `1` to enable S3 object persistence |
 | `LOCALSTACK_PERSISTENCE` | `0` | Set to `1` to enable persistence (LocalStack compat) |
@@ -55,7 +55,7 @@ docker run -e GATEWAY_PORT=5000 -p 5000:5000 ghcr.io/damianh/microstack:latest
 Enable persistence to survive restarts:
 
 ```bash
-docker run -e PERSIST_STATE=1 -v ./state:/tmp/ministack-state -p 4566:4566 ghcr.io/damianh/microstack:latest
+docker run -e PERSIST_STATE=1 -v ./state:/tmp/microstack-state -p 4566:4566 ghcr.io/damianh/microstack:latest
 ```
 
 State is saved as JSON files in `STATE_DIR` on shutdown and restored on startup.

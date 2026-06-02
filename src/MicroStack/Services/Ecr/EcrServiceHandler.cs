@@ -508,7 +508,7 @@ internal sealed class EcrServiceHandler : IServiceHandler
 
     private ServiceResponse GetAuthorizationToken()
     {
-        var token = Convert.ToBase64String("AWS:ministack-auth-token"u8.ToArray());
+        var token = Convert.ToBase64String("AWS:microstack-auth-token"u8.ToArray());
         var authEntry = new Dictionary<string, object?>
         {
             ["authorizationToken"] = token,

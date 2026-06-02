@@ -125,11 +125,11 @@ See [Internal API](https://damianh.github.io/microstack/internal-api) for full d
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `GATEWAY_PORT` | `4566` | Port to listen on |
-| `MINISTACK_HOST` | `localhost` | Hostname for URL generation |
-| `MINISTACK_REGION` | `us-east-1` | Default AWS region |
-| `MINISTACK_ACCOUNT_ID` | `000000000000` | Default AWS account ID |
+| `MICROSTACK_HOST` | `localhost` | Hostname for URL generation |
+| `MICROSTACK_REGION` | `us-east-1` | Default AWS region |
+| `MICROSTACK_ACCOUNT_ID` | `000000000000` | Default AWS account ID |
 | `PERSIST_STATE` | `0` | Set to `1` for JSON state persistence |
-| `STATE_DIR` | `<temp>/ministack-state` | Directory for persisted state |
+| `STATE_DIR` | `<temp>/microstack-state` | Directory for persisted state |
 | `SERVICES` | *(all)* | Comma-separated list of services to enable |
 
 See [Configuration](https://damianh.github.io/microstack/configuration) for all options including S3 persistence, service aliases, and Docker Compose examples.
@@ -157,7 +157,7 @@ services:
     environment:
       - PERSIST_STATE=1
     volumes:
-      - microstack-state:/tmp/ministack-state
+      - microstack-state:/tmp/microstack-state
 
 volumes:
   microstack-state:

@@ -430,7 +430,7 @@ public sealed class SesTests(MicroStackFixture fixture) : IClassFixture<MicroSta
             },
         });
 
-        resp.MessageId.ShouldStartWith("ministack-");
+        resp.MessageId.ShouldStartWith("microstack-");
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
