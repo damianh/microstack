@@ -50,28 +50,28 @@ public sealed class CloudWatchLogsTests(MicroStackFixture fixture) : IClassFixtu
     [Fact]
     public async Task PutGet()
     {
-        await _logs.CreateLogGroupAsync(new CreateLogGroupRequest { LogGroupName = "/test/ministack" });
+        await _logs.CreateLogGroupAsync(new CreateLogGroupRequest { LogGroupName = "/test/microstack" });
         await _logs.CreateLogStreamAsync(new CreateLogStreamRequest
         {
-            LogGroupName = "/test/ministack",
+            LogGroupName = "/test/microstack",
             LogStreamName = "stream1",
         });
 
         var nowMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         await _logs.PutLogEventsAsync(new PutLogEventsRequest
         {
-            LogGroupName = "/test/ministack",
+            LogGroupName = "/test/microstack",
             LogStreamName = "stream1",
             LogEvents =
             [
-                new InputLogEvent { Timestamp = DateTime.UtcNow, Message = "Hello from MiniStack" },
+                new InputLogEvent { Timestamp = DateTime.UtcNow, Message = "Hello from MicroStack" },
                 new InputLogEvent { Timestamp = DateTime.UtcNow, Message = "Second log line" },
             ],
         });
 
         var resp = await _logs.GetLogEventsAsync(new GetLogEventsRequest
         {
-            LogGroupName = "/test/ministack",
+            LogGroupName = "/test/microstack",
             LogStreamName = "stream1",
         });
 

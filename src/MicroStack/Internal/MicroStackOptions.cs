@@ -23,7 +23,7 @@ internal sealed class MicroStackOptions
 
     internal bool PersistState { get; set; }
 
-    internal string StateDir { get; set; } = Path.Combine(Path.GetTempPath(), "ministack-state");
+    internal string StateDir { get; set; } = Path.Combine(Path.GetTempPath(), "microstack-state");
 
     internal bool S3Persist { get; set; }
 
@@ -44,9 +44,9 @@ internal sealed class MicroStackOptions
             options.GatewayPort = port;
         }
 
-        options.Host = Environment.GetEnvironmentVariable("MINISTACK_HOST") ?? options.Host;
-        options.Region = Environment.GetEnvironmentVariable("MINISTACK_REGION") ?? options.Region;
-        options.DefaultAccountId = Environment.GetEnvironmentVariable("MINISTACK_ACCOUNT_ID") ?? options.DefaultAccountId;
+        options.Host = Environment.GetEnvironmentVariable("MICROSTACK_HOST") ?? options.Host;
+        options.Region = Environment.GetEnvironmentVariable("MICROSTACK_REGION") ?? options.Region;
+        options.DefaultAccountId = Environment.GetEnvironmentVariable("MICROSTACK_ACCOUNT_ID") ?? options.DefaultAccountId;
         options.PersistState = Environment.GetEnvironmentVariable("PERSIST_STATE") == "1";
         options.StateDir = Environment.GetEnvironmentVariable("STATE_DIR") ?? options.StateDir;
         options.Services = Environment.GetEnvironmentVariable("SERVICES")?.Trim();

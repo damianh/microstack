@@ -15,7 +15,7 @@ Set the `PERSIST_STATE` environment variable:
 
 ```bash
 # Docker
-docker run -e PERSIST_STATE=1 -v ./state:/tmp/ministack-state -p 4566:4566 ghcr.io/damianh/microstack:latest
+docker run -e PERSIST_STATE=1 -v ./state:/tmp/microstack-state -p 4566:4566 ghcr.io/damianh/microstack:latest
 
 # Direct
 PERSIST_STATE=1 dotnet run --project src/MicroStack/MicroStack.csproj
@@ -49,12 +49,12 @@ The `POST /_microstack/reset` endpoint calls:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `STATE_DIR` | `<temp>/ministack-state` | Directory where state files are written |
+| `STATE_DIR` | `<temp>/microstack-state` | Directory where state files are written |
 
 Each service gets its own file:
 
 ```
-ministack-state/
+microstack-state/
   sqs.json
   dynamodb.json
   s3.json

@@ -2920,7 +2920,7 @@ internal sealed partial class StepFunctionsServiceHandler : IServiceHandler
 
         if (!AwsSdkServiceMap.TryGetValue(serviceName, out var serviceInfo))
         {
-            throw new ExecutionError("States.Runtime", $"Service '{serviceName}' is not supported in MiniStack aws-sdk integrations");
+            throw new ExecutionError("States.Runtime", $"Service '{serviceName}' is not supported in MicroStack aws-sdk integrations");
         }
 
         if (serviceInfo.Protocol == "json")
@@ -2949,7 +2949,7 @@ internal sealed partial class StepFunctionsServiceHandler : IServiceHandler
         var handler = _registry.Resolve(serviceKey);
         if (handler is null)
         {
-            throw new ExecutionError("States.Runtime", $"Service '{serviceKey}' is not available in MiniStack");
+            throw new ExecutionError("States.Runtime", $"Service '{serviceKey}' is not available in MicroStack");
         }
 
         var headers = new Dictionary<string, string>

@@ -35,7 +35,7 @@ services:
     environment:
       - PERSIST_STATE=1
     volumes:
-      - microstack-state:/tmp/ministack-state
+      - microstack-state:/tmp/microstack-state
 
 volumes:
   microstack-state:

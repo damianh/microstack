@@ -74,7 +74,7 @@ public static class MicroStackBuilderExtensions
         ArgumentNullException.ThrowIfNull(builder);
 
         return builder
-            .WithVolume(name ?? VolumeNameGenerator.Generate(builder, "data"), "/tmp/ministack-state")
+            .WithVolume(name ?? VolumeNameGenerator.Generate(builder, "data"), "/tmp/microstack-state")
             .WithEnvironment("PERSIST_STATE", "1");
     }
 
@@ -107,6 +107,6 @@ public static class MicroStackBuilderExtensions
         ArgumentNullException.ThrowIfNull(builder);
         ArgumentException.ThrowIfNullOrEmpty(region);
 
-        return builder.WithEnvironment("MINISTACK_REGION", region);
+        return builder.WithEnvironment("MICROSTACK_REGION", region);
     }
 }

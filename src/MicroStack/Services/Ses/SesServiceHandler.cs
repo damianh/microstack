@@ -717,7 +717,7 @@ internal sealed partial class SesServiceHandler : IServiceHandler
 
     private ServiceResponse V2SendEmail(JsonElement data)
     {
-        var msgId = $"ministack-{HashHelpers.NewUuid()}";
+        var msgId = $"microstack-{HashHelpers.NewUuid()}";
         var fromAddr = GetStr(data, "FromEmailAddress") ?? "";
 
         lock (_lock)

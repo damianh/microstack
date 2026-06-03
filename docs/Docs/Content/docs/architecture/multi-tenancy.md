@@ -21,7 +21,7 @@ Authorization: AWS4-HMAC-SHA256 Credential=123456789012/20240101/us-east-1/sqs/a
 
 The `AccountContext.SetFromAccessKey()` method checks:
 - If the access key is exactly 12 digits (e.g., `123456789012`), it's used directly as the account ID.
-- Otherwise, the default account ID is used (from `MINISTACK_ACCOUNT_ID`, defaults to `000000000000`).
+- Otherwise, the default account ID is used (from `MICROSTACK_ACCOUNT_ID`, defaults to `000000000000`).
 
 This means you control the account ID by setting the AWS access key:
 

@@ -130,7 +130,7 @@ var resp = await sesV2.SendEmailAsync(new SendEmailRequest
     },
 });
 
-Console.WriteLine(resp.MessageId); // e.g. "ministack-abc123" (MicroStack internal prefix)
+Console.WriteLine(resp.MessageId); // e.g. "microstack-abc123" (MicroStack internal prefix)
 
 // Check account sending limits
 var account = await sesV2.GetAccountAsync(new GetAccountRequest());
