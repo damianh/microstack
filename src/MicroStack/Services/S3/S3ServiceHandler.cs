@@ -12,7 +12,7 @@ namespace MicroStack.Services.S3;
 ///
 /// Port of ministack/services/s3.py.
 /// </summary>
-internal sealed partial class S3ServiceHandler : IServiceHandler
+internal sealed partial class S3ServiceHandler : IServiceHandler, IResourceProvider
 {
     // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -114,6 +114,26 @@ internal sealed partial class S3ServiceHandler : IServiceHandler
     public void RestoreState(JsonElement state)
     {
         // Not implementing restore in Phase 1.
+    }
+
+    public ResourceSummary GetResources()
+    {
+        var accountId = AccountContext.GetAccountId();
+        var items = _buckets.Items
+            .Select(kv => new ResourceItem(
+                kv.Key,
+                $"arn:aws:s3:::{kv.Key}",
+                new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["CreationDate"] = kv.Value.Created,
+                    ["ObjectCount"] = kv.Value.Objects.Count.ToString(),
+                    ["Region"] = kv.Value.Region ?? Region,
+                    ["AccountId"] = accountId,
+                }))
+            .OrderBy(item => item.Name, StringComparer.Ordinal)
+            .ToList();
+
+        return new ResourceSummary("s3", items.Count, items);
     }
 
     // ── Dispatch ─────────────────────────────────────────────────────────────────

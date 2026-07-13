@@ -13,7 +13,7 @@ namespace MicroStack.Services.Sqs;
 ///
 /// Port of ministack/services/sqs.py.
 /// </summary>
-internal sealed class SqsServiceHandler : IServiceHandler
+internal sealed class SqsServiceHandler : IServiceHandler, IResourceProvider
 {
     // ── Module-level state ──────────────────────────────────────────────────────
 
@@ -141,6 +141,37 @@ internal sealed class SqsServiceHandler : IServiceHandler
                 new KeyValuePair<(string, string), SqsQueue>((e.AccountId, e.Value.Name), e.Value)));
             _queueNameToUrl.FromRaw(restored.Queues.Select(e =>
                 new KeyValuePair<(string, string), string>((e.AccountId, e.Value.Name), e.Value.Name)));
+        }
+    }
+
+    public ResourceSummary GetResources()
+    {
+        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        lock (_lock)
+        {
+            var items = _queues.Items
+                .Select(kv =>
+                {
+                    var queue = kv.Value;
+                    var visible = queue.Messages.Count(m => m.VisibleAtMs <= now);
+                    var inFlight = queue.Messages.Count - visible;
+                    var arn = queue.Attributes.GetValueOrDefault("QueueArn")
+                        ?? $"arn:aws:sqs:{_region}:{AccountContext.GetAccountId()}:{queue.Name}";
+
+                    return new ResourceItem(
+                        queue.Name,
+                        arn,
+                        new Dictionary<string, string>(StringComparer.Ordinal)
+                        {
+                            ["QueueUrl"] = queue.Url,
+                            ["VisibleMessages"] = visible.ToString(),
+                            ["InFlightMessages"] = inFlight.ToString(),
+                        });
+                })
+                .OrderBy(item => item.Name, StringComparer.Ordinal)
+                .ToList();
+
+            return new ResourceSummary("sqs", items.Count, items);
         }
     }
 

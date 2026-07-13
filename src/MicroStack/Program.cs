@@ -60,6 +60,7 @@ AccountContext.Configure(options);
 // so we use factory lambdas instead of letting DI locate a public constructor.
 builder.Services.AddSingleton<AwsServiceRouter>();
 builder.Services.AddSingleton<ServiceRegistry>(_ => new ServiceRegistry(options));
+builder.Services.AddSingleton<RequestLog>(_ => new RequestLog());
 builder.Services.AddSingleton<StatePersistence>(sp => new StatePersistence(
     sp.GetRequiredService<ILogger<StatePersistence>>(),
     sp.GetRequiredService<ServiceRegistry>(),
@@ -169,6 +170,33 @@ app.MapPost("/_microstack/config", async (HttpContext ctx) =>
     return Results.Ok(new ConfigResponse(applied));
 });
 
+// Request log endpoint
+app.MapGet("/_microstack/requests", (HttpContext ctx) =>
+{
+    var limitText = ctx.Request.Query["limit"].ToString();
+    var limit = int.TryParse(limitText, out var parsed) ? parsed : 1000;
+    var requestLog = ctx.RequestServices.GetRequiredService<RequestLog>();
+    return Results.Ok(requestLog.GetEntries(limit));
+});
+
+// Request log clear endpoint
+app.MapDelete("/_microstack/requests", (RequestLog requestLog) =>
+{
+    requestLog.Clear();
+    return Results.Ok(new RequestLogClearResponse(true));
+});
+
+// Resource explorer endpoint
+app.MapGet("/_microstack/resources", (ServiceRegistry serviceRegistry) =>
+{
+    var resources = serviceRegistry.All
+        .OfType<IResourceProvider>()
+        .Select(provider => provider.GetResources())
+        .OrderBy(summary => summary.Service, StringComparer.Ordinal)
+        .ToList();
+    return Results.Ok(resources);
+});
+
 // Enable routing so endpoint matching runs before our AWS middleware.
 // This ensures admin endpoints (health, reset, config) take priority.
 app.UseRouting();
@@ -190,6 +218,7 @@ app.Use(async (ctx, next) =>
 });
 
 // Main AWS request middleware
+app.UseMiddleware<RequestLogMiddleware>();
 app.UseMiddleware<AwsRequestMiddleware>();
 
 // Activate the mapped endpoints (health, reset, config) registered above.
@@ -215,6 +244,7 @@ lifetime.ApplicationStarted.Register(() =>
 
     logger.LogInformation(banner);
     logger.LogInformation("Services enabled: {ServiceCount}", serviceCount);
+    logger.LogInformation("UI configured for: http://{Host}:{UiPort}", options.Host, options.UiPort);
 });
 
 app.Run();
@@ -226,3 +256,4 @@ public partial class Program { }
 internal sealed record HealthResponse(Dictionary<string, string> Services, string Edition, string Version);
 internal sealed record ResetResponse(string Reset);
 internal sealed record ConfigResponse(Dictionary<string, string> Applied);
+internal sealed record RequestLogClearResponse(bool Cleared);

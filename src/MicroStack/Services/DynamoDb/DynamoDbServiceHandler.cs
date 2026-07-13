@@ -10,7 +10,7 @@ namespace MicroStack.Services.DynamoDb;
 ///
 /// Port of ministack/services/dynamodb.py.
 /// </summary>
-internal sealed class DynamoDbServiceHandler : IServiceHandler
+internal sealed class DynamoDbServiceHandler : IServiceHandler, IResourceProvider
 {
     // ── State ────────────────────────────────────────────────────────────────────
 
@@ -105,6 +105,26 @@ internal sealed class DynamoDbServiceHandler : IServiceHandler
     public JsonElement? GetState() => null;   // persistence not implemented in Phase 1
 
     public void RestoreState(JsonElement state) { }  // persistence not implemented in Phase 1
+
+    public ResourceSummary GetResources()
+    {
+        lock (_lock)
+        {
+            var items = _tables.Items
+                .Select(kv => new ResourceItem(
+                    kv.Key,
+                    kv.Value.TableArn,
+                    new Dictionary<string, string>(StringComparer.Ordinal)
+                    {
+                        ["ItemCount"] = kv.Value.ItemCount.ToString(),
+                        ["TableStatus"] = kv.Value.TableStatus,
+                    }))
+                .OrderBy(item => item.Name, StringComparer.Ordinal)
+                .ToList();
+
+            return new ResourceSummary("dynamodb", items.Count, items);
+        }
+    }
 
     // ── Internal stream record access (used by Lambda ESM) ──────────────────────
 

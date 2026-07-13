@@ -48,6 +48,19 @@ dotnet run --project src/MicroStack/MicroStack.csproj
 curl http://localhost:4566/_microstack/health
 ```
 
+## Admin UI
+
+MicroStack now includes a web UI dashboard on a separate port:
+
+- **API endpoint:** `http://localhost:4566`
+- **UI endpoint:** `http://localhost:4567`
+
+The UI includes:
+
+- **Dashboard** — service health and resource counts
+- **Request Log** — recent AWS API calls (service, action, account, status, duration)
+- **Resource Explorer** — SQS/S3/DynamoDB resources with names/ARNs and attributes
+
 ## Usage
 
 Point any AWS SDK client at `http://localhost:4566`:
@@ -154,6 +167,7 @@ services:
     image: ghcr.io/damianh/microstack:latest
     ports:
       - "4566:4566"
+      - "4567:4567"
     environment:
       - PERSIST_STATE=1
     volumes:

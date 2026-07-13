@@ -3,6 +3,8 @@
     <Project Path="src/MicroStack/MicroStack.csproj" />
     <Project Path="src/MicroStack.Aspire.Hosting/MicroStack.Aspire.Hosting.csproj" />
     <Project Path="src/MicroStack.LambdaBootstrap/MicroStack.LambdaBootstrap.csproj" />
+    <Project Path="src/MicroStack.UI.Client/MicroStack.UI.Client.csproj" />
+    <Project Path="src/MicroStack.UI/MicroStack.UI.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/MicroStack.Tests/MicroStack.Tests.csproj" />

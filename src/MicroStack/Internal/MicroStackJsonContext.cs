@@ -24,6 +24,13 @@ namespace MicroStack.Internal;
 [JsonSerializable(typeof(HealthResponse))]
 [JsonSerializable(typeof(ResetResponse))]
 [JsonSerializable(typeof(ConfigResponse))]
+[JsonSerializable(typeof(RequestLogClearResponse))]
+// Request log endpoint
+[JsonSerializable(typeof(List<RequestLogEntry>))]
+// Resource explorer endpoint
+[JsonSerializable(typeof(List<ResourceSummary>))]
+[JsonSerializable(typeof(ResourceSummary))]
+[JsonSerializable(typeof(ResourceItem))]
 // AwsResponseHelpers error type
 [JsonSerializable(typeof(AwsJsonError))]
 // SecretsManager persistence

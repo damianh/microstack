@@ -1,0 +1,72 @@
+@page "/resources"
+@inject MicroStackApiService Api
+
+<PageTitle>Resource Explorer</PageTitle>
+
+<h1>Resource Explorer</h1>
+
+<div class="mb-3">
+    <button class="btn btn-primary btn-sm" @onclick="LoadAsync">Refresh</button>
+</div>
+
+@if (_resources.Count == 0)
+{
+    <p class="text-muted">No resources yet.</p>
+}
+else
+{
+    foreach (var summary in _resources.OrderBy(r => r.Service, StringComparer.Ordinal))
+    {
+        <details class="mb-3" open>
+            <summary class="fw-semibold">@summary.Service (@summary.Count)</summary>
+            @if (summary.Items.Count == 0)
+            {
+                <p class="text-muted mt-2">No resources yet.</p>
+            }
+            else
+            {
+                <table class="table table-sm table-striped mt-2">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>ARN</th>
+                            <th>Attributes</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var item in summary.Items.OrderBy(i => i.Name, StringComparer.Ordinal))
+                        {
+                            <tr>
+                                <td>@item.Name</td>
+                                <td><code>@item.Arn</code></td>
+                                <td>@FormatAttributes(item.Attributes)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+        </details>
+    }
+}
+
+@code {
+    private IReadOnlyList<ResourceSummary> _resources = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _resources = await Api.GetResourcesAsync();
+    }
+
+    private static string FormatAttributes(Dictionary<string, string>? attributes)
+    {
+        if (attributes is null || attributes.Count == 0)
+            return "-";
+
+        return string.Join(", ", attributes.OrderBy(kv => kv.Key, StringComparer.Ordinal).Select(kv => $"{kv.Key}={kv.Value}"));
+    }
+}

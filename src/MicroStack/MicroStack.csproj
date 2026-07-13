@@ -27,7 +27,9 @@
 
   <ItemGroup>
     <ContainerPort Include="4566" Type="tcp" />
+    <ContainerPort Include="4567" Type="tcp" />
     <ContainerEnvironmentVariable Include="ASPNETCORE_HTTP_PORTS" Value="4566" />
+    <ContainerEnvironmentVariable Include="MICROSTACK_UI_PORT" Value="4567" />
   </ItemGroup>
 
   <ItemGroup>
