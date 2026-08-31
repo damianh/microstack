@@ -8,8 +8,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Atoll.Middleware" Version="0.7.6" />
-    <PackageReference Include="Atoll.Lagoon" Version="0.7.6" />
+    <PackageReference Include="Atoll.Middleware" Version="0.12.1" />
+    <PackageReference Include="Atoll.Lagoon" Version="0.12.1" />
   </ItemGroup>
 
 </Project>
