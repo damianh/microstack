@@ -2,6 +2,7 @@ using Amazon;
 using Amazon.KeyManagementService;
 using Amazon.KeyManagementService.Model;
 using Amazon.Runtime;
+using System.Security.Cryptography;
 
 namespace MicroStack.Tests;
 
@@ -107,6 +108,55 @@ public sealed class KmsTests(MicroStackFixture fixture) : IClassFixture<MicroSta
         var meta = resp.KeyMetadata;
         meta.KeySpec.ShouldBe(KeySpec.RSA_4096);
         meta.EncryptionAlgorithms.ShouldContain("RSAES_OAEP_SHA_256");
+    }
+
+    [Fact]
+    public async Task Rsa3072SignAndVerify()
+    {
+        var created = await _kms.CreateKeyAsync(new CreateKeyRequest
+        {
+            KeySpec = KeySpec.RSA_3072,
+            KeyUsage = KeyUsageType.SIGN_VERIFY,
+        });
+        var keyId = created.KeyMetadata.KeyId;
+        var message = "rsa-3072-message"u8.ToArray();
+        SigningAlgorithmSpec[] algorithms =
+        [
+            SigningAlgorithmSpec.RSASSA_PKCS1_V1_5_SHA_384,
+            SigningAlgorithmSpec.RSASSA_PSS_SHA_384,
+        ];
+
+        created.KeyMetadata.KeySpec.ShouldBe(KeySpec.RSA_3072);
+        created.KeyMetadata.SigningAlgorithms.ShouldContain(algorithms[0].Value);
+        created.KeyMetadata.SigningAlgorithms.ShouldContain(algorithms[1].Value);
+
+        var publicKey = await _kms.GetPublicKeyAsync(new GetPublicKeyRequest { KeyId = keyId });
+        using var rsa = RSA.Create();
+        rsa.ImportSubjectPublicKeyInfo(publicKey.PublicKey.ToArray(), out var bytesRead);
+        bytesRead.ShouldBe((int)publicKey.PublicKey.Length);
+        rsa.KeySize.ShouldBe(3072);
+
+        foreach (var algorithm in algorithms)
+        {
+            var signed = await _kms.SignAsync(new SignRequest
+            {
+                KeyId = keyId,
+                Message = new MemoryStream(message),
+                MessageType = MessageType.RAW,
+                SigningAlgorithm = algorithm,
+            });
+
+            var verified = await _kms.VerifyAsync(new VerifyRequest
+            {
+                KeyId = keyId,
+                Message = new MemoryStream(message),
+                MessageType = MessageType.RAW,
+                Signature = new MemoryStream(signed.Signature.ToArray()),
+                SigningAlgorithm = algorithm,
+            });
+
+            verified.SignatureValid.ShouldBe(true);
+        }
     }
 
     // -- ListKeys --------------------------------------------------------------
@@ -228,6 +278,122 @@ public sealed class KmsTests(MicroStackFixture fixture) : IClassFixture<MicroSta
         });
 
         verifyResp.SignatureValid.ShouldBe(true);
+    }
+
+    [Theory]
+    [InlineData("ECC_NIST_P256", "ECDSA_SHA_256", 256)]
+    [InlineData("ECC_NIST_P384", "ECDSA_SHA_384", 384)]
+    [InlineData("ECC_NIST_P521", "ECDSA_SHA_512", 521)]
+    public async Task EccSignaturesAreDerEncoded(
+        string keySpecValue,
+        string signingAlgorithmValue,
+        int keySize)
+    {
+        var keySpec = KeySpec.FindValue(keySpecValue);
+        var signingAlgorithm = SigningAlgorithmSpec.FindValue(signingAlgorithmValue);
+        var created = await _kms.CreateKeyAsync(new CreateKeyRequest
+        {
+            KeySpec = keySpec,
+            KeyUsage = KeyUsageType.SIGN_VERIFY,
+        });
+        var keyId = created.KeyMetadata.KeyId;
+        var message = "ecdsa-message"u8.ToArray();
+
+        created.KeyMetadata.KeySpec.ShouldBe(keySpec);
+        created.KeyMetadata.SigningAlgorithms.ShouldHaveSingleItem().ShouldBe(signingAlgorithmValue);
+        created.KeyMetadata.EncryptionAlgorithms.ShouldBeEmpty();
+
+        var described = await _kms.DescribeKeyAsync(new DescribeKeyRequest { KeyId = keyId });
+        described.KeyMetadata.KeySpec.ShouldBe(keySpec);
+        described.KeyMetadata.SigningAlgorithms.ShouldHaveSingleItem().ShouldBe(signingAlgorithmValue);
+
+        var publicKey = await _kms.GetPublicKeyAsync(new GetPublicKeyRequest { KeyId = keyId });
+        publicKey.KeySpec.ShouldBe(keySpec);
+        publicKey.SigningAlgorithms.ShouldHaveSingleItem().ShouldBe(signingAlgorithmValue);
+
+        var signed = await _kms.SignAsync(new SignRequest
+        {
+            KeyId = keyId,
+            Message = new MemoryStream(message),
+            MessageType = MessageType.RAW,
+            SigningAlgorithm = signingAlgorithm,
+        });
+
+        using var ecdsa = ECDsa.Create();
+        ecdsa.ImportSubjectPublicKeyInfo(publicKey.PublicKey.ToArray(), out var bytesRead);
+        bytesRead.ShouldBe((int)publicKey.PublicKey.Length);
+        ecdsa.KeySize.ShouldBe(keySize);
+        ecdsa.VerifyData(
+                message,
+                signed.Signature.ToArray(),
+                GetHashAlgorithm(signingAlgorithmValue),
+                DSASignatureFormat.Rfc3279DerSequence)
+            .ShouldBe(true);
+
+        var verified = await _kms.VerifyAsync(new VerifyRequest
+        {
+            KeyId = keyId,
+            Message = new MemoryStream(message),
+            MessageType = MessageType.RAW,
+            Signature = new MemoryStream(signed.Signature.ToArray()),
+            SigningAlgorithm = signingAlgorithm,
+        });
+        verified.SignatureValid.ShouldBe(true);
+    }
+
+    [Fact]
+    public async Task EccRejectsInvalidUsage()
+    {
+        await ShouldThrowValidationException(() =>
+            _kms.CreateKeyAsync(new CreateKeyRequest
+            {
+                KeySpec = KeySpec.ECC_NIST_P256,
+                KeyUsage = KeyUsageType.ENCRYPT_DECRYPT,
+            }));
+    }
+
+    [Fact]
+    public async Task EccRejectsWrongSigningAlgorithm()
+    {
+        var created = await _kms.CreateKeyAsync(new CreateKeyRequest
+        {
+            KeySpec = KeySpec.ECC_NIST_P256,
+            KeyUsage = KeyUsageType.SIGN_VERIFY,
+        });
+
+        await ShouldThrowValidationException(() =>
+            _kms.SignAsync(new SignRequest
+            {
+                KeyId = created.KeyMetadata.KeyId,
+                Message = new MemoryStream("message"u8.ToArray()),
+                MessageType = MessageType.RAW,
+                SigningAlgorithm = SigningAlgorithmSpec.ECDSA_SHA_384,
+            }));
+    }
+
+    [Fact]
+    public async Task EccRejectsEncryptAndDecrypt()
+    {
+        var created = await _kms.CreateKeyAsync(new CreateKeyRequest
+        {
+            KeySpec = KeySpec.ECC_NIST_P256,
+            KeyUsage = KeyUsageType.SIGN_VERIFY,
+        });
+        var keyId = created.KeyMetadata.KeyId;
+
+        await ShouldThrowValidationException(() =>
+            _kms.EncryptAsync(new EncryptRequest
+            {
+                KeyId = keyId,
+                Plaintext = new MemoryStream("plaintext"u8.ToArray()),
+            }));
+
+        await ShouldThrowValidationException(() =>
+            _kms.DecryptAsync(new DecryptRequest
+            {
+                KeyId = keyId,
+                CiphertextBlob = new MemoryStream("ciphertext"u8.ToArray()),
+            }));
     }
 
     [Fact]
@@ -874,5 +1040,22 @@ public sealed class KmsTests(MicroStackFixture fixture) : IClassFixture<MicroSta
             KeyId = keyId,
             PendingWindowInDays = 7,
         });
+    }
+
+    private static HashAlgorithmName GetHashAlgorithm(string signingAlgorithm)
+    {
+        return signingAlgorithm switch
+        {
+            "ECDSA_SHA_256" => HashAlgorithmName.SHA256,
+            "ECDSA_SHA_384" => HashAlgorithmName.SHA384,
+            "ECDSA_SHA_512" => HashAlgorithmName.SHA512,
+            _ => throw new ArgumentOutOfRangeException(nameof(signingAlgorithm)),
+        };
+    }
+
+    private static async Task ShouldThrowValidationException(Func<Task> action)
+    {
+        var exception = await Should.ThrowAsync<AmazonKeyManagementServiceException>(action);
+        exception.ErrorCode.ShouldBe("ValidationException");
     }
 }

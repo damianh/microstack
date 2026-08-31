@@ -10,8 +10,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Amazon.Lambda.Core" Version="2.*" />
-    <PackageReference Include="Amazon.Lambda.Serialization.SystemTextJson" Version="2.*" />
+    <PackageReference Include="Amazon.Lambda.Core" Version="3.3.0" />
+    <PackageReference Include="Amazon.Lambda.Serialization.SystemTextJson" Version="3.0.1" />
   </ItemGroup>
 
 </Project>

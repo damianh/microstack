@@ -34,7 +34,7 @@
     <PackageReference Include="AWSSDK.SecurityToken" Version="4.*" />
     <PackageReference Include="AWSSDK.SimpleNotificationService" Version="4.*" />
     <PackageReference Include="AWSSDK.SimpleSystemsManagement" Version="4.*" />
-    <PackageReference Include="AWSSDK.SQS" Version="4.0.2.24" />
+    <PackageReference Include="AWSSDK.SQS" Version="4.0.100.11" />
     <PackageReference Include="AWSSDK.StepFunctions" Version="4.*" />
     <PackageReference Include="AWSSDK.SimpleEmail" Version="4.*" />
     <PackageReference Include="AWSSDK.SimpleEmailV2" Version="4.*" />
@@ -47,8 +47,8 @@
     <PackageReference Include="AWSSDK.CognitoIdentity" Version="4.*" />
     <PackageReference Include="AWSSDK.CognitoIdentityProvider" Version="4.*" />
     <PackageReference Include="AWSSDK.ServiceDiscovery" Version="4.*" />
-    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.7" />
-    <PackageReference Include="xunit.v3.core.mtp-v2" Version="3.2.2" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.11" />
+    <PackageReference Include="xunit.v3.core.mtp-v2" Version="4.0.0" />
     <PackageReference Include="Shouldly" Version="4.3.0" />
   </ItemGroup>
 

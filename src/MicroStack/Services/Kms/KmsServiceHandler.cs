@@ -251,17 +251,31 @@ internal sealed class KmsServiceHandler : IServiceHandler
         return result;
     }
 
-    private static (RSASignaturePadding? Padding, HashAlgorithmName Hash) GetSigningParams(string algorithm)
+    private static HashAlgorithmName GetSigningHash(string algorithm)
     {
         return algorithm switch
         {
-            "RSASSA_PKCS1_V1_5_SHA_256" => (RSASignaturePadding.Pkcs1, HashAlgorithmName.SHA256),
-            "RSASSA_PKCS1_V1_5_SHA_384" => (RSASignaturePadding.Pkcs1, HashAlgorithmName.SHA384),
-            "RSASSA_PKCS1_V1_5_SHA_512" => (RSASignaturePadding.Pkcs1, HashAlgorithmName.SHA512),
-            "RSASSA_PSS_SHA_256" => (RSASignaturePadding.Pss, HashAlgorithmName.SHA256),
-            "RSASSA_PSS_SHA_384" => (RSASignaturePadding.Pss, HashAlgorithmName.SHA384),
-            "RSASSA_PSS_SHA_512" => (RSASignaturePadding.Pss, HashAlgorithmName.SHA512),
-            _ => (null, default),
+            "RSASSA_PKCS1_V1_5_SHA_256" or "RSASSA_PSS_SHA_256" or "ECDSA_SHA_256"
+                => HashAlgorithmName.SHA256,
+            "RSASSA_PKCS1_V1_5_SHA_384" or "RSASSA_PSS_SHA_384" or "ECDSA_SHA_384"
+                => HashAlgorithmName.SHA384,
+            "RSASSA_PKCS1_V1_5_SHA_512" or "RSASSA_PSS_SHA_512" or "ECDSA_SHA_512"
+                => HashAlgorithmName.SHA512,
+            _ => default,
+        };
+    }
+
+    private static RSASignaturePadding? GetRsaSignaturePadding(string algorithm)
+    {
+        return algorithm switch
+        {
+            "RSASSA_PKCS1_V1_5_SHA_256" or
+            "RSASSA_PKCS1_V1_5_SHA_384" or
+            "RSASSA_PKCS1_V1_5_SHA_512" => RSASignaturePadding.Pkcs1,
+            "RSASSA_PSS_SHA_256" or
+            "RSASSA_PSS_SHA_384" or
+            "RSASSA_PSS_SHA_512" => RSASignaturePadding.Pss,
+            _ => null,
         };
     }
 
@@ -305,9 +319,14 @@ internal sealed class KmsServiceHandler : IServiceHandler
                 rec.EncryptionAlgorithms = ["SYMMETRIC_DEFAULT"];
                 rec.SigningAlgorithms = [];
             }
-            else if (keySpec is "RSA_2048" or "RSA_4096")
+            else if (keySpec is "RSA_2048" or "RSA_3072" or "RSA_4096")
             {
-                var bits = keySpec == "RSA_2048" ? 2048 : 4096;
+                var bits = keySpec switch
+                {
+                    "RSA_2048" => 2048,
+                    "RSA_3072" => 3072,
+                    _ => 4096,
+                };
                 var rsa = RSA.Create(bits);
                 rec.RsaKey = rsa;
                 rec.PublicKeyDer = rsa.ExportSubjectPublicKeyInfo();
@@ -334,6 +353,36 @@ internal sealed class KmsServiceHandler : IServiceHandler
                     ];
                     rec.SigningAlgorithms = [];
                 }
+            }
+            else if (keySpec is "ECC_NIST_P256" or "ECC_NIST_P384" or "ECC_NIST_P521")
+            {
+                if (keyUsage != "SIGN_VERIFY")
+                {
+                    return AwsResponseHelpers.ErrorResponseJson(
+                        "ValidationException",
+                        $"KeySpec {keySpec} requires KeyUsage SIGN_VERIFY",
+                        400);
+                }
+
+                var curve = keySpec switch
+                {
+                    "ECC_NIST_P256" => ECCurve.NamedCurves.nistP256,
+                    "ECC_NIST_P384" => ECCurve.NamedCurves.nistP384,
+                    _ => ECCurve.NamedCurves.nistP521,
+                };
+                var ecdsa = ECDsa.Create(curve);
+                rec.EcdsaKey = ecdsa;
+                rec.PublicKeyDer = ecdsa.ExportSubjectPublicKeyInfo();
+                rec.EncryptionAlgorithms = [];
+                rec.SigningAlgorithms =
+                [
+                    keySpec switch
+                    {
+                        "ECC_NIST_P256" => "ECDSA_SHA_256",
+                        "ECC_NIST_P384" => "ECDSA_SHA_384",
+                        _ => "ECDSA_SHA_512",
+                    },
+                ];
             }
             else
             {
@@ -443,7 +492,7 @@ internal sealed class KmsServiceHandler : IServiceHandler
                 return AwsResponseHelpers.ErrorResponseJson("NotFoundException", $"Key {keyId} not found", 400);
             }
 
-            if (rec.RsaKey is null)
+            if (rec.RsaKey is null && rec.EcdsaKey is null)
             {
                 return AwsResponseHelpers.ErrorResponseJson(
                     "UnsupportedOperationException",
@@ -454,18 +503,30 @@ internal sealed class KmsServiceHandler : IServiceHandler
             var messageB64 = GetString(data, "Message") ?? "";
             var algorithm = GetString(data, "SigningAlgorithm") ?? "RSASSA_PKCS1_V1_5_SHA_256";
 
-            var message = Convert.FromBase64String(messageB64);
-
-            var (padding, hash) = GetSigningParams(algorithm);
-            if (padding is null)
+            if (!rec.SigningAlgorithms.Contains(algorithm, StringComparer.Ordinal))
             {
                 return AwsResponseHelpers.ErrorResponseJson(
-                    "UnsupportedOperationException",
-                    $"Signing algorithm {algorithm} is not supported",
+                    "ValidationException",
+                    $"Signing algorithm {algorithm} is not valid for key spec {rec.KeySpec}",
                     400);
             }
 
-            var signature = rec.RsaKey.SignData(message, hash, padding);
+            var message = Convert.FromBase64String(messageB64);
+            var hash = GetSigningHash(algorithm);
+            byte[] signature;
+
+            if (rec.RsaKey is not null)
+            {
+                var padding = GetRsaSignaturePadding(algorithm)!;
+                signature = rec.RsaKey.SignData(message, hash, padding);
+            }
+            else
+            {
+                signature = rec.EcdsaKey!.SignData(
+                    message,
+                    hash,
+                    DSASignatureFormat.Rfc3279DerSequence);
+            }
 
             return AwsResponseHelpers.JsonResponse(new Dictionary<string, object?>
             {
@@ -487,7 +548,7 @@ internal sealed class KmsServiceHandler : IServiceHandler
                 return AwsResponseHelpers.ErrorResponseJson("NotFoundException", $"Key {keyId} not found", 400);
             }
 
-            if (rec.RsaKey is null)
+            if (rec.RsaKey is null && rec.EcdsaKey is null)
             {
                 return AwsResponseHelpers.ErrorResponseJson(
                     "UnsupportedOperationException",
@@ -499,19 +560,32 @@ internal sealed class KmsServiceHandler : IServiceHandler
             var signatureB64 = GetString(data, "Signature") ?? "";
             var algorithm = GetString(data, "SigningAlgorithm") ?? "RSASSA_PKCS1_V1_5_SHA_256";
 
-            var message = Convert.FromBase64String(messageB64);
-            var signature = Convert.FromBase64String(signatureB64);
-
-            var (padding, hash) = GetSigningParams(algorithm);
-            if (padding is null)
+            if (!rec.SigningAlgorithms.Contains(algorithm, StringComparer.Ordinal))
             {
                 return AwsResponseHelpers.ErrorResponseJson(
-                    "UnsupportedOperationException",
-                    $"Signing algorithm {algorithm} is not supported",
+                    "ValidationException",
+                    $"Signing algorithm {algorithm} is not valid for key spec {rec.KeySpec}",
                     400);
             }
 
-            var valid = rec.RsaKey.VerifyData(message, signature, hash, padding);
+            var message = Convert.FromBase64String(messageB64);
+            var signature = Convert.FromBase64String(signatureB64);
+            var hash = GetSigningHash(algorithm);
+            bool valid;
+
+            if (rec.RsaKey is not null)
+            {
+                var padding = GetRsaSignaturePadding(algorithm)!;
+                valid = rec.RsaKey.VerifyData(message, signature, hash, padding);
+            }
+            else
+            {
+                valid = rec.EcdsaKey!.VerifyData(
+                    message,
+                    signature,
+                    hash,
+                    DSASignatureFormat.Rfc3279DerSequence);
+            }
 
             return AwsResponseHelpers.JsonResponse(new Dictionary<string, object?>
             {
@@ -531,6 +605,14 @@ internal sealed class KmsServiceHandler : IServiceHandler
             if (rec is null)
             {
                 return AwsResponseHelpers.ErrorResponseJson("NotFoundException", $"Key {keyId} not found", 400);
+            }
+
+            if (rec.EcdsaKey is not null)
+            {
+                return AwsResponseHelpers.ErrorResponseJson(
+                    "ValidationException",
+                    "ECC keys cannot be used for encryption",
+                    400);
             }
 
             var plaintextB64 = GetString(data, "Plaintext") ?? "";
@@ -612,6 +694,14 @@ internal sealed class KmsServiceHandler : IServiceHandler
                 return AwsResponseHelpers.ErrorResponseJson(
                     "NotFoundException",
                     "Unable to find the key for decryption",
+                    400);
+            }
+
+            if (rec.EcdsaKey is not null)
+            {
+                return AwsResponseHelpers.ErrorResponseJson(
+                    "ValidationException",
+                    "ECC keys cannot be used for decryption",
                     400);
             }
 
@@ -1231,6 +1321,7 @@ internal sealed class KmsKeyRecord
     internal double? DeletionDate { get; set; }
     internal byte[]? SymmetricKey { get; set; }
     internal RSA? RsaKey { get; set; }
+    internal ECDsa? EcdsaKey { get; set; }
     internal byte[]? PublicKeyDer { get; set; }
     internal List<string> EncryptionAlgorithms { get; set; } = [];
     internal List<string> SigningAlgorithms { get; set; } = [];
