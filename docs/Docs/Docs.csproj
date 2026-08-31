@@ -8,10 +8,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Atoll.Middleware" Version="0.12.0" />
-    <PackageReference Include="Atoll.Lagoon" Version="0.12.0" />
-    <!-- Override vulnerable transitive AngleSharp 1.3.0 (GHSA-pgww-w46g-26qg) -->
-    <PackageReference Include="AngleSharp" Version="1.7.2" />
+    <PackageReference Include="Atoll.Middleware" Version="0.12.1" />
+    <PackageReference Include="Atoll.Lagoon" Version="0.12.1" />
   </ItemGroup>
 
 </Project>
