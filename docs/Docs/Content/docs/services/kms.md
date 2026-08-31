@@ -1,13 +1,13 @@
 ---
 title: KMS
-description: KMS emulation — symmetric and RSA keys, encrypt/decrypt, sign/verify, aliases, data keys.
+description: KMS emulation — symmetric, RSA, and ECC keys; encrypt/decrypt; sign/verify; aliases; data keys.
 order: 12
 section: Services
 ---
 
 # KMS
 
-MicroStack's KMS handler supports symmetric (AES-256) and RSA (2048/4096) keys with full encrypt/decrypt and sign/verify operations. Key aliases, rotation status, and key policies are all supported.
+MicroStack's KMS handler supports symmetric (AES-256), RSA (2048/3072/4096), and NIST ECC keys. Symmetric and RSA keys support encryption/decryption, while RSA and ECC keys support signing/verification. Key aliases, rotation status, and key policies are all supported.
 
 ## Supported Operations
 
@@ -89,6 +89,18 @@ var verified = await kms.VerifyAsync(new VerifyRequest
 Console.WriteLine(verified.SignatureValid); // True
 ```
 
+## ECC Sign and Verify
+
+ECC signing keys use the AWS KMS algorithm associated with their curve:
+
+| Key spec | Curve | Signing algorithm |
+| --- | --- | --- |
+| `ECC_NIST_P256` | secp256r1 | `ECDSA_SHA_256` |
+| `ECC_NIST_P384` | secp384r1 | `ECDSA_SHA_384` |
+| `ECC_NIST_P521` | secp521r1 | `ECDSA_SHA_512` |
+
+ECC keys require `SIGN_VERIFY` usage and cannot encrypt or decrypt. ECDSA signatures are returned as DER-encoded ANSI X9.62/RFC 3279 sequences, matching AWS KMS rather than the IEEE P1363 `r || s` format.
+
 ## Aliases
 
 ```csharp
@@ -108,5 +120,5 @@ var encrypted = await kms.EncryptAsync(new EncryptRequest
 ```
 
 :::aside{type="note" title="Supported key types"}
-Supported key specs: `SYMMETRIC_DEFAULT` (AES-256-GCM), `RSA_2048`, `RSA_4096`. Signing algorithms: `RSASSA_PKCS1_V1_5_SHA_256`, `RSASSA_PSS_SHA_256`, `RSASSA_PKCS1_V1_5_SHA_384`, `RSASSA_PSS_SHA_384`, `RSASSA_PKCS1_V1_5_SHA_512`, `RSASSA_PSS_SHA_512`.
+Supported key specs: `SYMMETRIC_DEFAULT` (AES-256-GCM), `RSA_2048`, `RSA_3072`, `RSA_4096`, `ECC_NIST_P256`, `ECC_NIST_P384`, and `ECC_NIST_P521`. RSA signing supports `RSASSA_PKCS1_V1_5_SHA_256/384/512` and `RSASSA_PSS_SHA_256/384/512`; ECC signing uses the curve-specific algorithms listed above.
 :::
