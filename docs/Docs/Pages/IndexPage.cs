@@ -27,7 +27,7 @@ public sealed class IndexPage : AtollComponent, IAtollPage
         var heroFragment = ComponentRenderer.ToFragment<Hero>(new Dictionary<string, object?>
         {
             ["Title"] = "MicroStack",
-            ["Tagline"] = "A lightweight local AWS service emulator for .NET. 39 services, single port, zero dependencies. Build and test AWS integrations without the cloud.",
+            ["Tagline"] = "A lightweight local AWS service emulator. 39 services, single port, zero dependencies. Build and test AWS integrations without the cloud.",
             ["Actions"] = (IReadOnlyList<HeroAction>)actions,
         });
 
