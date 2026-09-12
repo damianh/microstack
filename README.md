@@ -9,7 +9,7 @@
 [![NuGet Downloads](https://img.shields.io/nuget/dt/MicroStack.Aspire.Hosting.svg)](https://www.nuget.org/packages/MicroStack.Aspire.Hosting)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-A lightweight local AWS service emulator for .NET. Runs **39 AWS services** on a single port, allowing you to build and test AWS integrations without connecting to the cloud.
+A lightweight local AWS service emulator. Runs **39 AWS services** on a single port, allowing you to build and test AWS integrations without connecting to the cloud.
 
 Ported from [MiniStack](https://github.com/damianh/ministack) (Python) to .NET 10 / C#.
 

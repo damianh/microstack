@@ -7,7 +7,7 @@ section: Basics
 
 # Getting Started
 
-MicroStack is a lightweight local AWS service emulator for .NET. It runs 39 AWS services on a single port (4566), allowing you to build and test AWS integrations without connecting to the cloud.
+MicroStack is a lightweight local AWS service emulator. It runs 39 AWS services on a single port (4566), allowing you to build and test AWS integrations without connecting to the cloud.
 
 ## Quick Start with .NET Aspire (Recommended)
 

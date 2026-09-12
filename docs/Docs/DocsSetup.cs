@@ -10,7 +10,7 @@ public static class DocsSetup
     public static DocsConfig Config { get; } = new DocsConfig
     {
         Title = "MicroStack",
-        Description = "A lightweight local AWS service emulator for .NET.",
+        Description = "A lightweight local AWS service emulator.",
         BasePath = "/microstack",
         LogoSrc = "/logo.png",
         LogoAlt = "MicroStack",
