@@ -1,4 +1,5 @@
-<Project Sdk="Microsoft.NET.Sdk.BlazorWebAssembly">
+<Project Sdk="Microsoft.NET.Sdk.BlazorWebAssembly"
+         TreatAsLocalProperty="RuntimeIdentifier;RuntimeIdentifiers">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
@@ -6,6 +7,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <OverrideHtmlAssetPlaceholders>true</OverrideHtmlAssetPlaceholders>
     <StaticWebAssetBasePath>ui</StaticWebAssetBasePath>
+    <!-- Server restore RIDs must not replace the browser's runtime pack. -->
+    <RuntimeIdentifier>browser-wasm</RuntimeIdentifier>
+    <RuntimeIdentifiers>browser-wasm</RuntimeIdentifiers>
   </PropertyGroup>
 
   <ItemGroup>

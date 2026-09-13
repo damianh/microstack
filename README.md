@@ -59,7 +59,8 @@ An unsigned browser navigation to `http://localhost:4566/` redirects to `/ui/`.
 SDK, signed, presigned, and non-HTML root requests retain AWS behavior.
 
 Local builds include the browser client's static assets. Native publishing builds
-the client separately so the server's runtime identifier is not applied to WebAssembly.
+the client separately. The client keeps its `browser-wasm` runtime identifier
+even when restore is invoked with the server's native runtime identifier.
 
 The UI includes:
 
