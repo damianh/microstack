@@ -20,7 +20,8 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 
 api="http://localhost:$api_port"
-curl --fail --silent --show-error --retry 20 --retry-connrefused --retry-delay 1 "$api/_microstack/health" >/dev/null
+# Docker can accept and reset connections before the application starts listening.
+curl --fail --silent --show-error --retry 20 --retry-all-errors --retry-delay 1 --retry-max-time 30 --max-time 5 "$api/_microstack/health" >/dev/null
 curl --fail --silent --show-error --retry 20 --retry-connrefused --retry-delay 1 "$api/ui/" >/dev/null
 curl --fail --silent --show-error "$api/_microstack/admin/v1/services" >/dev/null
 curl --fail --silent --show-error "$api/ui/services/s3" | grep -qi '<html'
