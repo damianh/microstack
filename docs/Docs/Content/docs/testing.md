@@ -11,6 +11,42 @@ MicroStack is designed for integration testing with the AWS SDK for .NET. The re
 approach uses **.NET Aspire** to spin up MicroStack as a container — matching how you
 run in production.
 
+## Testcontainers
+
+MicroStack works with generic Testcontainers APIs in any language. The container
+contract is:
+
+- container port `4566`
+- HTTP readiness at `/_microstack/health`
+- dummy AWS credentials and an explicit signing region such as `us-east-1`
+- path-style addressing for S3
+- random host-port mappings; do not assume host port `4566`
+
+Runnable examples are available for
+[.NET](https://github.com/damianh/microstack/tree/main/examples/testcontainers/dotnet),
+[Java](https://github.com/damianh/microstack/tree/main/examples/testcontainers/java),
+[Go](https://github.com/damianh/microstack/tree/main/examples/testcontainers/go),
+[Python](https://github.com/damianh/microstack/tree/main/examples/testcontainers/python),
+and [TypeScript](https://github.com/damianh/microstack/tree/main/examples/testcontainers/typescript).
+Each starts an isolated generic container and verifies SQS and S3 using the
+language's AWS SDK.
+
+Set `MICROSTACK_TEST_IMAGE` to test a local image:
+
+```bash
+docker build -t microstack:test .
+export MICROSTACK_TEST_IMAGE=microstack:test
+```
+
+SQS queue URLs follow the incoming request's scheme, host, and mapped port, so they
+can be passed back to the SDK unchanged. If tests run inside another container,
+use an endpoint reachable on that container network rather than the host-published
+endpoint. A single advertised address cannot be reachable from every network.
+
+The release Dockerfile currently publishes a Linux x64 image. Docker Desktop can
+run it from Windows and macOS hosts; ARM hosts require container emulation until
+the Dockerfile release pipeline publishes ARM64 as well.
+
 ## Aspire-Based Testing
 
 ### 1. AppHost Setup

@@ -82,7 +82,10 @@ internal sealed partial class CloudFormationServiceHandler
         }
 
         var request = new ServiceRequest("POST", "/", SqsHeaders,
-            Encoding.UTF8.GetBytes(formData), EmptyQuery);
+            Encoding.UTF8.GetBytes(formData), EmptyQuery)
+        {
+            Origin = _requestOrigin,
+        };
         var response = CallHandlerGetResponse("sqs", request);
         var responseBody = Encoding.UTF8.GetString(response.Body);
 

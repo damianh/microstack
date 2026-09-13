@@ -108,11 +108,13 @@ internal sealed class AwsRequestMiddleware
         }
 
         // ── Set per-request account ID ─────────────────────────────────────
-        var accessKey = AwsServiceRouter.ExtractAccessKeyId(
-            new ServiceRequest(method, path, headers, body, queryParams));
-        AccountContext.SetFromAccessKey(accessKey);
+        var serviceRequest = new ServiceRequest(method, path, headers, body, queryParams)
+        {
+            Origin = $"{req.Scheme}://{req.Host.Value}",
+        };
 
-        var serviceRequest = new ServiceRequest(method, path, headers, body, queryParams);
+        var accessKey = AwsServiceRouter.ExtractAccessKeyId(serviceRequest);
+        AccountContext.SetFromAccessKey(accessKey);
 
         // ── CORS pre-flight ────────────────────────────────────────────────
         if (method == "OPTIONS")

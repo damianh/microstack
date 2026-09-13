@@ -110,11 +110,7 @@ internal sealed class EventSourceMappingPoller : IDisposable
         var region = parts[3];
         var queueName = parts[5];
 
-        // Reconstruct the queue URL in the same format that SqsServiceHandler uses:
-        // http://{host}:{port}/{accountId}/{queueName}
-        var queueUrl = $"http://localhost:4566/{accountId}/{queueName}";
-
-        var messages = _sqsHandler.ReceiveMessagesForEsm(queueUrl, batchSize);
+        var messages = _sqsHandler.ReceiveMessagesForEsm(queueName, batchSize);
         if (messages.Count == 0)
         {
             return;
@@ -167,7 +163,7 @@ internal sealed class EventSourceMappingPoller : IDisposable
                 }
             }
 
-            _sqsHandler.DeleteMessagesForEsm(queueUrl, handles);
+            _sqsHandler.DeleteMessagesForEsm(queueName, handles);
             esm["LastProcessingResult"] = $"OK - {messages.Count} records";
         }
         else

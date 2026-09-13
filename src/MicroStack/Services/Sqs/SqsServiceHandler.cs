@@ -17,9 +17,9 @@ internal sealed class SqsServiceHandler : IServiceHandler
 {
     // ── Module-level state ──────────────────────────────────────────────────────
 
-    // keyed by account-scoped queue URL
+    // keyed by account-scoped queue name; advertised URLs are request-specific
     private readonly AccountScopedDictionary<string, SqsQueue> _queues = new();
-    // keyed by queue name → URL
+    // Retained in persisted state for compatibility with existing snapshots.
     private readonly AccountScopedDictionary<string, string> _queueNameToUrl = new();
     private readonly Lock _lock = new();
 
@@ -79,7 +79,7 @@ internal sealed class SqsServiceHandler : IServiceHandler
             {
                 data = new JsonObject();
             }
-            return await HandleJsonAsync(action, data, request.Path);
+            return await HandleJsonAsync(action, data, request);
         }
 
         // Legacy Query / form-encoded protocol
@@ -104,7 +104,7 @@ internal sealed class SqsServiceHandler : IServiceHandler
         if (string.IsNullOrEmpty(queryAction))
             return XmlErrorResponse("MissingAction", "Missing Action parameter", 400);
 
-        return await HandleQueryAsync(queryAction, queryParams, request.Path);
+        return await HandleQueryAsync(queryAction, queryParams, request);
     }
 
     public void Reset()
@@ -138,20 +138,22 @@ internal sealed class SqsServiceHandler : IServiceHandler
         lock (_lock)
         {
             _queues.FromRaw(restored.Queues.Select(e =>
-                new KeyValuePair<(string, string), SqsQueue>((e.AccountId, e.Key), e.Value)));
-            _queueNameToUrl.FromRaw(restored.Names.Select(e =>
-                new KeyValuePair<(string, string), string>((e.AccountId, e.Key), e.Value)));
+                new KeyValuePair<(string, string), SqsQueue>((e.AccountId, e.Value.Name), e.Value)));
+            _queueNameToUrl.FromRaw(restored.Queues.Select(e =>
+                new KeyValuePair<(string, string), string>((e.AccountId, e.Value.Name), e.Value.Name)));
         }
     }
 
     // ── JSON protocol ───────────────────────────────────────────────────────────
 
-    private async Task<ServiceResponse> HandleJsonAsync(string action, JsonObject data, string path)
+    private async Task<ServiceResponse> HandleJsonAsync(
+        string action, JsonObject data, ServiceRequest request)
     {
         try
         {
-            var qurl = data["QueueUrl"]?.GetValue<string>() ?? UrlFromPath(path);
-            var result = await DispatchAsync(action, data, qurl);
+            var endpoint = QueueEndpoint(request);
+            var qurl = data["QueueUrl"]?.GetValue<string>() ?? UrlFromPath(request.Path, endpoint);
+            var result = await DispatchAsync(action, data, qurl, endpoint);
             return JsonOkResponse(result);
         }
         catch (SqsException ex)
@@ -163,15 +165,16 @@ internal sealed class SqsServiceHandler : IServiceHandler
     // ── Query/XML protocol ──────────────────────────────────────────────────────
 
     private async Task<ServiceResponse> HandleQueryAsync(
-        string action, Dictionary<string, string> @params, string path)
+        string action, Dictionary<string, string> @params, ServiceRequest request)
     {
         try
         {
+            var endpoint = QueueEndpoint(request);
             var data = NormaliseParams(action, @params);
             var qurl = data["QueueUrl"]?.GetValue<string>()
-                ?? UrlFromPath(path);
+                ?? UrlFromPath(request.Path, endpoint);
             data["QueueUrl"] = qurl;
-            var result = await DispatchAsync(action, data, qurl);
+            var result = await DispatchAsync(action, data, qurl, endpoint);
             return ToXmlResponse(action, result);
         }
         catch (SqsException ex)
@@ -182,14 +185,15 @@ internal sealed class SqsServiceHandler : IServiceHandler
 
     // ── Dispatcher ──────────────────────────────────────────────────────────────
 
-    private Task<JsonObject> DispatchAsync(string action, JsonObject data, string qurl)
+    private Task<JsonObject> DispatchAsync(
+        string action, JsonObject data, string qurl, string endpoint)
     {
         return action switch
         {
-            "CreateQueue"                  => Task.FromResult(ActCreateQueue(data, qurl)),
+            "CreateQueue"                  => Task.FromResult(ActCreateQueue(data, endpoint)),
             "DeleteQueue"                  => Task.FromResult(ActDeleteQueue(data, qurl)),
-            "ListQueues"                   => Task.FromResult(ActListQueues(data, qurl)),
-            "GetQueueUrl"                  => Task.FromResult(ActGetQueueUrl(data, qurl)),
+            "ListQueues"                   => Task.FromResult(ActListQueues(data, endpoint)),
+            "GetQueueUrl"                  => Task.FromResult(ActGetQueueUrl(data, endpoint)),
             "SendMessage"                  => Task.FromResult(ActSendMessage(data, qurl)),
             "ReceiveMessage"               => ActReceiveMessageAsync(data, qurl),
             "DeleteMessage"                => Task.FromResult(ActDeleteMessage(data, qurl)),
@@ -210,7 +214,7 @@ internal sealed class SqsServiceHandler : IServiceHandler
 
     // ── Core Actions ────────────────────────────────────────────────────────────
 
-    private JsonObject ActCreateQueue(JsonObject data, string _)
+    private JsonObject ActCreateQueue(JsonObject data, string endpoint)
     {
         var name = data["QueueName"]?.GetValue<string>() ?? "";
         if (string.IsNullOrEmpty(name))
@@ -229,17 +233,16 @@ internal sealed class SqsServiceHandler : IServiceHandler
         if (name.EndsWith(".fifo", StringComparison.Ordinal))
             isFifo = true;
 
-        var url = QueueUrl(name);
+        var url = QueueUrl(endpoint, name);
         lock (_lock)
         {
-            if (_queues.TryGetValue(url, out SqsQueue? _))
+            if (_queues.TryGetValue(name, out SqsQueue? _))
                 return new JsonObject { ["QueueUrl"] = url };
 
             var ts = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString();
             var q = new SqsQueue
             {
                 Name = name,
-                Url  = url,
                 IsFifo = isFifo,
                 Attributes = new Dictionary<string, string>(StringComparer.Ordinal)
                 {
@@ -271,8 +274,8 @@ internal sealed class SqsServiceHandler : IServiceHandler
                 foreach (var kv in tags)
                     q.Tags[kv.Key] = kv.Value?.GetValue<string>() ?? "";
 
-            _queues[url] = q;
-            _queueNameToUrl[name] = url;
+            _queues[name] = q;
+            _queueNameToUrl[name] = name;
         }
         return new JsonObject { ["QueueUrl"] = url };
     }
@@ -282,16 +285,16 @@ internal sealed class SqsServiceHandler : IServiceHandler
         var url = data["QueueUrl"]?.GetValue<string>() ?? qurl;
         lock (_lock)
         {
-            if (_queues.TryGetValue(url, out var q))
+            if (TryGetQueue(url, out var q))
             {
                 _queueNameToUrl.TryRemove(q.Name, out _);
-                _queues.TryRemove(url, out _);
+                _queues.TryRemove(q.Name, out _);
             }
         }
         return new JsonObject();
     }
 
-    private JsonObject ActListQueues(JsonObject data, string _)
+    private JsonObject ActListQueues(JsonObject data, string endpoint)
     {
         var pfx = data["QueueNamePrefix"]?.GetValue<string>() ?? "";
         var max = data["MaxResults"]?.GetValue<int>() ?? 1000;
@@ -301,12 +304,11 @@ internal sealed class SqsServiceHandler : IServiceHandler
             var count = 0;
             foreach (var kv in _queues.Items)
             {
-                var url = kv.Key;
                 var q   = kv.Value;
                 if (count >= max) break;
                 if (string.IsNullOrEmpty(pfx) || q.Name.StartsWith(pfx, StringComparison.Ordinal))
                 {
-                    ((IList<JsonNode?>)urls).Add(JsonValue.Create(url));
+                    ((IList<JsonNode?>)urls).Add(JsonValue.Create(QueueUrl(endpoint, q.Name)));
                     count++;
                 }
             }
@@ -314,15 +316,15 @@ internal sealed class SqsServiceHandler : IServiceHandler
         }
     }
 
-    private JsonObject ActGetQueueUrl(JsonObject data, string _)
+    private JsonObject ActGetQueueUrl(JsonObject data, string endpoint)
     {
         var name = data["QueueName"]?.GetValue<string>() ?? "";
         lock (_lock)
         {
-            if (!_queueNameToUrl.TryGetValue(name, out var url) || string.IsNullOrEmpty(url))
+            if (!_queues.ContainsKey(name))
                 throw new SqsException("QueueDoesNotExist",
                     "The specified queue does not exist.");
-            return new JsonObject { ["QueueUrl"] = url };
+            return new JsonObject { ["QueueUrl"] = QueueUrl(endpoint, name) };
         }
     }
 
@@ -796,26 +798,29 @@ internal sealed class SqsServiceHandler : IServiceHandler
     // ── Queue / Message helpers ─────────────────────────────────────────────────
 
     /// <summary>
-    /// Look up a queue by URL, falling back to name-based lookup for
-    /// hostname-mismatch scenarios (e.g. docker-compose).
+    /// Look up a queue by stable name, accepting either a queue URL or a name.
     /// Must be called inside _lock.
     /// </summary>
-    private SqsQueue GetQueue(string url)
+    private SqsQueue GetQueue(string queueUrlOrName)
     {
-        if (_queues.TryGetValue(url, out var q)) return q;
-
-        // Fallback: extract name from URL path
-        var parts = url.TrimEnd('/').Split('/');
-        if (parts.Length >= 2)
-        {
-            var name = parts[^1];
-            if (_queueNameToUrl.TryGetValue(name, out var canonical) &&
-                _queues.TryGetValue(canonical, out var q2))
-                return q2;
-        }
+        if (TryGetQueue(queueUrlOrName, out var q)) return q;
 
         throw new SqsException("QueueDoesNotExist",
             "The specified queue does not exist for this wsdl version.");
+    }
+
+    private bool TryGetQueue(
+        string queueUrlOrName,
+        [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out SqsQueue? queue)
+    {
+        var name = QueueNameFromUrl(queueUrlOrName);
+        if (!string.IsNullOrEmpty(name))
+        {
+            return _queues.TryGetValue(name, out queue);
+        }
+
+        queue = null;
+        return false;
     }
 
     private static void RefreshCounts(SqsQueue q)
@@ -984,13 +989,35 @@ internal sealed class SqsServiceHandler : IServiceHandler
 
     // ── Helpers ─────────────────────────────────────────────────────────────────
 
-    private static string QueueUrl(string name) =>
-        $"http://{_defaultHost}:{_defaultPort}/{AccountContext.GetAccountId()}/{name}";
+    private static string QueueEndpoint(ServiceRequest request)
+    {
+        if (MicroStackOptions.Instance.SqsEndpointStrategy == SqsEndpointStrategy.Request
+            && !string.IsNullOrWhiteSpace(request.Origin))
+        {
+            return request.Origin.TrimEnd('/');
+        }
 
-    private static string UrlFromPath(string path)
+        return $"http://{_defaultHost}:{_defaultPort}";
+    }
+
+    private static string QueueUrl(string endpoint, string name) =>
+        $"{endpoint.TrimEnd('/')}/{AccountContext.GetAccountId()}/{name}";
+
+    private static string UrlFromPath(string path, string endpoint)
     {
         var parts = path.TrimStart('/').Split('/');
-        return parts.Length >= 2 ? QueueUrl(parts[^1]) : "";
+        return parts.Length >= 2 ? QueueUrl(endpoint, parts[^1]) : "";
+    }
+
+    private static string QueueNameFromUrl(string queueUrlOrName)
+    {
+        if (string.IsNullOrWhiteSpace(queueUrlOrName)) return "";
+        if (!queueUrlOrName.Contains('/')) return queueUrlOrName;
+
+        var path = Uri.TryCreate(queueUrlOrName, UriKind.Absolute, out var uri)
+            ? uri.AbsolutePath
+            : queueUrlOrName;
+        return path.TrimEnd('/').Split('/')[^1];
     }
 
     private static string ComputeMd5Hex(string text)
@@ -1448,10 +1475,9 @@ internal sealed class SqsServiceHandler : IServiceHandler
     /// </summary>
     internal bool InjectMessage(string queueName, string body, string? groupId, string? dedupId)
     {
-        var url = QueueUrl(queueName);
         lock (_lock)
         {
-            if (!_queues.TryGetValue(url, out var q))
+            if (!_queues.TryGetValue(queueName, out var q))
                 return false;
 
             var nowMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
@@ -1482,11 +1508,11 @@ internal sealed class SqsServiceHandler : IServiceHandler
     // ── ESM helpers (internal — used by Lambda ESM poller in Phase 4) ───────────
 
     /// <summary>Receive up to maxNumber messages for ESM consumption (thread-safe).</summary>
-    internal List<SqsMessage> ReceiveMessagesForEsm(string queueUrl, int maxNumber)
+    internal List<SqsMessage> ReceiveMessagesForEsm(string queueName, int maxNumber)
     {
         lock (_lock)
         {
-            var q = GetQueue(queueUrl);
+            var q = GetQueue(queueName);
             DlqSweepWithQueues(q);
             return CollectMessages(q, Math.Min(maxNumber, 10),
                 int.Parse(q.Attributes.GetValueOrDefault("VisibilityTimeout", "30")));
@@ -1494,12 +1520,12 @@ internal sealed class SqsServiceHandler : IServiceHandler
     }
 
     /// <summary>Best-effort delete of messages received by ESM (thread-safe).</summary>
-    internal void DeleteMessagesForEsm(string queueUrl, IReadOnlyCollection<string> receiptHandles)
+    internal void DeleteMessagesForEsm(string queueName, IReadOnlyCollection<string> receiptHandles)
     {
         if (receiptHandles.Count == 0) return;
         lock (_lock)
         {
-            var q = GetQueue(queueUrl);
+            var q = GetQueue(queueName);
             q.Messages.RemoveAll(m =>
             {
                 if (m.ReceiptHandle is null || !receiptHandles.Contains(m.ReceiptHandle)) return false;
@@ -1517,7 +1543,6 @@ internal sealed class SqsServiceHandler : IServiceHandler
 internal sealed class SqsQueue
 {
     public required string Name { get; set; }
-    public required string Url  { get; set; }
     public bool IsFifo { get; set; }
     public Dictionary<string, string> Attributes { get; set; } = new(StringComparer.Ordinal);
     public List<SqsMessage>           Messages   { get; set; } = [];

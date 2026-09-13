@@ -18,6 +18,7 @@ MicroStack is configured via environment variables. All settings are consolidate
 | `MICROSTACK_HOST` | `localhost` | Hostname for URL generation |
 | `MICROSTACK_REGION` | `us-east-1` | Default AWS region |
 | `MICROSTACK_ACCOUNT_ID` | `000000000000` | Default AWS account ID |
+| `MICROSTACK_SQS_ENDPOINT_STRATEGY` | `request` | SQS queue URL source: `request` uses the caller's scheme, host, and port; `legacy` uses `MICROSTACK_HOST` and `GATEWAY_PORT` |
 | `PERSIST_STATE` | `0` | Set to `1` to enable JSON state persistence |
 | `STATE_DIR` | `<temp>/microstack-state` | Directory for persisted state files |
 | `SERVICES` | *(all)* | Comma-separated list of services to enable |
@@ -48,6 +49,21 @@ Service aliases are supported:
 
 ```bash
 docker run -e GATEWAY_PORT=5000 -p 5000:5000 ghcr.io/damianh/microstack:latest
+```
+
+`GATEWAY_PORT` controls the port inside the container. When Docker or Testcontainers
+maps that port dynamically, SQS queue URLs use the incoming request authority by
+default so SDKs can use returned URLs without rewriting them.
+
+To retain the earlier configured-address behavior:
+
+```bash
+docker run \
+  -e MICROSTACK_SQS_ENDPOINT_STRATEGY=legacy \
+  -e MICROSTACK_HOST=localhost \
+  -e GATEWAY_PORT=4566 \
+  -p 4566:4566 \
+  ghcr.io/damianh/microstack:latest
 ```
 
 ## State Persistence

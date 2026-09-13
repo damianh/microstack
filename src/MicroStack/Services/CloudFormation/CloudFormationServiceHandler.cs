@@ -28,6 +28,7 @@ internal sealed partial class CloudFormationServiceHandler : IServiceHandler
     private readonly AccountScopedDictionary<string, Dictionary<string, object?>> _changeSets = new();
 
     private readonly Lock _lock = new();
+    private string? _requestOrigin;
 
     // Sentinel for AWS::NoValue
     private static readonly object NoValue = new();
@@ -81,32 +82,40 @@ internal sealed partial class CloudFormationServiceHandler : IServiceHandler
         ServiceResponse response;
         lock (_lock)
         {
-            response = action switch
+            _requestOrigin = request.Origin;
+            try
             {
-                "CreateStack" => CreateStack(p),
-                "DescribeStacks" => DescribeStacks(p),
-                "ListStacks" => ListStacks(p),
-                "DeleteStack" => DeleteStack(p),
-                "UpdateStack" => UpdateStack(p),
-                "DescribeStackEvents" => DescribeStackEvents(p),
-                "DescribeStackResource" => DescribeStackResource(p),
-                "DescribeStackResources" => DescribeStackResources(p),
-                "ListStackResources" => ListStackResources(p),
-                "GetTemplate" => GetTemplate(p),
-                "ValidateTemplate" => ValidateTemplate(p),
-                "ListExports" => ListExports(),
-                "CreateChangeSet" => CreateChangeSet(p),
-                "DescribeChangeSet" => DescribeChangeSet(p),
-                "ExecuteChangeSet" => ExecuteChangeSet(p),
-                "DeleteChangeSet" => DeleteChangeSet(p),
-                "ListChangeSets" => ListChangeSets(p),
-                "GetTemplateSummary" => GetTemplateSummary(p),
-                "UpdateTerminationProtection" => UpdateTerminationProtection(p),
-                "SetStackPolicy" => SetStackPolicy(),
-                "GetStackPolicy" => GetStackPolicy(),
-                "ListImports" => ListImports(),
-                _ => Error("InvalidAction", $"Unknown action: {action}", 400),
-            };
+                response = action switch
+                {
+                    "CreateStack" => CreateStack(p),
+                    "DescribeStacks" => DescribeStacks(p),
+                    "ListStacks" => ListStacks(p),
+                    "DeleteStack" => DeleteStack(p),
+                    "UpdateStack" => UpdateStack(p),
+                    "DescribeStackEvents" => DescribeStackEvents(p),
+                    "DescribeStackResource" => DescribeStackResource(p),
+                    "DescribeStackResources" => DescribeStackResources(p),
+                    "ListStackResources" => ListStackResources(p),
+                    "GetTemplate" => GetTemplate(p),
+                    "ValidateTemplate" => ValidateTemplate(p),
+                    "ListExports" => ListExports(),
+                    "CreateChangeSet" => CreateChangeSet(p),
+                    "DescribeChangeSet" => DescribeChangeSet(p),
+                    "ExecuteChangeSet" => ExecuteChangeSet(p),
+                    "DeleteChangeSet" => DeleteChangeSet(p),
+                    "ListChangeSets" => ListChangeSets(p),
+                    "GetTemplateSummary" => GetTemplateSummary(p),
+                    "UpdateTerminationProtection" => UpdateTerminationProtection(p),
+                    "SetStackPolicy" => SetStackPolicy(),
+                    "GetStackPolicy" => GetStackPolicy(),
+                    "ListImports" => ListImports(),
+                    _ => Error("InvalidAction", $"Unknown action: {action}", 400),
+                };
+            }
+            finally
+            {
+                _requestOrigin = null;
+            }
         }
 
         return Task.FromResult(response);

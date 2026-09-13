@@ -1,0 +1,13 @@
+[project]
+name = "microstack-testcontainers-python-example"
+version = "0.1.0"
+description = "MicroStack integration test example using testcontainers-python"
+requires-python = ">=3.10"
+dependencies = [
+    "boto3==1.42.97",
+    "pytest==8.4.2",
+    "testcontainers==4.13.3",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

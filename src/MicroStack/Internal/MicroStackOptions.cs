@@ -1,5 +1,11 @@
 namespace MicroStack.Internal;
 
+internal enum SqsEndpointStrategy
+{
+    Request,
+    Legacy,
+}
+
 /// <summary>
 /// Strongly-typed configuration options for MicroStack.
 /// Consolidates all environment variable reads into a single location.
@@ -29,6 +35,8 @@ internal sealed class MicroStackOptions
 
     internal string? Services { get; set; }
 
+    internal SqsEndpointStrategy SqsEndpointStrategy { get; set; } = SqsEndpointStrategy.Request;
+
     /// <summary>
     /// Binds configuration from environment variables.
     /// Called once at startup. Sets <see cref="Instance"/> for global access.
@@ -50,6 +58,18 @@ internal sealed class MicroStackOptions
         options.PersistState = Environment.GetEnvironmentVariable("PERSIST_STATE") == "1";
         options.StateDir = Environment.GetEnvironmentVariable("STATE_DIR") ?? options.StateDir;
         options.Services = Environment.GetEnvironmentVariable("SERVICES")?.Trim();
+
+        var sqsEndpointStrategy = Environment.GetEnvironmentVariable("MICROSTACK_SQS_ENDPOINT_STRATEGY");
+        if (!string.IsNullOrWhiteSpace(sqsEndpointStrategy))
+        {
+            if (!Enum.TryParse(sqsEndpointStrategy, ignoreCase: true, out SqsEndpointStrategy strategy)
+                || !Enum.IsDefined(strategy))
+            {
+                throw new InvalidOperationException(
+                    "MICROSTACK_SQS_ENDPOINT_STRATEGY must be either 'request' or 'legacy'.");
+            }
+            options.SqsEndpointStrategy = strategy;
+        }
 
         // Handle LOCALSTACK_PERSISTENCE=1 → S3_PERSIST=true compatibility
         var s3Persist = Environment.GetEnvironmentVariable("S3_PERSIST") == "1";

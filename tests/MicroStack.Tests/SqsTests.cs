@@ -16,6 +16,11 @@ public sealed class SqsTests(MicroStackFixture fixture) : IClassFixture<MicroSta
     private readonly AmazonSQSClient _sqs = CreateSqsClient(fixture);
 
     private static AmazonSQSClient CreateSqsClient(MicroStackFixture fixture)
+        => CreateSqsClient(fixture, "http://localhost/");
+
+    private static AmazonSQSClient CreateSqsClient(
+        MicroStackFixture fixture,
+        string serviceUrl)
     {
         // AWS SDK v4 builds request URIs with DangerousDisablePathAndQueryCanonicalization,
         // which is incompatible with TestServer's ClientHandler (it calls GetComponents() on
@@ -25,13 +30,13 @@ public sealed class SqsTests(MicroStackFixture fixture) : IClassFixture<MicroSta
         var innerHandler = fixture.Factory.Server.CreateHandler();
         var httpClient   = new HttpClient(new CanonicalizeUriHandler(innerHandler))
         {
-            BaseAddress = new Uri("http://localhost/"),
+            BaseAddress = new Uri(serviceUrl),
         };
 
         var config = new AmazonSQSConfig
         {
             RegionEndpoint     = RegionEndpoint.USEast1,
-            ServiceURL         = "http://localhost/",
+            ServiceURL         = serviceUrl,
             HttpClientFactory  = new FixedHttpClientFactory(httpClient),
         };
 
@@ -61,6 +66,52 @@ public sealed class SqsTests(MicroStackFixture fixture) : IClassFixture<MicroSta
 
         var getUrl = await _sqs.GetQueueUrlAsync("test-queue-basic");
         getUrl.QueueUrl.ShouldBe(created.QueueUrl);
+    }
+
+    [Fact]
+    public async Task QueueUrlsFollowRequestAuthorityWithoutChangingQueueIdentity()
+    {
+        using var firstClient = CreateSqsClient(fixture, "http://first.test:49101/");
+        using var secondClient = CreateSqsClient(fixture, "http://second.test:49102/");
+
+        var created = await firstClient.CreateQueueAsync("mapped-port-queue");
+        created.QueueUrl.ShouldBe(
+            "http://first.test:49101/000000000000/mapped-port-queue");
+
+        var retrieved = await secondClient.GetQueueUrlAsync("mapped-port-queue");
+        retrieved.QueueUrl.ShouldBe(
+            "http://second.test:49102/000000000000/mapped-port-queue");
+
+        await secondClient.SendMessageAsync(retrieved.QueueUrl, "reachable");
+        var received = await secondClient.ReceiveMessageAsync(retrieved.QueueUrl);
+        received.Messages.ShouldHaveSingleItem().Body.ShouldBe("reachable");
+
+        await firstClient.DeleteQueueAsync(created.QueueUrl);
+        var queues = await secondClient.ListQueuesAsync("mapped-port-queue");
+        queues.QueueUrls.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task QueryProtocolQueueUrlsFollowRequestAuthority()
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/")
+        {
+            Content = new FormUrlEncodedContent(new Dictionary<string, string>
+            {
+                ["Action"] = "CreateQueue",
+                ["QueueName"] = "query-authority-queue",
+            }),
+        };
+        request.Headers.Host = "query.test:49103";
+
+        using var response = await fixture.HttpClient.SendAsync(
+            request, TestContext.Current.CancellationToken);
+        response.EnsureSuccessStatusCode();
+        var body = await response.Content.ReadAsStringAsync(
+            TestContext.Current.CancellationToken);
+
+        body.ShouldContain(
+            "<QueueUrl>http://query.test:49103/000000000000/query-authority-queue</QueueUrl>");
     }
 
     [Fact]
