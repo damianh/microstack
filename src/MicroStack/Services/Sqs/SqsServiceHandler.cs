@@ -165,7 +165,7 @@ internal sealed partial class SqsServiceHandler : IServiceHandler, IResourceProv
                         arn,
                         new Dictionary<string, string>(StringComparer.Ordinal)
                         {
-                            ["QueueUrl"] = queue.Url,
+                            ["QueueUrl"] = QueueUrl(QueueEndpoint(), queue.Name),
                             ["VisibleMessages"] = visible.ToString(),
                             ["InFlightMessages"] = inFlight.ToString(),
                         });
@@ -1022,10 +1022,10 @@ internal sealed partial class SqsServiceHandler : IServiceHandler, IResourceProv
 
     // ── Helpers ─────────────────────────────────────────────────────────────────
 
-    private static string QueueEndpoint(ServiceRequest request)
+    private static string QueueEndpoint(ServiceRequest? request = null)
     {
         if (MicroStackOptions.Instance.SqsEndpointStrategy == SqsEndpointStrategy.Request
-            && !string.IsNullOrWhiteSpace(request.Origin))
+            && !string.IsNullOrWhiteSpace(request?.Origin))
         {
             return request.Origin.TrimEnd('/');
         }

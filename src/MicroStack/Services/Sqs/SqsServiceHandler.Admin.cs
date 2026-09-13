@@ -28,7 +28,7 @@ internal sealed partial class SqsServiceHandler : IAdminResourceSource, IAdminRe
         {
             queues = _queues.Values.Select(queue => new QueueSnapshot(
                 queue.Name,
-                queue.Url,
+                QueueUrl(QueueEndpoint(), queue.Name),
                 queue.IsFifo,
                 new(queue.Attributes, StringComparer.Ordinal),
                 new(queue.Tags, StringComparer.Ordinal),
