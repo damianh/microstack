@@ -40,6 +40,30 @@ internal static partial class AccountContext
     internal static string GetAccountId() =>
         _accountId.Value ?? _defaultAccountId;
 
+    internal static IDisposable BeginScope(string accountId)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(accountId);
+        if (!TwelveDigitRegex().IsMatch(accountId))
+            throw new ArgumentException("Account IDs must contain exactly 12 digits.", nameof(accountId));
+
+        var previous = _accountId.Value;
+        _accountId.Value = accountId;
+        return new Scope(previous);
+    }
+
     /// <summary>Resets to default (used in tests).</summary>
     internal static void Reset() => _accountId.Value = null;
+
+    private sealed class Scope(string? previous) : IDisposable
+    {
+        private bool _disposed;
+
+        public void Dispose()
+        {
+            if (_disposed)
+                return;
+            _accountId.Value = previous;
+            _disposed = true;
+        }
+    }
 }

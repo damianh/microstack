@@ -1,0 +1,14 @@
+@inject IJSRuntime JS
+<button class="button" @onclick="CopyAsync" disabled="@string.IsNullOrEmpty(Text)" aria-label="@Label">@Label</button>
+<span class="copy-status" role="status">@_status</span>
+@code {
+    [Parameter] public string? Text { get; set; }
+    [Parameter] public string Label { get; set; } = "Copy";
+    private string? _status;
+    protected override void OnParametersSet() => _status = null;
+    private async Task CopyAsync()
+    {
+        try { await JS.InvokeVoidAsync("microstack.copy", Text); _status = "Copied."; }
+        catch (JSException) { _status = "Clipboard unavailable. Select the text and copy it manually."; }
+    }
+}

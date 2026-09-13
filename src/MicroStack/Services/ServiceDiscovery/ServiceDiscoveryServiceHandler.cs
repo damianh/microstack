@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using System.Xml.Linq;
 using MicroStack.Internal;
+using MicroStack.Internal.Admin;
 using MicroStack.Services.Route53;
 
 namespace MicroStack.Services.ServiceDiscovery;
@@ -21,7 +22,7 @@ namespace MicroStack.Services.ServiceDiscovery;
 ///           UpdatePrivateDnsNamespace, UpdatePublicDnsNamespace, UpdateService,
 ///           UpdateServiceAttributes.
 /// </summary>
-internal sealed class ServiceDiscoveryServiceHandler : IServiceHandler
+internal sealed partial class ServiceDiscoveryServiceHandler : IServiceHandler, IAdminResourceSource
 {
     private static string Region => MicroStackOptions.Instance.Region;
 

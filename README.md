@@ -57,9 +57,14 @@ MicroStack now includes a web UI dashboard on a separate port:
 
 The UI includes:
 
-- **Dashboard** — service health and resource counts
+- **Services** — a searchable directory of all supported services
+- **Resource Explorer** — read-only, account-aware inspection of retained
+  resources, configuration, content, and configured connections
+- **Overview** — service health, resource counts, and the global reset control
 - **Request Log** — recent AWS API calls (service, action, account, status, duration)
-- **Resource Explorer** — SQS/S3/DynamoDB resources with names/ARNs and attributes
+
+For the separate, synthetic design reference (not the running Admin UI), see the
+[Resource Explorer prototype](design/resource-explorer/README.md).
 
 ## Usage
 

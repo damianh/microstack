@@ -3,10 +3,12 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Web;
 using MicroStack.Internal;
+using MicroStack.Internal.Admin;
+using MicroStack.Admin.Contracts;
 
 namespace MicroStack.Services.Rds;
 
-internal sealed class RdsServiceHandler : IServiceHandler
+internal sealed class RdsServiceHandler : IServiceHandler, IAdminResourceSource
 {
     public string ServiceName => "rds";
 
@@ -67,6 +69,131 @@ internal sealed class RdsServiceHandler : IServiceHandler
     public JsonElement? GetState() => null;
 
     public void RestoreState(JsonElement state) { }
+
+    public IReadOnlyList<AdminResourceKind> GetAdminResourceKinds(string serviceId) =>
+    [
+        new("db-instances", "DB instances"),
+        new("db-clusters", "DB clusters"),
+        new("db-subnet-groups", "DB subnet groups"),
+        new("db-parameter-groups", "DB parameter groups"),
+        new("db-cluster-parameter-groups", "DB cluster parameter groups"),
+        new("db-snapshots", "DB snapshots"),
+        new("db-cluster-snapshots", "DB cluster snapshots"),
+        new("event-subscriptions", "Event subscriptions"),
+        new("db-proxies", "DB proxies"),
+        new("option-groups", "Option groups"),
+        new("global-clusters", "Global clusters"),
+    ];
+
+    public IEnumerable<AdminNode> GetAdminResources(string serviceId)
+    {
+        lock (_lock)
+        {
+            return
+            [
+                .. RdsNodes("db-instances", _instances),
+                .. RdsNodes("db-clusters", _clusters),
+                .. RdsNodes("db-subnet-groups", _subnetGroups),
+                .. RdsNodes("db-parameter-groups", _paramGroups),
+                .. RdsNodes("db-cluster-parameter-groups", _clusterParamGroups),
+                .. RdsNodes("db-snapshots", _snapshots),
+                .. RdsNodes("db-cluster-snapshots", _clusterSnapshots),
+                .. RdsNodes("event-subscriptions", _eventSubscriptions),
+                .. RdsNodes("db-proxies", _dbProxies),
+                .. RdsNodes("option-groups", _optionGroups),
+                .. RdsNodes("global-clusters", _globalClusters),
+            ];
+        }
+    }
+
+    private IEnumerable<AdminNode> RdsNodes(
+        string kind, AccountScopedDictionary<string, Dictionary<string, object?>> source) =>
+        source.Items.OrderBy(x => x.Key, StringComparer.Ordinal)
+            .Select(x => RdsNode(kind, x.Key, x.Value, source));
+
+    private AdminNode RdsNode(
+        string kind, string id, Dictionary<string, object?> value,
+        AccountScopedDictionary<string, Dictionary<string, object?>> source)
+    {
+        var arn = value.FirstOrDefault(x =>
+            x.Key.EndsWith("Arn", StringComparison.Ordinal) &&
+            x.Value is string).Value?.ToString();
+        var status = value.FirstOrDefault(x =>
+            x.Key.EndsWith("Status", StringComparison.Ordinal) &&
+            x.Value is string).Value?.ToString();
+        return AdminData.Node(kind, id, id, arn, status) with
+        {
+            ReadFields = () =>
+            {
+                lock (_lock)
+                    return source.TryGetValue(id, out var current) ? RdsFields(current) : [];
+            },
+            ReadChildren = arn is null ? null : () => RdsTagNodes(arn),
+        };
+    }
+
+    private IReadOnlyList<AdminNode> RdsTagNodes(string arn)
+    {
+        lock (_lock)
+        {
+            if (!_tags.TryGetValue(arn, out var tags))
+                return [];
+            return tags.Where(x => x.TryGetValue("Key", out _))
+                .OrderBy(x => x.GetValueOrDefault("Key"), StringComparer.Ordinal)
+                .Select(x =>
+                {
+                    var key = x.GetValueOrDefault("Key") ?? "";
+                    var value = x.GetValueOrDefault("Value");
+                    return AdminData.Node("tags", key, key) with
+                    {
+                        ReadFields = () =>
+                        [
+                            AdminData.Field("Key", key),
+                            AdminData.Field("Value", value, RdsSensitiveName(key)),
+                        ],
+                    };
+                }).ToArray();
+        }
+    }
+
+    private static IReadOnlyList<AdminField> RdsFields(Dictionary<string, object?> value)
+    {
+        var fields = new List<AdminField>();
+        AddRdsFields(fields, value, "");
+        return fields;
+    }
+
+    private static void AddRdsFields(
+        List<AdminField> fields, Dictionary<string, object?> value, string prefix)
+    {
+        foreach (var (key, item) in value.OrderBy(x => x.Key, StringComparer.Ordinal))
+        {
+            var name = prefix + key;
+            switch (item)
+            {
+                case null or string or bool or byte or short or int or long or float or double or decimal:
+                    fields.Add(AdminData.Field(name, item?.ToString(), RdsSensitiveName(name)));
+                    break;
+                case Dictionary<string, object?> dictionary:
+                    AddRdsFields(fields, dictionary, name + ".");
+                    break;
+                case List<string> strings:
+                    fields.Add(AdminData.Field(name, string.Join(", ", strings), RdsSensitiveName(name)));
+                    break;
+                case List<Dictionary<string, object?>> dictionaries:
+                    for (var i = 0; i < dictionaries.Count; i++)
+                        AddRdsFields(fields, dictionaries[i], $"{name}[{i}].");
+                    break;
+            }
+        }
+    }
+
+    private static bool RdsSensitiveName(string name) =>
+        name.Contains("password", StringComparison.OrdinalIgnoreCase) ||
+        name.Contains("secret", StringComparison.OrdinalIgnoreCase) ||
+        name.Contains("token", StringComparison.OrdinalIgnoreCase) ||
+        name.Contains("credential", StringComparison.OrdinalIgnoreCase) ||
+        name.Contains("auth", StringComparison.OrdinalIgnoreCase);
 
     // ── Action dispatch ───────────────────────────────────────────────────────
 

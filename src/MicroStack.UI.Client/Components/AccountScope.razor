@@ -1,0 +1,24 @@
+<div class="scope">
+    <form @onsubmit="ApplyAsync" @onsubmit:preventDefault>
+        <label for="account-id">Account</label>
+        <input id="account-id" type="text" inputmode="numeric" pattern="[0-9]{12}" maxlength="12" minlength="12" required
+               aria-describedby="account-help" @bind="_draft" aria-invalid="@(_error is not null ? "true" : "false")" />
+        <button class="button" type="submit" disabled="@(_draft == Account)">Switch</button>
+        <span id="account-help" class="@(_error is null ? "sr-only" : "field-error")">@(_error ?? "Enter a 12-digit account ID.")</span>
+    </form>
+    <span>Configured region <code>@Region</code></span>
+</div>
+@code {
+    [Parameter] public string Account { get; set; } = "";
+    [Parameter] public string Region { get; set; } = "";
+    [Parameter] public EventCallback<string> AccountChanged { get; set; }
+    private string _draft = "";
+    private string? _error;
+    protected override void OnParametersSet() { _draft = Account; _error = null; }
+    private async Task ApplyAsync()
+    {
+        if (!ExplorerLocation.ValidAccount(_draft)) { _error = "Use exactly 12 digits."; return; }
+        _error = null;
+        await AccountChanged.InvokeAsync(_draft);
+    }
+}

@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using MicroStack.Internal;
+using MicroStack.Internal.Admin;
 using MicroStack.Services.Lambda;
 
 namespace MicroStack.Services.ApiGateway;
@@ -17,10 +18,11 @@ namespace MicroStack.Services.ApiGateway;
 ///
 /// Port of ministack/services/apigateway.py.
 /// </summary>
-internal sealed partial class ApiGatewayV2ServiceHandler : IServiceHandler
+internal sealed partial class ApiGatewayV2ServiceHandler : IServiceHandler, IAdminResourceSource
 {
     private readonly LambdaServiceHandler _lambdaHandler;
     private readonly ApiGatewayV1ServiceHandler _v1Handler;
+    private readonly Lock _lock = new();
 
     // -- State ------------------------------------------------------------------
 
@@ -53,44 +55,50 @@ internal sealed partial class ApiGatewayV2ServiceHandler : IServiceHandler
 
     public Task<ServiceResponse> HandleAsync(ServiceRequest request)
     {
-        var host = request.GetHeader("host") ?? "";
-        var executeMatch = ExecuteApiRegex().Match(host);
-        if (executeMatch.Success)
+        lock (_lock)
         {
-            var apiId = executeMatch.Groups[1].Value;
-            // Route to v1 handler if the API ID belongs to a REST API
-            if (_v1Handler.OwnsApiId(apiId))
+            var host = request.GetHeader("host") ?? "";
+            var executeMatch = ExecuteApiRegex().Match(host);
+            if (executeMatch.Success)
             {
-                return Task.FromResult(_v1Handler.HandleExecute(apiId, request));
+                var apiId = executeMatch.Groups[1].Value;
+                // Route to v1 handler if the API ID belongs to a REST API
+                if (_v1Handler.OwnsApiId(apiId))
+                {
+                    return Task.FromResult(_v1Handler.HandleExecute(apiId, request));
+                }
+                return Task.FromResult(HandleExecute(apiId, request));
             }
-            return Task.FromResult(HandleExecute(apiId, request));
-        }
 
-        // Route v1 control plane paths to the v1 handler
-        var pathLower = request.Path.TrimStart('/').ToLowerInvariant();
-        if (pathLower.StartsWith("restapis", StringComparison.Ordinal)
-            || pathLower.StartsWith("apikeys", StringComparison.Ordinal)
-            || pathLower.StartsWith("usageplans", StringComparison.Ordinal)
-            || pathLower.StartsWith("domainnames", StringComparison.Ordinal)
-            || (pathLower.StartsWith("tags/", StringComparison.Ordinal)
-                && pathLower.Contains("restapis", StringComparison.Ordinal)))
-        {
-            return Task.FromResult(_v1Handler.HandleControlPlane(request));
-        }
+            // Route v1 control plane paths to the v1 handler
+            var pathLower = request.Path.TrimStart('/').ToLowerInvariant();
+            if (pathLower.StartsWith("restapis", StringComparison.Ordinal)
+                || pathLower.StartsWith("apikeys", StringComparison.Ordinal)
+                || pathLower.StartsWith("usageplans", StringComparison.Ordinal)
+                || pathLower.StartsWith("domainnames", StringComparison.Ordinal)
+                || (pathLower.StartsWith("tags/", StringComparison.Ordinal)
+                    && pathLower.Contains("restapis", StringComparison.Ordinal)))
+            {
+                return Task.FromResult(_v1Handler.HandleControlPlane(request));
+            }
 
-        return Task.FromResult(HandleControlPlane(request));
+            return Task.FromResult(HandleControlPlane(request));
+        }
     }
 
     public void Reset()
     {
-        _apis.Clear();
-        _routes.Clear();
-        _integrations.Clear();
-        _stages.Clear();
-        _deployments.Clear();
-        _authorizers.Clear();
-        _apiTags.Clear();
-        _v1Handler.Reset();
+        lock (_lock)
+        {
+            _apis.Clear();
+            _routes.Clear();
+            _integrations.Clear();
+            _stages.Clear();
+            _deployments.Clear();
+            _authorizers.Clear();
+            _apiTags.Clear();
+            _v1Handler.Reset();
+        }
     }
 
     public JsonElement? GetState() => null;

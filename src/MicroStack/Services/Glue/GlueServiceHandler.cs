@@ -1,5 +1,7 @@
 using System.Text.Json;
+using MicroStack.Admin.Contracts;
 using MicroStack.Internal;
+using MicroStack.Internal.Admin;
 
 namespace MicroStack.Services.Glue;
 
@@ -21,7 +23,7 @@ namespace MicroStack.Services.Glue;
 ///           RegisterSchemaVersion, GetSchemaVersion, ListSchemaVersions,
 ///           TagResource, UntagResource, GetTags.
 /// </summary>
-internal sealed class GlueServiceHandler : IServiceHandler
+internal sealed class GlueServiceHandler : IServiceHandler, IAdminResourceSource
 {
     private readonly Lock _lock = new();
 
@@ -155,6 +157,194 @@ internal sealed class GlueServiceHandler : IServiceHandler
     public JsonElement? GetState() => null;
 
     public void RestoreState(JsonElement state) { }
+
+    public IReadOnlyList<AdminResourceKind> GetAdminResourceKinds(string serviceId) =>
+    [
+        new("database", "Databases"),
+        new("crawler", "Crawlers"),
+        new("job", "Jobs"),
+        new("registry", "Schema registries"),
+    ];
+
+    public IEnumerable<AdminNode> GetAdminResources(string serviceId)
+    {
+        lock (_lock)
+        {
+            var nodes = new List<AdminNode>();
+            nodes.AddRange(_databases.Items.OrderBy(x => x.Key, StringComparer.Ordinal)
+                .Select(x => DatabaseNode(x.Key, x.Value)));
+            nodes.AddRange(_crawlers.Items.OrderBy(x => x.Key, StringComparer.Ordinal)
+                .Select(x => SimpleNode("crawler", x.Key, x.Value, "State",
+                    ["Targets", "Schedule", "SchemaChangePolicy"])));
+            nodes.AddRange(_jobs.Items.OrderBy(x => x.Key, StringComparer.Ordinal)
+                .Select(x => JobNode(x.Key, x.Value)));
+            nodes.AddRange(_registries.Items.OrderBy(x => x.Key, StringComparer.Ordinal)
+                .Select(x => RegistryNode(x.Key, x.Value)));
+            return nodes;
+        }
+    }
+
+    public string? GetAdminNotice(string serviceId) =>
+        "Stored job runs and crawler state are inspection-only; inspection never starts work.";
+
+    private AdminNode DatabaseNode(string name, Dictionary<string, object?> database)
+    {
+        var arn = Arn("database", name);
+        return SimpleNode("database", name, database, null, ["Parameters"], arn) with
+        {
+            ReadChildren = () =>
+            {
+                lock (_lock)
+                    return _tables.Items
+                        .Where(x => x.Key.StartsWith($"{name}/", StringComparison.Ordinal))
+                        .OrderBy(x => x.Key, StringComparer.Ordinal)
+                        .Select(x => TableNode(x.Key, x.Value)).ToArray();
+            },
+            ReadConnections = () =>
+            {
+                lock (_lock)
+                {
+                    var location = AnalyticsAdminData.String(database, "LocationUri");
+                    var link = AnalyticsAdminData.S3Connection("Database location", location);
+                    return link is null ? [] : [link];
+                }
+            },
+        };
+    }
+
+    private AdminNode TableNode(string key, Dictionary<string, object?> table)
+    {
+        var name = AnalyticsAdminData.String(table, "Name") ?? key;
+        return SimpleNode("table", name, table, "TableType",
+            ["StorageDescriptor", "PartitionKeys", "Parameters"]) with
+        {
+            ReadChildren = () =>
+            {
+                lock (_lock)
+                {
+                    if (!_partitions.TryGetValue(key, out var partitions))
+                        return [];
+                    return partitions.Select((partition, index) =>
+                    {
+                        var values = partition.TryGetValue("Values", out var v) && v is List<object?> list
+                            ? string.Join("/", list)
+                            : index.ToString();
+                        return SimpleNode("partition", $"{index}:{values}", partition, null,
+                            ["Values", "StorageDescriptor", "Parameters"]);
+                    }).ToArray();
+                }
+            },
+            ReadConnections = () =>
+            {
+                lock (_lock)
+                {
+                    var descriptor = AnalyticsAdminData.Dict(table, "StorageDescriptor");
+                    var link = AnalyticsAdminData.S3Connection("Table location",
+                        AnalyticsAdminData.String(descriptor, "Location"));
+                    return link is null ? [] : [link];
+                }
+            },
+        };
+    }
+
+    private AdminNode JobNode(string name, Dictionary<string, object?> job) =>
+        SimpleNode("job", name, job, null, ["Command", "DefaultArguments"]) with
+        {
+            ReadChildren = () =>
+            {
+                lock (_lock)
+                {
+                    if (!_jobRuns.TryGetValue(name, out var runs))
+                        return [];
+                    return runs.OrderBy(x => AnalyticsAdminData.String(x, "StartedOn"), StringComparer.Ordinal)
+                        .Select(x => SimpleNode("job-run", AnalyticsAdminData.String(x, "Id") ?? "",
+                            x, "JobRunState", ["Arguments"])).ToArray();
+                }
+            },
+            ReadConnections = () =>
+            {
+                lock (_lock)
+                {
+                    var command = AnalyticsAdminData.Dict(job, "Command");
+                    var link = AnalyticsAdminData.S3Connection("Job script",
+                        AnalyticsAdminData.String(command, "ScriptLocation"));
+                    return link is null ? [] : [link];
+                }
+            },
+        };
+
+    private AdminNode RegistryNode(string name, Dictionary<string, object?> registry) =>
+        SimpleNode("registry", name, registry, "Status", [], AnalyticsAdminData.String(registry, "RegistryArn")) with
+        {
+            ReadChildren = () =>
+            {
+                lock (_lock)
+                    return _schemas.Items.Where(x => x.Key.StartsWith($"{name}/", StringComparison.Ordinal))
+                        .OrderBy(x => x.Key, StringComparer.Ordinal)
+                        .Select(x => SchemaNode(x.Key, x.Value)).ToArray();
+            },
+        };
+
+    private AdminNode SchemaNode(string key, Dictionary<string, object?> schema) =>
+        SimpleNode("schema", AnalyticsAdminData.String(schema, "SchemaName") ?? key,
+            schema, "SchemaStatus", [], AnalyticsAdminData.String(schema, "SchemaArn")) with
+        {
+            ReadChildren = () =>
+            {
+                lock (_lock)
+                {
+                    if (!_schemaVersions.TryGetValue(key, out var versions))
+                        return [];
+                    return versions.OrderBy(x => AnalyticsAdminData.String(x, "VersionNumber"), StringComparer.Ordinal)
+                        .Select(x => SimpleNode("schema-version",
+                            AnalyticsAdminData.String(x, "SchemaVersionId") ?? "",
+                            x, "Status", ["SchemaDefinition"])).ToArray();
+                }
+            },
+        };
+
+    private AdminNode SimpleNode(
+        string kind, string id, IReadOnlyDictionary<string, object?> value, string? statusKey,
+        string[] contentKeys, string? arn = null)
+    {
+        var name = AnalyticsAdminData.String(value, "Name") ??
+                   AnalyticsAdminData.String(value, "RegistryName") ??
+                   AnalyticsAdminData.String(value, "SchemaName") ?? id;
+        return AdminData.Node(kind, id, name, arn,
+            statusKey is null ? null : AnalyticsAdminData.String(value, statusKey)) with
+        {
+            ReadFields = () =>
+            {
+                lock (_lock)
+                {
+                    return value.OrderBy(x => x.Key, StringComparer.Ordinal)
+                        .Where(x => (x.Value is null or string or bool or ValueType) &&
+                                    !contentKeys.Contains(x.Key))
+                        .Select(x =>
+                        {
+                            var timestamp = x.Key.Contains("Time", StringComparison.OrdinalIgnoreCase) ||
+                                            x.Key.EndsWith("On", StringComparison.Ordinal);
+                            return AdminData.Field(x.Key,
+                                timestamp ? AnalyticsAdminData.Epoch(x.Value) ??
+                                            AnalyticsAdminData.String(value, x.Key) :
+                                            AnalyticsAdminData.String(value, x.Key),
+                                sensitive: x.Key.Contains("password", StringComparison.OrdinalIgnoreCase) ||
+                                           x.Key.Contains("secret", StringComparison.OrdinalIgnoreCase),
+                                format: timestamp ? "timestamp" : null);
+                        }).ToArray();
+                }
+            },
+            ReadContent = contentKeys.Length == 0 ? null : () =>
+            {
+                lock (_lock)
+                {
+                    return AnalyticsAdminData.Json(contentKeys
+                        .Where(value.ContainsKey)
+                        .ToDictionary(x => x, x => value[x], StringComparer.Ordinal));
+                }
+            },
+        };
+    }
 
     // -- JSON helpers ----------------------------------------------------------
 

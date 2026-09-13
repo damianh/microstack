@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using MicroStack.Internal;
+using MicroStack.Internal.Admin;
 
 namespace MicroStack.Services.Route53;
 
@@ -11,7 +12,7 @@ namespace MicroStack.Services.Route53;
 ///
 /// Port of ministack/services/route53.py.
 /// </summary>
-internal sealed partial class Route53ServiceHandler : IServiceHandler
+internal sealed partial class Route53ServiceHandler : IServiceHandler, IAdminResourceSource
 {
     // ── Constants ────────────────────────────────────────────────────────────────
 

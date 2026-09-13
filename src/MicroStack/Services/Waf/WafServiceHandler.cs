@@ -15,7 +15,7 @@ namespace MicroStack.Services.Waf;
 ///           TagResource, UntagResource, ListTagsForResource,
 ///           CheckCapacity, DescribeManagedRuleGroup.
 /// </summary>
-internal sealed class WafServiceHandler : IServiceHandler
+internal sealed partial class WafServiceHandler : IServiceHandler, Internal.Admin.IAdminResourceSource
 {
     private readonly Lock _lock = new();
 

@@ -167,6 +167,7 @@ internal sealed partial class EventBridgeServiceHandler : IServiceHandler
             _apiDestinations.Clear();
             _replays.Clear();
             _endpoints.Clear();
+            _partnerEventSources.Clear();
             _eventBuses = CreateDefaultBuses();
         }
     }

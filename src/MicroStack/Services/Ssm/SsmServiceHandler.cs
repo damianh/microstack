@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using MicroStack.Internal;
+using MicroStack.Internal.Admin;
 
 namespace MicroStack.Services.Ssm;
 
@@ -14,7 +15,7 @@ namespace MicroStack.Services.Ssm;
 ///           GetParameterHistory, LabelParameterVersion,
 ///           AddTagsToResource, RemoveTagsFromResource, ListTagsForResource.
 /// </summary>
-internal sealed class SsmServiceHandler : IServiceHandler
+internal sealed partial class SsmServiceHandler : IServiceHandler, IAdminResourceSource
 {
     private readonly AccountScopedDictionary<string, SsmParameter> _parameters = new();
     private readonly AccountScopedDictionary<string, List<SsmHistoryEntry>> _parameterHistory = new();

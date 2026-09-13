@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Web;
 using MicroStack.Internal;
+using MicroStack.Internal.Admin;
 
 namespace MicroStack.Services.CloudWatch;
 
@@ -21,7 +22,7 @@ namespace MicroStack.Services.CloudWatch;
 ///           TagResource, UntagResource, ListTagsForResource,
 ///           PutDashboard, GetDashboard, DeleteDashboards, ListDashboards.
 /// </summary>
-internal sealed partial class CloudWatchServiceHandler : IServiceHandler
+internal sealed partial class CloudWatchServiceHandler : IServiceHandler, IAdminResourceSource
 {
     public string ServiceName => "monitoring";
 

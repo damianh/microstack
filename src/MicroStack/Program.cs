@@ -37,6 +37,7 @@ using MicroStack.Services.ServiceDiscovery;
 using MicroStack.Services.CloudFormation;
 using MicroStack.Services.Cognito;
 using MicroStack.Services.S3Files;
+using MicroStack.Internal.Admin;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -49,6 +50,11 @@ builder.Services.ConfigureHttpJsonOptions(jsonOptions =>
 // Bind all environment variables into strongly-typed options (single source of truth)
 var options = MicroStackOptions.BindFromEnvironment();
 builder.Services.AddSingleton(options);
+
+const string uiCorsPolicy = "MicroStackUi";
+var uiOrigin = new UriBuilder("http", options.Host, options.UiPort).Uri.GetLeftPart(UriPartial.Authority);
+builder.Services.AddCors(cors => cors.AddPolicy(uiCorsPolicy, policy =>
+    policy.WithOrigins(uiOrigin).WithMethods("GET", "POST", "DELETE").AllowAnyHeader()));
 
 builder.WebHost.UseUrls($"http://0.0.0.0:{options.GatewayPort}");
 
@@ -123,6 +129,8 @@ registry.Register(new CognitoIdentityServiceHandler(cognitoIdpHandler));
 registry.Register(new CloudFormationServiceHandler(registry));
 registry.Register(new S3FilesServiceHandler());
 
+app.MapAdminApi(registry, app.Services.GetRequiredService<RequestLog>(), options, uiCorsPolicy);
+
 // Health endpoint (multiple aliases for LocalStack compatibility)
 foreach (var healthPath in new[] { "/_microstack/health", "/health", "/_localstack/health" })
 {
@@ -130,7 +138,7 @@ foreach (var healthPath in new[] { "/_microstack/health", "/health", "/_localsta
     {
         var services = registry.GetServiceStatus();
         return Results.Ok(new HealthResponse(services, "light", "0.1.0"));
-    });
+    }).RequireCors(uiCorsPolicy);
 }
 
 // Reset endpoint
@@ -139,7 +147,7 @@ app.MapPost("/_microstack/reset", () =>
     registry.ResetAll();
     persistence.DeleteAll();
     return Results.Ok(new ResetResponse("ok"));
-});
+}).RequireCors(uiCorsPolicy);
 
 // Config endpoint (stub — populated when services implement it)
 app.MapPost("/_microstack/config", async (HttpContext ctx) =>
@@ -168,7 +176,7 @@ app.MapPost("/_microstack/config", async (HttpContext ctx) =>
     }
 
     return Results.Ok(new ConfigResponse(applied));
-});
+}).RequireCors(uiCorsPolicy);
 
 // Request log endpoint
 app.MapGet("/_microstack/requests", (HttpContext ctx) =>
@@ -177,14 +185,14 @@ app.MapGet("/_microstack/requests", (HttpContext ctx) =>
     var limit = int.TryParse(limitText, out var parsed) ? parsed : 1000;
     var requestLog = ctx.RequestServices.GetRequiredService<RequestLog>();
     return Results.Ok(requestLog.GetEntries(limit));
-});
+}).RequireCors(uiCorsPolicy);
 
 // Request log clear endpoint
 app.MapDelete("/_microstack/requests", (RequestLog requestLog) =>
 {
     requestLog.Clear();
     return Results.Ok(new RequestLogClearResponse(true));
-});
+}).RequireCors(uiCorsPolicy);
 
 // Resource explorer endpoint
 app.MapGet("/_microstack/resources", (ServiceRegistry serviceRegistry) =>
@@ -195,11 +203,39 @@ app.MapGet("/_microstack/resources", (ServiceRegistry serviceRegistry) =>
         .OrderBy(summary => summary.Service, StringComparer.Ordinal)
         .ToList();
     return Results.Ok(resources);
-});
+}).RequireCors(uiCorsPolicy);
 
 // Enable routing so endpoint matching runs before our AWS middleware.
 // This ensures admin endpoints (health, reset, config) take priority.
 app.UseRouting();
+app.UseCors();
+
+// Keep failures from the inspection API machine-readable without hiding provider faults.
+app.Use(async (ctx, next) =>
+{
+    try
+    {
+        await next(ctx);
+    }
+    catch (OperationCanceledException) when (ctx.RequestAborted.IsCancellationRequested)
+    {
+        throw;
+    }
+    catch (Exception exception) when (ctx.Request.Path.StartsWithSegments("/_microstack/admin/v1"))
+    {
+        var logger = ctx.RequestServices.GetRequiredService<ILogger<Program>>();
+        logger.LogError(exception, "Admin API request failed for {Path}", ctx.Request.Path);
+        if (ctx.Response.HasStarted)
+            throw;
+        ctx.Response.Clear();
+        ctx.Response.StatusCode = StatusCodes.Status500InternalServerError;
+        await ctx.Response.WriteAsJsonAsync(
+            new MicroStack.Admin.Contracts.AdminError(
+                "internal_error", "The admin request failed. Refresh and try again."),
+            MicroStack.Admin.Contracts.AdminJsonContext.Default.AdminError,
+            cancellationToken: ctx.RequestAborted);
+    }
+});
 
 // Handle OPTIONS (CORS pre-flight) before the routing layer can emit a 405.
 // AWS SDKs send OPTIONS pre-flight; we must return CORS headers for all paths.

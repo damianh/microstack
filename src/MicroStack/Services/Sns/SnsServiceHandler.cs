@@ -20,7 +20,7 @@ namespace MicroStack.Services.Sns;
 ///           CreatePlatformApplication, CreatePlatformEndpoint.
 /// SNS -> SQS fanout delivers synchronously into the SQS handler's queues.
 /// </summary>
-internal sealed class SnsServiceHandler : IServiceHandler
+internal sealed partial class SnsServiceHandler : IServiceHandler
 {
     private readonly SqsServiceHandler _sqs;
 

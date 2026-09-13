@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<!--
+THESIS: Find a service on a searchable home page, then work in its split inspector without an ever-growing services rail.
+OWN-WORLD: White work surfaces, cool gray navigation, blue selection, system sans, monospace only for data.
+STORY: Find a local resource, read its contents, follow configured connections, distinguish observations from configuration.
+FIRST VIEWPORT: Grouped service directory, search and inspector-availability filter, with demo and account context visible.
+FORM: User-selected services home followed by a rail-free split inspector. This is the only navigation layout.
+-->
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>MicroStack · Resource explorer mockups</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <a class="skip" href="#main">Skip to resource inspector</a>
+  <div class="prototype-bar">
+    <div><strong>Design preview</strong><span class="bar-divider"></span><span>Synthetic data · no live API calls</span></div>
+    <a href="notes.html">Design decisions <span aria-hidden="true">↗</span></a>
+  </div>
+  <header class="app-header">
+    <a class="brand" href="./" aria-label="MicroStack resource explorer"><img src="logo.png" alt="" width="32" height="30"><strong>MicroStack</strong></a>
+    <span class="header-divider"></span><span class="header-title">Resource explorer</span>
+  </header>
+  <div class="design-controls" aria-label="Mockup state controls">
+    <label>Example state
+      <select id="scenario">
+        <option value="populated">Populated</option><option value="empty">Empty resource</option>
+        <option value="loading">Loading snapshot</option><option value="error">API unavailable</option>
+        <option value="disabled">Service disabled</option><option value="unsupported">Inspector unavailable</option>
+        <option value="stale">Stale snapshot</option><option value="large">Large list</option>
+        <option value="missing">Missing connection</option>
+      </select>
+    </label>
+  </div>
+  <div class="shell" id="shell">
+    <main id="main" tabindex="-1">
+      <div class="workspace-context">
+        <nav id="service-context" class="service-context" aria-label="Service workspace navigation" hidden></nav>
+        <div class="scope"><span>Account <code>000000000000</code></span><span>Configured region <code>us-east-1</code></span></div>
+      </div>
+      <section id="service-home" aria-label="Services directory" hidden></section>
+      <div class="service-heading"><div id="service-title"></div><button class="button secondary" id="mobile-resources" data-action="show-resources">Browse resources</button></div>
+      <div class="resource-workspace">
+        <section class="resource-index" id="resource-index" aria-label="Resources"></section>
+        <section class="inspector" id="inspector" aria-label="Selected resource"></section>
+      </div>
+      <footer class="workspace-footer"><span>Read-only prototype</span><span>Sample snapshot · 2026-09-11T10:24:00Z</span></footer>
+    </main>
+  </div>
+  <div id="toast" role="status" aria-live="polite"></div>
+</body>
+</html>

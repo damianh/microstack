@@ -1,0 +1,41 @@
+using System.Text.Json.Serialization;
+
+namespace MicroStack.Admin.Contracts;
+
+[JsonSourceGenerationOptions(
+    PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
+    GenerationMode = JsonSourceGenerationMode.Metadata)]
+[JsonSerializable(typeof(AdminContext))]
+[JsonSerializable(typeof(AdminService))]
+[JsonSerializable(typeof(AdminResourceKind))]
+[JsonSerializable(typeof(AdminKey))]
+[JsonSerializable(typeof(AdminResourceSummary))]
+[JsonSerializable(typeof(AdminField))]
+[JsonSerializable(typeof(AdminConnection))]
+[JsonSerializable(typeof(AdminResourceDetail))]
+[JsonSerializable(typeof(AdminContent))]
+[JsonSerializable(typeof(AdminError))]
+[JsonSerializable(typeof(AdminActivity))]
+[JsonSerializable(typeof(AdminContext[]))]
+[JsonSerializable(typeof(AdminService[]))]
+[JsonSerializable(typeof(AdminResourceKind[]))]
+[JsonSerializable(typeof(AdminKey[]))]
+[JsonSerializable(typeof(AdminResourceSummary[]))]
+[JsonSerializable(typeof(AdminField[]))]
+[JsonSerializable(typeof(AdminConnection[]))]
+[JsonSerializable(typeof(AdminResourceDetail[]))]
+[JsonSerializable(typeof(AdminContent[]))]
+[JsonSerializable(typeof(AdminError[]))]
+[JsonSerializable(typeof(AdminActivity[]))]
+[JsonSerializable(typeof(AdminPage<AdminService>))]
+[JsonSerializable(typeof(AdminPage<AdminContext>))]
+[JsonSerializable(typeof(AdminPage<AdminResourceKind>))]
+[JsonSerializable(typeof(AdminPage<AdminKey>))]
+[JsonSerializable(typeof(AdminPage<AdminResourceSummary>))]
+[JsonSerializable(typeof(AdminPage<AdminField>))]
+[JsonSerializable(typeof(AdminPage<AdminConnection>))]
+[JsonSerializable(typeof(AdminPage<AdminResourceDetail>))]
+[JsonSerializable(typeof(AdminPage<AdminContent>))]
+[JsonSerializable(typeof(AdminPage<AdminError>))]
+[JsonSerializable(typeof(AdminPage<AdminActivity>))]
+public partial class AdminJsonContext : JsonSerializerContext;

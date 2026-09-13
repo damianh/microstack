@@ -2,10 +2,11 @@ using System.Text.Json;
 using System.Text;
 using System.Web;
 using MicroStack.Internal;
+using MicroStack.Internal.Admin;
 
 namespace MicroStack.Services.Alb;
 
-internal sealed class AlbServiceHandler : IServiceHandler
+internal sealed partial class AlbServiceHandler : IServiceHandler, IAdminResourceSource
 {
     public string ServiceName => "elasticloadbalancing";
 

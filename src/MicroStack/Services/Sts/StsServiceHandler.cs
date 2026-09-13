@@ -15,7 +15,7 @@ namespace MicroStack.Services.Sts;
 /// Supports: GetCallerIdentity, AssumeRole, AssumeRoleWithWebIdentity,
 ///           GetSessionToken, GetAccessKeyInfo.
 /// </summary>
-internal sealed class StsServiceHandler : IServiceHandler
+internal sealed partial class StsServiceHandler : IServiceHandler, Internal.Admin.IAdminResourceSource
 {
     private readonly IamServiceHandler _iam;
     private readonly Lock _lock = new();

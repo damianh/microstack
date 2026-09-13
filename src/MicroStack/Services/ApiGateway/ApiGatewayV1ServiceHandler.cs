@@ -17,7 +17,7 @@ namespace MicroStack.Services.ApiGateway;
 ///
 /// Port of ministack/services/apigateway_v1.py.
 /// </summary>
-internal sealed class ApiGatewayV1ServiceHandler
+internal sealed partial class ApiGatewayV1ServiceHandler
 {
     private readonly LambdaServiceHandler _lambdaHandler;
 

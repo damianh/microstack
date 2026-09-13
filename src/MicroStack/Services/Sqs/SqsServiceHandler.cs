@@ -13,7 +13,7 @@ namespace MicroStack.Services.Sqs;
 ///
 /// Port of ministack/services/sqs.py.
 /// </summary>
-internal sealed class SqsServiceHandler : IServiceHandler, IResourceProvider
+internal sealed partial class SqsServiceHandler : IServiceHandler, IResourceProvider
 {
     // ── Module-level state ──────────────────────────────────────────────────────
 

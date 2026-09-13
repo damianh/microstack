@@ -1,0 +1,82 @@
+@page "/overview"
+@implements IDisposable
+@inject MicroStackApiService Api
+<PageTitle>Overview · MicroStack</PageTitle>
+<section class="overview">
+    <div class="service-heading"><div><h1>Overview</h1><p>Instance status and global operations.</p></div><button class="button" disabled="@_busy" @onclick="LoadAsync">Refresh</button></div>
+    @if (_error is not null) { <div class="notice error" role="alert">@_error</div> }
+    @if (_busy && _health is null) { <LoadingState Label="Loading instance status…" /> }
+    @if (_health is not null)
+    {
+        <dl class="metadata overview-facts">
+            <div><dt>Edition</dt><dd>@_health.Edition</dd></div>
+            <div><dt>Version</dt><dd><code>@_health.Version</code></dd></div>
+            <div><dt>Enabled handlers</dt><dd>@_health.Services.Count</dd></div>
+            <div><dt>Legacy resource summary</dt><dd>@_resources.Sum(resource => resource.Count) resources across @_resources.Count legacy providers</dd></div>
+        </dl>
+        <h2>Service status</h2>
+        <div class="table-scroll subsection"><table><thead><tr><th>Handler</th><th>Status</th></tr></thead><tbody>
+            @foreach (var entry in _health.Services.OrderBy(entry => entry.Key, StringComparer.Ordinal))
+            { <tr><td>@entry.Key</td><td><span class="tag">@entry.Value</span></td></tr> }
+        </tbody></table></div>
+        <h2 class="subsection">Resource summary</h2>
+        <p class="notice">This compatible summary covers the original resource providers in the configured default account. Use Services for all-service, account-selectable inspection.</p>
+        <div class="table-scroll"><table><thead><tr><th>Provider</th><th>Resources</th></tr></thead><tbody>
+            @foreach (var entry in _resources.OrderBy(entry => entry.Service, StringComparer.Ordinal))
+            { <tr><td>@entry.Service</td><td>@entry.Count</td></tr> }
+        </tbody></table></div>
+    }
+    <section class="subsection">
+        <h2>Global reset</h2>
+        <p>Clear all in-memory resource state for every account and service. This is not scoped to your selected account.</p>
+        @if (_confirmReset)
+        {
+            <div class="notice warning" role="alert">
+                <p>This deletes the instance's in-memory state. It cannot be undone.</p>
+                <button class="button danger" disabled="@_busy" @onclick="ResetAsync">Confirm reset all state</button>
+                <button class="button" disabled="@_busy" @onclick="() => _confirmReset = false">Cancel</button>
+            </div>
+        }
+        else { <button class="button danger" disabled="@_busy" @onclick="() => _confirmReset = true">Reset all state</button> }
+    </section>
+    @if (_message is not null) { <p role="status">@_message</p> }
+</section>
+@code {
+    private readonly CancellationTokenSource _cts = new();
+    private HealthResponse? _health;
+    private IReadOnlyList<ResourceSummary> _resources = [];
+    private bool _busy, _confirmReset;
+    private string? _error, _message;
+    protected override Task OnInitializedAsync() => LoadAsync();
+    private async Task LoadAsync()
+    {
+        if (_busy) return;
+        _busy = true; _error = null;
+        try
+        {
+            var health = await Api.GetHealthAsync(_cts.Token);
+            var resources = await Api.GetResourcesAsync(_cts.Token);
+            if (!_cts.IsCancellationRequested) { _health = health; _resources = resources; }
+        }
+        catch (OperationCanceledException) when (_cts.IsCancellationRequested) { }
+        catch (Exception) { _error = "Instance status could not be loaded. Check the API connection and refresh. Previously loaded data may be stale."; }
+        finally { _busy = false; }
+    }
+    private async Task ResetAsync()
+    {
+        if (_busy) return;
+        _busy = true; _error = null; _message = null;
+        var reset = false;
+        try
+        {
+            await Api.ResetAsync(_cts.Token);
+            _confirmReset = false; _message = "All in-memory state was reset.";
+            reset = true;
+        }
+        catch (OperationCanceledException) when (_cts.IsCancellationRequested) { }
+        catch (Exception) { _error = "The reset could not be confirmed. Refresh instance status before retrying."; }
+        finally { _busy = false; }
+        if (reset && !_cts.IsCancellationRequested) await LoadAsync();
+    }
+    public void Dispose() { _cts.Cancel(); _cts.Dispose(); }
+}

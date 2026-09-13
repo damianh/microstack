@@ -63,6 +63,9 @@ jobs:
       - name: Test
         run: dotnet test --project tests/MicroStack.Tests/MicroStack.Tests.csproj -c Release --no-build
 
+      - name: Test UI components
+        run: dotnet test --project tests/MicroStack.UI.Tests/MicroStack.UI.Tests.csproj -c Release --no-build
+
       - name: Pack NuGet packages
         run: dotnet pack src/MicroStack.Aspire.Hosting/MicroStack.Aspire.Hosting.csproj -c Release --no-build --output ./packages
 
@@ -112,6 +115,9 @@ jobs:
           npm ci
           npm run typecheck
           npm test
+
+      - name: Smoke test container
+        run: sh scripts/smoke-container.sh microstack:ci
 
       - name: Report container image size
         run: docker images microstack

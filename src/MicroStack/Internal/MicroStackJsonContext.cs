@@ -4,6 +4,7 @@ using MicroStack.Services.SecretsManager;
 using MicroStack.Services.Ssm;
 using MicroStack.Services.Sns;
 using MicroStack.Services.Sqs;
+using MicroStack.Admin.Contracts;
 
 namespace MicroStack.Internal;
 
@@ -25,6 +26,14 @@ namespace MicroStack.Internal;
 [JsonSerializable(typeof(ResetResponse))]
 [JsonSerializable(typeof(ConfigResponse))]
 [JsonSerializable(typeof(RequestLogClearResponse))]
+[JsonSerializable(typeof(AdminContext))]
+[JsonSerializable(typeof(AdminService[]))]
+[JsonSerializable(typeof(AdminResourceDetail))]
+[JsonSerializable(typeof(AdminContent))]
+[JsonSerializable(typeof(AdminError))]
+[JsonSerializable(typeof(AdminPage<AdminResourceSummary>))]
+[JsonSerializable(typeof(AdminPage<AdminConnection>))]
+[JsonSerializable(typeof(AdminPage<AdminActivity>))]
 // Request log endpoint
 [JsonSerializable(typeof(List<RequestLogEntry>))]
 // Resource explorer endpoint

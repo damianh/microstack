@@ -8,6 +8,7 @@
 **/TestResults/
 .git/
 docs/
+design/
 tests/
 *.md
 *.txt

@@ -1,5 +1,7 @@
 using System.Text.Json;
+using MicroStack.Admin.Contracts;
 using MicroStack.Internal;
+using MicroStack.Internal.Admin;
 
 namespace MicroStack.Services.Emr;
 
@@ -18,7 +20,7 @@ namespace MicroStack.Services.Emr;
 ///   Tags:            AddTags, RemoveTags
 ///   Block Public Access: GetBlockPublicAccessConfiguration, PutBlockPublicAccessConfiguration
 /// </summary>
-internal sealed class EmrServiceHandler : IServiceHandler
+internal sealed class EmrServiceHandler : IServiceHandler, IAdminResourceSource
 {
     private readonly Lock _lock = new();
 
@@ -107,6 +109,121 @@ internal sealed class EmrServiceHandler : IServiceHandler
     public JsonElement? GetState() => null;
 
     public void RestoreState(JsonElement state) { }
+
+    public IReadOnlyList<AdminResourceKind> GetAdminResourceKinds(string serviceId) =>
+    [
+        new("cluster", "Clusters"),
+    ];
+
+    public IEnumerable<AdminNode> GetAdminResources(string serviceId)
+    {
+        lock (_lock)
+        {
+            return _clusters.Items.OrderBy(x => x.Key, StringComparer.Ordinal)
+                .Select(x => ClusterNode(x.Key, x.Value)).ToArray();
+        }
+    }
+
+    public string? GetAdminNotice(string serviceId) =>
+        "Cluster and step inspection is read-only; the admin API never runs or cancels work.";
+
+    private AdminNode ClusterNode(string id, Dictionary<string, object?> cluster)
+    {
+        var status = AnalyticsAdminData.Dict(cluster, "Status");
+        return AdminData.Node("cluster", id,
+            AnalyticsAdminData.String(cluster, "Name") ?? id,
+            $"arn:aws:elasticmapreduce:{Region}:{AccountContext.GetAccountId()}:cluster/{id}",
+            AnalyticsAdminData.String(status, "State")) with
+        {
+            ReadFields = () =>
+            {
+                lock (_lock)
+                {
+                    var timeline = AnalyticsAdminData.Dict(status, "Timeline");
+                    return
+                    [
+                        AdminData.Field("id", id),
+                        AdminData.Field("releaseLabel", AnalyticsAdminData.String(cluster, "ReleaseLabel")),
+                        AdminData.Field("serviceRole", AnalyticsAdminData.String(cluster, "ServiceRole")),
+                        AdminData.Field("jobFlowRole", AnalyticsAdminData.String(
+                            AnalyticsAdminData.Dict(cluster, "Ec2InstanceAttributes"), "IamInstanceProfile")),
+                        AdminData.Field("stepConcurrencyLevel", AnalyticsAdminData.String(cluster, "StepConcurrencyLevel")),
+                        AdminData.Field("createdAt", AnalyticsAdminData.Epoch(timeline.GetValueOrDefault("CreationDateTime")), format: "timestamp"),
+                        AdminData.Field("readyAt", AnalyticsAdminData.Epoch(timeline.GetValueOrDefault("ReadyDateTime")), format: "timestamp"),
+                    ];
+                }
+            },
+            ReadChildren = () =>
+            {
+                lock (_lock)
+                {
+                    var children = new List<AdminNode>();
+                    if (_steps.TryGetValue(id, out var steps))
+                        children.AddRange(steps.OrderBy(x => AnalyticsAdminData.String(x, "Id"), StringComparer.Ordinal)
+                            .Select(x => EmrChild("step", AnalyticsAdminData.String(x, "Id")!, x)));
+                    children.AddRange(Children(cluster, "InstanceFleets", "instance-fleet", "Id"));
+                    children.AddRange(Children(cluster, "InstanceGroups", "instance-group", "Id"));
+                    children.AddRange(Children(cluster, "BootstrapActions", "bootstrap-action", "Name"));
+                    return children;
+                }
+            },
+            ReadConnections = () =>
+            {
+                lock (_lock)
+                {
+                    var link = AnalyticsAdminData.S3Connection("Log location",
+                        AnalyticsAdminData.String(cluster, "LogUri"));
+                    return link is null ? [] : [link];
+                }
+            },
+        };
+    }
+
+    private IEnumerable<AdminNode> Children(
+        IReadOnlyDictionary<string, object?> parent, string property, string kind, string idProperty)
+    {
+        parent.TryGetValue(property, out var value);
+        return AnalyticsAdminData.Dicts(value)
+            .Select((child, index) =>
+            {
+                var id = AnalyticsAdminData.String(child, idProperty) ?? $"{kind}-{index}";
+                return EmrChild(kind, id, child);
+            }).ToArray();
+    }
+
+    private AdminNode EmrChild(string kind, string id, IReadOnlyDictionary<string, object?> value)
+    {
+        var status = AnalyticsAdminData.Dict(value, "Status");
+        return AdminData.Node(kind, id, AnalyticsAdminData.String(value, "Name") ?? id,
+            status: AnalyticsAdminData.String(status, "State")) with
+        {
+            ReadFields = () =>
+            {
+                lock (_lock)
+                {
+                    var timeline = AnalyticsAdminData.Dict(status, "Timeline");
+                    return
+                    [
+                        AdminData.Field("id", id),
+                        AdminData.Field("createdAt", AnalyticsAdminData.Epoch(timeline.GetValueOrDefault("CreationDateTime")), format: "timestamp"),
+                        AdminData.Field("startedAt", AnalyticsAdminData.Epoch(timeline.GetValueOrDefault("StartDateTime")), format: "timestamp"),
+                        AdminData.Field("endedAt", AnalyticsAdminData.Epoch(timeline.GetValueOrDefault("EndDateTime")), format: "timestamp"),
+                    ];
+                }
+            },
+            ReadContent = () =>
+            {
+                lock (_lock)
+                {
+                    return AnalyticsAdminData.Json(AnalyticsAdminData.Project(
+                        ("config", value.GetValueOrDefault("Config")),
+                        ("instanceFleetType", value.GetValueOrDefault("InstanceFleetType")),
+                        ("instanceGroupType", value.GetValueOrDefault("InstanceGroupType")),
+                        ("scriptBootstrapAction", value.GetValueOrDefault("ScriptBootstrapAction"))));
+                }
+            },
+        };
+    }
 
     // -- ID generators ---------------------------------------------------------
 

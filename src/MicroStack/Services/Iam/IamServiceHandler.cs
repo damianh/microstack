@@ -34,7 +34,7 @@ namespace MicroStack.Services.Iam;
 ///           CreateServiceLinkedRole, DeleteServiceLinkedRole, GetServiceLinkedRoleDeletionStatus,
 ///           CreateOpenIDConnectProvider, GetOpenIDConnectProvider, DeleteOpenIDConnectProvider.
 /// </summary>
-internal sealed class IamServiceHandler : IServiceHandler
+internal sealed partial class IamServiceHandler : IServiceHandler, Internal.Admin.IAdminResourceSource
 {
     private readonly AccountScopedDictionary<string, IamUser> _users = new();
     private readonly AccountScopedDictionary<string, IamRole> _roles = new();

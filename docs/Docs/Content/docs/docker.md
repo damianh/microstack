@@ -7,22 +7,38 @@ section: Guides
 
 # Docker
 
-MicroStack publishes OCI container images via `dotnet publish` — no Dockerfile required.
+MicroStack supports both the repository Dockerfile and SDK OCI publishing.
+The container runs the native API and the separate self-contained UI host.
 
 ## Pre-built Image
 
 ```bash
-docker run -p 4566:4566 ghcr.io/damianh/microstack:latest
+docker run -p 127.0.0.1:4566:4566 -p 127.0.0.1:4567:4567 ghcr.io/damianh/microstack:latest
 ```
+
+Open `http://localhost:4567` for the UI. AWS clients continue to use port `4566`.
 
 ## Building Locally
 
 ```bash
-dotnet publish src/MicroStack/MicroStack.csproj /t:PublishContainer -c Release
-docker run -p 4566:4566 microstack:latest
+docker build -t microstack:latest .
+docker run -p 127.0.0.1:4566:4566 -p 127.0.0.1:4567:4567 microstack:latest
 ```
 
-This produces a ~237MB image based on `mcr.microsoft.com/dotnet/aspnet:10.0`.
+Alternatively, SDK publishing includes the UI under the API publish directory:
+
+```bash
+dotnet publish src/MicroStack/MicroStack.csproj /t:PublishContainer -c Release -r linux-musl-x64
+```
+
+Native AOT publishing requires a matching Linux toolchain; use the Dockerfile
+or a suitable Linux environment when building from Windows. Both image paths
+use the .NET runtime-dependencies Alpine image and include the self-contained
+UI host. The processes have separate content roots, and stopping the container
+stops both. If either process exits, the other is also stopped.
+
+For an API-only publish, pass `-p:PublishAdminUi=false`. The standalone design
+reference in `design/resource-explorer` is never included in production images.
 
 ## Docker Compose
 
@@ -31,7 +47,8 @@ services:
   microstack:
     image: ghcr.io/damianh/microstack:latest
     ports:
-      - "4566:4566"
+      - "127.0.0.1:4566:4566"
+      - "127.0.0.1:4567:4567"
     environment:
       - PERSIST_STATE=1
     volumes:

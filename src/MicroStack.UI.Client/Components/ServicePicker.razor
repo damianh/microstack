@@ -1,0 +1,34 @@
+<div class="service-picker" data-service-picker>
+    <button class="service-picker-trigger" data-picker-trigger aria-expanded="false" aria-haspopup="listbox" aria-controls="service-options">
+        @if (Selected is not null) { <img class="aws-service-icon" src="@($"icons/{Selected.Icon}.svg")" alt="" /> }
+        @(Selected?.Label ?? "Choose service") <span aria-hidden="true">⌄</span>
+    </button>
+    <div class="service-picker-panel" data-picker-panel hidden>
+        <div class="search">
+            <input type="search" role="combobox" aria-label="Find a service" aria-controls="service-options" aria-expanded="false" aria-autocomplete="list"
+                   autocomplete="off" placeholder="Find a service…" @bind="_filter" @bind:event="oninput" />
+        </div>
+        <div id="service-options" class="service-options" role="listbox" aria-label="Services">
+            @foreach (var service in Matches)
+            {
+                <button @key="service.Id" id="@($"service-option-{service.Id}")" class="service-option @(service.Id == Selected?.Id ? "active" : "")"
+                        role="option" aria-selected="@(service.Id == Selected?.Id ? "true" : "false")" tabindex="-1" @onclick="() => SelectedChanged.InvokeAsync(service.Id)">
+                    <span class="service-option-label"><img class="aws-service-icon" src="@($"icons/{service.Icon}.svg")" alt="" />
+                        <span><strong>@service.Label</strong><small>@service.Name</small></span>
+                    </span>
+                    <span class="service-option-current">@(service.Id == Selected?.Id ? "Current" : service.Availability == "disabled" ? "Disabled" : "")</span>
+                </button>
+            }
+        </div>
+        <p class="service-match-count" role="status">@(Matches.Count == 0 ? "No services match." : $"{Matches.Count} services")</p>
+    </div>
+</div>
+@code {
+    [Parameter] public IReadOnlyList<AdminService> Services { get; set; } = [];
+    [Parameter] public AdminService? Selected { get; set; }
+    [Parameter] public EventCallback<string> SelectedChanged { get; set; }
+    private string _filter = "";
+    private List<AdminService> Matches => Services.Where(service =>
+        $"{service.Label} {service.Name} {service.Id} {service.Category}".Contains(_filter, StringComparison.OrdinalIgnoreCase))
+        .OrderBy(service => service.Label, StringComparer.OrdinalIgnoreCase).ToList();
+}

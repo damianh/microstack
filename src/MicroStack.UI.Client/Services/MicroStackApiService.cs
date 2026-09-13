@@ -1,4 +1,6 @@
 using System.Net.Http.Json;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace MicroStack.UI.Client.Services;
 
@@ -6,13 +8,14 @@ internal sealed class MicroStackApiService(HttpClient httpClient)
 {
     public async Task<HealthResponse?> GetHealthAsync(CancellationToken cancellationToken = default)
     {
-        return await httpClient.GetFromJsonAsync<HealthResponse>("/_microstack/health", cancellationToken);
+        return await httpClient.GetFromJsonAsync("/_microstack/health", LegacyJsonContext.Default.HealthResponse, cancellationToken)
+            ?? throw new JsonException("The API returned no health data.");
     }
 
     public async Task<IReadOnlyList<RequestLogEntry>> GetRequestsAsync(int limit = 1000, CancellationToken cancellationToken = default)
     {
-        var requests = await httpClient.GetFromJsonAsync<List<RequestLogEntry>>($"/_microstack/requests?limit={limit}", cancellationToken);
-        return requests ?? [];
+        return await httpClient.GetFromJsonAsync($"/_microstack/requests?limit={limit}", LegacyJsonContext.Default.RequestLogEntryArray, cancellationToken)
+            ?? throw new JsonException("The API returned no request data.");
     }
 
     public async Task DeleteRequestsAsync(CancellationToken cancellationToken = default)
@@ -23,8 +26,8 @@ internal sealed class MicroStackApiService(HttpClient httpClient)
 
     public async Task<IReadOnlyList<ResourceSummary>> GetResourcesAsync(CancellationToken cancellationToken = default)
     {
-        var resources = await httpClient.GetFromJsonAsync<List<ResourceSummary>>("/_microstack/resources", cancellationToken);
-        return resources ?? [];
+        return await httpClient.GetFromJsonAsync("/_microstack/resources", LegacyJsonContext.Default.ResourceSummaryArray, cancellationToken)
+            ?? throw new JsonException("The API returned no resource data.");
     }
 
     public async Task ResetAsync(CancellationToken cancellationToken = default)
@@ -38,3 +41,9 @@ internal sealed record HealthResponse(Dictionary<string, string> Services, strin
 internal sealed record RequestLogEntry(string Service, string Action, string AccountId, DateTimeOffset Timestamp, int StatusCode, long DurationMs);
 internal sealed record ResourceSummary(string Service, int Count, IReadOnlyList<ResourceItem> Items);
 internal sealed record ResourceItem(string Name, string Arn, Dictionary<string, string>? Attributes);
+
+[JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase, PropertyNameCaseInsensitive = true)]
+[JsonSerializable(typeof(HealthResponse))]
+[JsonSerializable(typeof(RequestLogEntry[]))]
+[JsonSerializable(typeof(ResourceSummary[]))]
+internal partial class LegacyJsonContext : JsonSerializerContext;

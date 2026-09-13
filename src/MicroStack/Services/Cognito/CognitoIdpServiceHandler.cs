@@ -12,7 +12,7 @@ namespace MicroStack.Services.Cognito;
 ///
 /// Port of ministack/services/cognito.py (IDP portion).
 /// </summary>
-internal sealed partial class CognitoIdpServiceHandler : IServiceHandler
+internal sealed partial class CognitoIdpServiceHandler : IServiceHandler, Internal.Admin.IAdminResourceSource
 {
     private readonly Lock _lock = new();
 

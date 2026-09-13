@@ -18,7 +18,7 @@ namespace MicroStack.Services.Kms;
 ///           EnableKey, DisableKey, ScheduleKeyDeletion, CancelKeyDeletion,
 ///           TagResource, UntagResource, ListResourceTags.
 /// </summary>
-internal sealed class KmsServiceHandler : IServiceHandler
+internal sealed partial class KmsServiceHandler : IServiceHandler, Internal.Admin.IAdminResourceSource
 {
     private readonly AccountScopedDictionary<string, KmsKeyRecord> _keys = new(); // keyed by KeyId
     private readonly AccountScopedDictionary<string, string> _aliases = new(); // alias_name -> key_id

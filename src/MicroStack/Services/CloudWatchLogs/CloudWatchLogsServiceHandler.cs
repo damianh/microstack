@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using MicroStack.Internal;
+using MicroStack.Internal.Admin;
 
 namespace MicroStack.Services.CloudWatchLogs;
 
@@ -20,7 +21,7 @@ namespace MicroStack.Services.CloudWatchLogs;
 ///           PutDestination, DescribeDestinations, PutDestinationPolicy, DeleteDestination,
 ///           StartQuery, GetQueryResults, StopQuery.
 /// </summary>
-internal sealed class CloudWatchLogsServiceHandler : IServiceHandler
+internal sealed partial class CloudWatchLogsServiceHandler : IServiceHandler, IAdminResourceSource
 {
     private readonly AccountScopedDictionary<string, LogGroup> _logGroups = new(); // keyed by group name
     private readonly AccountScopedDictionary<string, Destination> _destinations = new(); // keyed by dest name
