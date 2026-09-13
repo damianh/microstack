@@ -165,6 +165,11 @@ volumes:
 
 See [Docker](https://damianh.github.io/microstack/docker) for more options.
 
+MicroStack also supports generic
+[Testcontainers](https://damianh.github.io/microstack/testing) clients with random
+port mappings. Runnable .NET, Java, Go, Python, and TypeScript examples are included
+under `examples/testcontainers`.
+
 ## Using with AWS CLI
 
 ```bash

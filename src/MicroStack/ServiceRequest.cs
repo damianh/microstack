@@ -10,6 +10,12 @@ public sealed record ServiceRequest(
     byte[] Body,
     IReadOnlyDictionary<string, string[]> QueryParams)
 {
+    /// <summary>
+    /// Gets the externally visible origin of the HTTP request, when the request
+    /// originated from the gateway.
+    /// </summary>
+    public string? Origin { get; init; }
+
     /// <summary>Gets a header value case-insensitively, or null if not present.</summary>
     public string? GetHeader(string name)
     {

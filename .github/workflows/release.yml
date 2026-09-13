@@ -16,7 +16,7 @@ on:
 jobs:
   release:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     environment: nuget.org
     permissions:
       contents: write
@@ -39,6 +39,34 @@ jobs:
         with:
           dotnet-version: '10.0.x'
           dotnet-quality: 'preview'
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+          cache-dependency-path: examples/testcontainers/java/pom.xml
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: examples/testcontainers/go/go.mod
+          cache-dependency-path: examples/testcontainers/go/go.sum
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: examples/testcontainers/typescript/package-lock.json
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: examples/testcontainers/python/requirements.lock
 
       - name: Remove existing tag if present
         run: |
@@ -64,7 +92,7 @@ jobs:
         run: dotnet build MicroStack.slnx -c Release --no-restore
 
       - name: Test
-        run: dotnet test --project tests/MicroStack.Tests/MicroStack.Tests.csproj -c Release --no-build --filter-not-class MicroStack.Tests.ContainerSmokeTests
+        run: dotnet test --project tests/MicroStack.Tests/MicroStack.Tests.csproj -c Release --no-build
 
       - name: Pack NuGet packages
         run: dotnet pack src/MicroStack.Aspire.Hosting/MicroStack.Aspire.Hosting.csproj -c Release --no-build --output ./packages
@@ -93,12 +121,43 @@ jobs:
           -t ghcr.io/${{ github.repository_owner }}/microstack:latest
           .
 
-      - name: Smoke test container
+      - name: Test container contract
+        env:
+          MICROSTACK_TEST_IMAGE: ghcr.io/${{ github.repository_owner }}/microstack:${{ inputs.version }}
+        run: dotnet test --project tests/MicroStack.Testcontainers.Tests/MicroStack.Testcontainers.Tests.csproj -c Release
+
+      - name: Test .NET Testcontainers example
+        env:
+          MICROSTACK_TEST_IMAGE: ghcr.io/${{ github.repository_owner }}/microstack:${{ inputs.version }}
+        run: dotnet test --project examples/testcontainers/dotnet/MicroStack.Testcontainers.Example.csproj -c Release
+
+      - name: Test Java Testcontainers example
+        working-directory: examples/testcontainers/java
+        env:
+          MICROSTACK_TEST_IMAGE: ghcr.io/${{ github.repository_owner }}/microstack:${{ inputs.version }}
+        run: mvn --batch-mode test
+
+      - name: Test Go Testcontainers example
+        working-directory: examples/testcontainers/go
+        env:
+          MICROSTACK_TEST_IMAGE: ghcr.io/${{ github.repository_owner }}/microstack:${{ inputs.version }}
+        run: go test ./...
+
+      - name: Test Python Testcontainers example
+        env:
+          MICROSTACK_TEST_IMAGE: ghcr.io/${{ github.repository_owner }}/microstack:${{ inputs.version }}
         run: |
-          docker run --rm -d --name microstack-smoke -p 4566:4566 ghcr.io/${{ github.repository_owner }}/microstack:${{ inputs.version }}
-          sleep 3
-          curl -sf http://localhost:4566/_microstack/health || (docker logs microstack-smoke && exit 1)
-          docker stop microstack-smoke
+          python -m pip install --require-hashes -r examples/testcontainers/python/requirements.lock
+          python -m pytest -q examples/testcontainers/python
+
+      - name: Test TypeScript Testcontainers example
+        working-directory: examples/testcontainers/typescript
+        env:
+          MICROSTACK_TEST_IMAGE: ghcr.io/${{ github.repository_owner }}/microstack:${{ inputs.version }}
+        run: |
+          npm ci
+          npm run typecheck
+          npm test
 
       - name: Push container image to GHCR
         run: |

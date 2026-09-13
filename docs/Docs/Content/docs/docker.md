@@ -69,3 +69,10 @@ curl -X POST http://localhost:4566/_microstack/reset
 ```
 
 Clears all in-memory state across all services.
+
+## Dynamic Port Mapping
+
+Container frameworks such as Testcontainers should map container port `4566` to a
+random host port and wait for `/_microstack/health`. SQS automatically returns queue
+URLs using the incoming request's mapped authority. See
+[Integration Testing](/testing) for runnable examples in five languages.
