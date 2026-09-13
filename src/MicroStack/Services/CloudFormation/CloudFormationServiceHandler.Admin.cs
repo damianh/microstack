@@ -25,6 +25,13 @@ internal sealed partial class CloudFormationServiceHandler
         AdminData.Node("stack", name, name, arn, status) with
         {
             ReadFields = () => ReadStackFields(name),
+            ChildKinds =
+            [
+                new("resource", "Resources") { IsRoot = false },
+                new("event", "Events") { IsRoot = false },
+                new("output", "Outputs") { IsRoot = false },
+                new("template", "Templates") { IsRoot = false },
+            ],
             ReadChildren = () => ReadStackChildren(name),
         };
 

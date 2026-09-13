@@ -30,6 +30,9 @@ internal sealed partial class KmsServiceHandler : IServiceHandler, Internal.Admi
 
     public string ServiceName => "kms";
 
+    public IEnumerable<string> GetKnownAccountIds() =>
+        _keys.GetAccountIds().Concat(_aliases.GetAccountIds());
+
     public Task<ServiceResponse> HandleAsync(ServiceRequest request)
     {
         var target = request.GetHeader("x-amz-target") ?? "";

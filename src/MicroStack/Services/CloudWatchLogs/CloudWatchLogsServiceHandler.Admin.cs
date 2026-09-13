@@ -29,6 +29,13 @@ internal sealed partial class CloudWatchLogsServiceHandler
         AdminData.Node("log-group", name, name, arn) with
         {
             ReadFields = () => ReadGroupFields(name),
+            ChildKinds =
+            [
+                new("log-stream", "Log streams") { IsRoot = false },
+                new("subscription-filter", "Subscription filters") { IsRoot = false },
+                new("metric-filter", "Metric filters") { IsRoot = false },
+                new("tag", "Tags") { IsRoot = false },
+            ],
             ReadChildren = () => ReadGroupChildren(name),
         };
 
@@ -82,6 +89,7 @@ internal sealed partial class CloudWatchLogsServiceHandler
                     ];
                 }
             },
+            ChildKinds = [new("log-event", "Log events") { IsRoot = false }],
             ReadChildren = () => ReadEvents(groupName, streamName),
         };
 

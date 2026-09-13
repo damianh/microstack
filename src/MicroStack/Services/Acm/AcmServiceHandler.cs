@@ -24,6 +24,8 @@ internal sealed partial class AcmServiceHandler : IServiceHandler, Internal.Admi
 
     public string ServiceName => "acm";
 
+    public IEnumerable<string> GetKnownAccountIds() => _certificates.GetAccountIds();
+
     public Task<ServiceResponse> HandleAsync(ServiceRequest request)
     {
         var target = request.GetHeader("x-amz-target") ?? "";

@@ -11,6 +11,24 @@ internal sealed class Ec2ServiceHandler : IServiceHandler, IAdminResourceSource
 {
     public string ServiceName => "ec2";
 
+    public IEnumerable<string> GetKnownAccountIds() =>
+        _instances.GetAccountIds()
+            .Concat(_securityGroups.GetAccountIds(includeKey: key => key != DefaultSgId))
+            .Concat(_keyPairs.GetAccountIds())
+            .Concat(_vpcs.GetAccountIds(includeKey: key => key != DefaultVpcId))
+            .Concat(_subnets.GetAccountIds(includeKey: key =>
+                key is not (DefaultSubnetId or DefaultSubnetIdB or DefaultSubnetIdC)))
+            .Concat(_internetGateways.GetAccountIds(includeKey: key => key != DefaultIgwId))
+            .Concat(_addresses.GetAccountIds())
+            .Concat(_routeTables.GetAccountIds(includeKey: key => key != DefaultRtbId))
+            .Concat(_networkInterfaces.GetAccountIds()).Concat(_vpcEndpoints.GetAccountIds())
+            .Concat(_volumes.GetAccountIds()).Concat(_snapshots.GetAccountIds())
+            .Concat(_natGateways.GetAccountIds()).Concat(_networkAcls.GetAccountIds())
+            .Concat(_flowLogs.GetAccountIds()).Concat(_vpcPeering.GetAccountIds())
+            .Concat(_dhcpOptions.GetAccountIds()).Concat(_egressIgws.GetAccountIds())
+            .Concat(_prefixLists.GetAccountIds()).Concat(_vpnGateways.GetAccountIds())
+            .Concat(_customerGateways.GetAccountIds()).Concat(_launchTemplates.GetAccountIds());
+
     private const string Ec2Ns = "http://ec2.amazonaws.com/doc/2016-11-15/";
     private const string DefaultVpcId = "vpc-00000001";
     private const string DefaultSubnetId = "subnet-00000001";
@@ -193,7 +211,7 @@ internal sealed class Ec2ServiceHandler : IServiceHandler, IAdminResourceSource
             new("vpn-gateways", "VPN gateways"),
             new("customer-gateways", "Customer gateways"),
             new("launch-templates", "Launch templates"),
-            new("launch-template-versions", "Launch template versions"),
+            new("launch-template-versions", "Launch template versions") { IsRoot = false },
         ] : [];
 
         public IEnumerable<AdminNode> GetAdminResources(string serviceId)
@@ -295,6 +313,7 @@ internal sealed class Ec2ServiceHandler : IServiceHandler, IAdminResourceSource
                         "LaunchTemplateId", "LaunchTemplateName", "CreateTime", "LatestVersionNumber",
                         "DefaultVersionNumber"),
                     ReadContent = () => AdminProjection.Content(snapshot),
+                    ChildKinds = [new("launch-template-versions", "Launch template versions") { IsRoot = false }],
                     ReadChildren = () => children,
                 });
             }

@@ -67,6 +67,11 @@ internal sealed class EcsServiceHandler : IServiceHandler, IAdminResourceSource
 
     public string ServiceName => "ecs";
 
+    public IEnumerable<string> GetKnownAccountIds() =>
+        _clusters.GetAccountIds().Concat(_taskDefs.GetAccountIds())
+            .Concat(_services.GetAccountIds()).Concat(_tasks.GetAccountIds())
+            .Concat(_capacityProviders.GetAccountIds());
+
     public Task<ServiceResponse> HandleAsync(ServiceRequest request)
     {
         var target = request.GetHeader("x-amz-target") ?? "";
@@ -185,8 +190,8 @@ internal sealed class EcsServiceHandler : IServiceHandler, IAdminResourceSource
             serviceId == ServiceName ?
         [
             new("clusters", "Clusters"),
-            new("services", "Services"),
-            new("tasks", "Tasks"),
+            new("services", "Services") { IsRoot = false },
+            new("tasks", "Tasks") { IsRoot = false },
             new("task-definitions", "Task definitions"),
         ] : [];
 
@@ -227,6 +232,11 @@ internal sealed class EcsServiceHandler : IServiceHandler, IAdminResourceSource
                             "status", "registeredContainerInstancesCount", "runningTasksCount",
                             "pendingTasksCount", "activeServicesCount"),
                         ReadContent = () => AdminProjection.Content(clusterSnapshot),
+                        ChildKinds =
+                        [
+                            new("services", "Services") { IsRoot = false },
+                            new("tasks", "Tasks") { IsRoot = false },
+                        ],
                         ReadChildren = () => frozenChildren,
                     });
                 }

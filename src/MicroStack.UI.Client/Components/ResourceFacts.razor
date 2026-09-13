@@ -1,0 +1,18 @@
+@if (Fields.Count > 0)
+{
+    <dl class="resource-facts @(Compact ? "compact" : "")" aria-label="@Label">
+        @foreach (var field in Fields)
+        {
+            <div><dt>@field.Name</dt><dd>
+                @InspectionProfile.FieldValue(field)
+                @if (Copyable && !field.Sensitive) { <CopyButton Text="@field.Value" Label="@($"Copy {field.Name}")" /> }
+            </dd></div>
+        }
+    </dl>
+}
+@code {
+    [Parameter] public IReadOnlyList<AdminField> Fields { get; set; } = [];
+    [Parameter] public bool Compact { get; set; }
+    [Parameter] public bool Copyable { get; set; }
+    [Parameter] public string Label { get; set; } = "Resource summary";
+}

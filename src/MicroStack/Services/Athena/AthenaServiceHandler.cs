@@ -73,6 +73,10 @@ internal sealed class AthenaServiceHandler : IServiceHandler, IAdminResourceSour
 
     public string ServiceName => "athena";
 
+    public IEnumerable<string> GetKnownAccountIds() =>
+        _executions.GetAccountIds().Concat(_namedQueries.GetAccountIds())
+            .Concat(_preparedStatements.GetAccountIds());
+
     public Task<ServiceResponse> HandleAsync(ServiceRequest request)
     {
         var target = request.GetHeader("x-amz-target") ?? "";
@@ -217,6 +221,7 @@ internal sealed class AthenaServiceHandler : IServiceHandler, IAdminResourceSour
                     ];
                 }
             },
+            ChildKinds = [new("result-row", "Result rows") { IsRoot = false }],
             ReadChildren = () =>
             {
                 lock (_lock)

@@ -43,6 +43,9 @@ internal sealed partial class SnsServiceHandler : IServiceHandler
 
     public string ServiceName => "sns";
 
+    public IEnumerable<string> GetKnownAccountIds() =>
+        _topics.GetAccountIds().Concat(_platformApps.GetAccountIds()).Concat(_platformEndpoints.GetAccountIds());
+
     public Task<ServiceResponse> HandleAsync(ServiceRequest request)
     {
         // SNS uses Query (form-encoded) protocol — parse form params from body and query string.

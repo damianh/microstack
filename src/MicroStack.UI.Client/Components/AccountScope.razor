@@ -1,24 +1,37 @@
 <div class="scope">
-    <form @onsubmit="ApplyAsync" @onsubmit:preventDefault>
+    @if (Accounts.Count == 1 && Accounts[0] == Account)
+    {
+        <span>Account <code id="account-id">@Account</code>@(Account == DefaultAccount ? " (default)" : "")</span>
+    }
+    else if (Accounts.Count > 0)
+    {
         <label for="account-id">Account</label>
-        <input id="account-id" type="text" inputmode="numeric" pattern="[0-9]{12}" maxlength="12" minlength="12" required
-               aria-describedby="account-help" @bind="_draft" aria-invalid="@(_error is not null ? "true" : "false")" />
-        <button class="button" type="submit" disabled="@(_draft == Account)">Switch</button>
-        <span id="account-help" class="@(_error is null ? "sr-only" : "field-error")">@(_error ?? "Enter a 12-digit account ID.")</span>
-    </form>
-    <span>Configured region <code>@Region</code></span>
+        <select id="account-id" value="@(Accounts.Contains(Account) ? Account : "")" @onchange="ApplyAsync" aria-describedby="account-help">
+            @if (!Accounts.Contains(Account))
+            { <option value="" disabled>Select a known account</option> }
+            @foreach (var account in Accounts)
+            { <option value="@account">@account@(account == DefaultAccount ? " (default)" : "")</option> }
+        </select>
+        <span id="account-help" class="sr-only">Accounts with retained resources and the configured default account.</span>
+    }
+    @if (_error is not null) { <span class="field-error" role="alert">@_error</span> }
 </div>
 @code {
     [Parameter] public string Account { get; set; } = "";
-    [Parameter] public string Region { get; set; } = "";
+    [Parameter] public string DefaultAccount { get; set; } = "";
+    [Parameter] public IReadOnlyList<string> Accounts { get; set; } = [];
     [Parameter] public EventCallback<string> AccountChanged { get; set; }
-    private string _draft = "";
     private string? _error;
-    protected override void OnParametersSet() { _draft = Account; _error = null; }
-    private async Task ApplyAsync()
+    protected override void OnParametersSet() => _error = null;
+    private async Task ApplyAsync(ChangeEventArgs args)
     {
-        if (!ExplorerLocation.ValidAccount(_draft)) { _error = "Use exactly 12 digits."; return; }
+        var account = args.Value?.ToString();
+        if (account is null || !Accounts.Contains(account))
+        {
+            _error = "This account is no longer available. Refresh the page to update known accounts.";
+            return;
+        }
         _error = null;
-        await AccountChanged.InvokeAsync(_draft);
+        if (account != Account) await AccountChanged.InvokeAsync(account);
     }
 }

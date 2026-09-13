@@ -45,6 +45,11 @@ internal sealed class GlueServiceHandler : IServiceHandler, IAdminResourceSource
 
     public string ServiceName => "glue";
 
+    public IEnumerable<string> GetKnownAccountIds() =>
+        _databases.GetAccountIds().Concat(_tables.GetAccountIds())
+            .Concat(_crawlers.GetAccountIds()).Concat(_jobs.GetAccountIds())
+            .Concat(_registries.GetAccountIds()).Concat(_schemas.GetAccountIds());
+
     public Task<ServiceResponse> HandleAsync(ServiceRequest request)
     {
         var target = request.GetHeader("x-amz-target") ?? "";
@@ -192,6 +197,7 @@ internal sealed class GlueServiceHandler : IServiceHandler, IAdminResourceSource
         var arn = Arn("database", name);
         return SimpleNode("database", name, database, null, ["Parameters"], arn) with
         {
+            ChildKinds = [new("table", "Tables") { IsRoot = false }],
             ReadChildren = () =>
             {
                 lock (_lock)
@@ -218,6 +224,7 @@ internal sealed class GlueServiceHandler : IServiceHandler, IAdminResourceSource
         return SimpleNode("table", name, table, "TableType",
             ["StorageDescriptor", "PartitionKeys", "Parameters"]) with
         {
+            ChildKinds = [new("partition", "Partitions") { IsRoot = false }],
             ReadChildren = () =>
             {
                 lock (_lock)
@@ -250,6 +257,7 @@ internal sealed class GlueServiceHandler : IServiceHandler, IAdminResourceSource
     private AdminNode JobNode(string name, Dictionary<string, object?> job) =>
         SimpleNode("job", name, job, null, ["Command", "DefaultArguments"]) with
         {
+            ChildKinds = [new("job-run", "Job runs") { IsRoot = false }],
             ReadChildren = () =>
             {
                 lock (_lock)
@@ -276,6 +284,7 @@ internal sealed class GlueServiceHandler : IServiceHandler, IAdminResourceSource
     private AdminNode RegistryNode(string name, Dictionary<string, object?> registry) =>
         SimpleNode("registry", name, registry, "Status", [], AnalyticsAdminData.String(registry, "RegistryArn")) with
         {
+            ChildKinds = [new("schema", "Schemas") { IsRoot = false }],
             ReadChildren = () =>
             {
                 lock (_lock)
@@ -289,6 +298,7 @@ internal sealed class GlueServiceHandler : IServiceHandler, IAdminResourceSource
         SimpleNode("schema", AnalyticsAdminData.String(schema, "SchemaName") ?? key,
             schema, "SchemaStatus", [], AnalyticsAdminData.String(schema, "SchemaArn")) with
         {
+            ChildKinds = [new("schema-version", "Schema versions") { IsRoot = false }],
             ReadChildren = () =>
             {
                 lock (_lock)

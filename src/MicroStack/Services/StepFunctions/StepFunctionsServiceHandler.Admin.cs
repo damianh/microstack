@@ -8,19 +8,41 @@ using MicroStack.Internal.Admin;
 
 namespace MicroStack.Services.StepFunctions;
 
-internal sealed partial class StepFunctionsServiceHandler : IAdminResourceSource
+internal sealed partial class StepFunctionsServiceHandler : IAdminResourceSource, IAdminRelationshipSource
 {
     private static readonly AdminResourceKind[] AdminKinds =
     [
         new("state-machines", "State machines"),
-        new("executions", "Executions"),
-        new("history-events", "History events"),
+        new("executions", "Executions") { IsRoot = false },
+        new("history-events", "History events") { IsRoot = false },
         new("activities", "Activities"),
-        new("activity-tasks", "Activity tasks")
+        new("activity-tasks", "Activity tasks") { IsRoot = false }
     ];
 
     public IReadOnlyList<AdminResourceKind> GetAdminResourceKinds(string serviceId) =>
         serviceId == "stepfunctions" ? AdminKinds : [];
+
+    public AdminRelationshipSnapshot GetAdminRelationshipSnapshot()
+    {
+        var resources = new List<AdminRelationshipResource>();
+        AddResources(_stateMachines, "state-machines", "stateMachineArn");
+        AddResources(_activities, "activities", "activityArn");
+        return new(resources, []);
+
+        void AddResources(
+            AccountScopedDictionary<string, Dictionary<string, object?>> source, string kind, string arnKey)
+        {
+            foreach (var item in source.Items.OrderBy(item => item.Key, StringComparer.Ordinal).ToArray())
+            {
+                lock (item.Value)
+                {
+                    var arn = GetString(item.Value, arnKey) ?? item.Key;
+                    resources.Add(new([new(kind, arn)], GetString(item.Value, "name") ?? arn,
+                        GetString(item.Value, "status"), arn));
+                }
+            }
+        }
+    }
 
     public IEnumerable<AdminNode> GetAdminResources(string serviceId)
     {
@@ -76,6 +98,7 @@ internal sealed partial class StepFunctionsServiceHandler : IAdminResourceSource
                 AdminData.Field("Created", Iso(machine, "creationDate"), format: "datetime"),
                 AdminData.Field("Executions", children.Length.ToString(CultureInfo.InvariantCulture))
             ],
+            ChildKinds = [AdminKinds[1]],
             ReadChildren = () => children.Select(ExecutionNode).ToArray(),
             ReadContent = () => SafeJsonText(definition),
             ReadConnections = () => DefinitionConnections(definition)
@@ -98,6 +121,7 @@ internal sealed partial class StepFunctionsServiceHandler : IAdminResourceSource
                 AdminData.Field("Stopped", Iso(execution, "stopDate"), format: "datetime"),
                 AdminData.Field("History events", events.Length.ToString(CultureInfo.InvariantCulture))
             ],
+            ChildKinds = [AdminKinds[2]],
             ReadChildren = () => events.Select(HistoryEventNode).ToArray(),
             ReadContent = () => AdminData.Json(new Dictionary<string, object?>
             {
@@ -136,6 +160,7 @@ internal sealed partial class StepFunctionsServiceHandler : IAdminResourceSource
                 AdminData.Field("Created", Iso(activity, "creationDate"), format: "datetime"),
                 AdminData.Field("Pending tasks", tasks.Length.ToString(CultureInfo.InvariantCulture))
             ],
+            ChildKinds = [AdminKinds[4]],
             ReadChildren = () => tasks.Select(ActivityTaskNode).ToArray()
         };
     }

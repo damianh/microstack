@@ -9,9 +9,9 @@ internal sealed partial class CognitoIdpServiceHandler
     private static readonly AdminResourceKind[] AdminKinds =
     [
         new("user-pool", "User pools"),
-        new("user-pool-client", "User pool clients"),
-        new("user", "Users"),
-        new("group", "Groups")
+        new("user-pool-client", "User pool clients") { IsRoot = false },
+        new("user", "Users") { IsRoot = false },
+        new("group", "Groups") { IsRoot = false }
     ];
 
     public IReadOnlyList<AdminResourceKind> GetAdminResourceKinds(string serviceId) => AdminKinds;
@@ -48,6 +48,7 @@ internal sealed partial class CognitoIdpServiceHandler
                     ];
                 }
             },
+            ChildKinds = AdminKinds[1..],
             ReadChildren = () =>
             {
                 lock (_lock)

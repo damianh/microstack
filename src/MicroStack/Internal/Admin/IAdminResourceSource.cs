@@ -2,7 +2,7 @@ using MicroStack.Admin.Contracts;
 
 namespace MicroStack.Internal.Admin;
 
-internal interface IAdminResourceSource
+internal interface IAdminResourceSource : IKnownAccountSource
 {
     IReadOnlyList<AdminResourceKind> GetAdminResourceKinds(string serviceId);
     IEnumerable<AdminNode> GetAdminResources(string serviceId);

@@ -67,6 +67,9 @@ internal sealed partial class EfsServiceHandler : IServiceHandler, IAdminResourc
 
     public string ServiceName => "elasticfilesystem";
 
+    public IEnumerable<string> GetKnownAccountIds() =>
+        _fileSystems.GetAccountIds().Concat(_mountTargets.GetAccountIds()).Concat(_accessPoints.GetAccountIds());
+
     public Task<ServiceResponse> HandleAsync(ServiceRequest request)
     {
         JsonElement body;
@@ -151,6 +154,15 @@ internal sealed partial class EfsServiceHandler : IServiceHandler, IAdminResourc
             fs.GetValueOrDefault("LifeCycleState")?.ToString()) with
         {
             ReadFields = () => ReadEfsFields(_fileSystems, id),
+            ChildKinds =
+            [
+                new("mount-targets", "Mount targets") { IsRoot = false },
+                new("access-points", "Access points") { IsRoot = false },
+                new("lifecycle-configurations", "Lifecycle configurations") { IsRoot = false },
+                new("backup-policies", "Backup policies") { IsRoot = false },
+                new("policies", "File system policies") { IsRoot = false },
+                new("tags", "Tags") { IsRoot = false },
+            ],
             ReadChildren = () => ReadEfsChildren(id),
         };
     }
@@ -233,6 +245,7 @@ internal sealed partial class EfsServiceHandler : IServiceHandler, IAdminResourc
             value.GetValueOrDefault("LifeCycleState")?.ToString()) with
         {
             ReadFields = () => ReadEfsFields(source, id),
+            ChildKinds = [new("tags", "Tags") { IsRoot = false }],
             ReadChildren = value.GetValueOrDefault("Tags") is List<Dictionary<string, object?>>
                 ? () =>
                 {

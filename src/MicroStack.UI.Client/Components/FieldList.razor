@@ -22,9 +22,9 @@
                 }
                 else if (field.Format == "json")
                 {
-                    <pre tabindex="0">@field.Value</pre>
+                    <div class="field-value"><pre tabindex="0">@field.Value</pre><CopyButton Text="@field.Value" Label="@($"Copy {field.Name}")" /></div>
                 }
-                else { <code>@DisplayValue(field)</code> }
+                else { <div class="field-value"><code>@InspectionProfile.FieldValue(field)</code><CopyButton Text="@field.Value" Label="@($"Copy {field.Name}")" /></div> }
             </dd>
         </div>
     }
@@ -76,12 +76,5 @@
         finally { if (!token.IsCancellationRequested) _busy = false; }
     }
     private void Hide(string field) { _revealed.Remove(field); _error = null; }
-    private static string DisplayValue(AdminField field)
-    {
-        if (field.Format is "timestamp" or "datetime" or "date-time" && DateTimeOffset.TryParse(field.Value,
-            System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AssumeUniversal, out var timestamp))
-            return ExplorerLocation.Utc(timestamp);
-        return field.Value ?? "Not set";
-    }
     public void Dispose() { _cts.Cancel(); _cts.Dispose(); _revealed.Clear(); }
 }

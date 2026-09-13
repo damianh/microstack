@@ -29,6 +29,8 @@ internal sealed partial class CognitoIdentityServiceHandler : IServiceHandler, I
     // ── IServiceHandler ────────────────────────────────────────────────────
     public string ServiceName => "cognito-identity";
 
+    public IEnumerable<string> GetKnownAccountIds() => _identityPools.GetAccountIds();
+
     public Task<ServiceResponse> HandleAsync(ServiceRequest request)
     {
         var target = request.GetHeader("x-amz-target") ?? "";

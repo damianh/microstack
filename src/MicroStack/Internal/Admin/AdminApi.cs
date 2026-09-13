@@ -18,6 +18,12 @@ internal static class AdminApi
             Ok(new AdminContext(options.DefaultAccountId, options.Region), AdminJsonContext.Default.AdminContext))
             .RequireCors(corsPolicy);
 
+        app.MapGet(Root + "/accounts", (HttpContext context) =>
+        {
+            context.Response.Headers.CacheControl = "no-store";
+            return Ok(registry.GetKnownAccountIds(options.DefaultAccountId), AdminJsonContext.Default.StringArray);
+        }).RequireCors(corsPolicy);
+
         app.MapGet(Root + "/services", (HttpContext context) =>
             WithAccount(context, options, _ => Ok(
                 AdminCatalog.Entries.Select(entry => AdminCatalog.Describe(entry, registry)).ToArray(),
@@ -44,15 +50,23 @@ internal static class AdminApi
             .RequireCors(corsPolicy);
 
         app.MapGet(Root + "/services/{service}/resource", (HttpContext context, string service) =>
-            WithNode(context, service, registry, options, (node, _) =>
-                Ok(new AdminResourceDetail(node.Resource)
+            WithNode(context, service, registry, options, (node, scope) =>
+            {
+                var connections = new AdminRelationshipResolver(registry, scope.Account)
+                    .Read(node, scope.Service, scope.Path);
+                var hasConnections = node.ReadConnections is not null || connections.Count > 0;
+                return Ok(new AdminResourceDetail(node.Resource)
                 {
                     Fields = node.ReadFields?.Invoke() ?? [],
+                    Summary = node.ReadSummary?.Invoke() ?? [],
+                    ChildKinds = node.ChildKinds,
                     HasChildren = node.ReadChildren is not null,
                     HasContent = node.ReadContent is not null,
-                    HasConnections = node.ReadConnections is not null,
+                    HasConnections = hasConnections,
+                    ConnectionCount = hasConnections ? connections.Count : null,
                     RevealableFields = node.RevealableFields
-                }, AdminJsonContext.Default.AdminResourceDetail)))
+                }, AdminJsonContext.Default.AdminResourceDetail);
+            }))
             .RequireCors(corsPolicy);
 
         app.MapGet(Root + "/services/{service}/children", (HttpContext context, string service) =>
@@ -94,13 +108,13 @@ internal static class AdminApi
         app.MapGet(Root + "/services/{service}/connections", (HttpContext context, string service) =>
             WithNode(context, service, registry, options, (node, scope) =>
             {
-                if (node.ReadConnections is null)
-                    return Error(409, "capability_unavailable", "This resource does not expose connections.");
                 if (!TryPage(context, Scope(scope.Service, scope.Account, scope.Path, "connections"),
                         out var page, out var error))
                     return error;
-                var values = node.ReadConnections().OrderBy(connection => connection.Label, StringComparer.Ordinal)
-                    .ThenBy(connection => connection.Relation, StringComparer.Ordinal);
+                var values = new AdminRelationshipResolver(registry, scope.Account)
+                    .Read(node, scope.Service, scope.Path);
+                if (node.ReadConnections is null && values.Count == 0)
+                    return Error(409, "capability_unavailable", "This resource does not expose connections.");
                 return ConnectionPage(values, page);
             }))
             .RequireCors(corsPolicy);
@@ -188,14 +202,16 @@ internal static class AdminApi
     {
         IEnumerable<AdminNode> level = source.GetAdminResources(service);
         AdminNode? current = null;
-        foreach (var key in path)
+        for (var index = 0; index < path.Length; index++)
         {
+            var key = path[index];
             current = level.FirstOrDefault(node =>
                 string.Equals(node.Resource.Key.Kind, key.Kind, StringComparison.Ordinal)
                 && string.Equals(node.Resource.Key.Id, key.Id, StringComparison.Ordinal));
             if (current is null)
                 return null;
-            level = current.ReadChildren?.Invoke() ?? [];
+            if (index < path.Length - 1)
+                level = current.ReadChildren?.Invoke() ?? [];
         }
         return current;
     }
@@ -264,7 +280,7 @@ internal static class AdminApi
         }, AdminJsonContext.Default.AdminPageAdminResourceSummary);
     }
 
-    private static IResult ConnectionPage(IEnumerable<AdminConnection> values, PageRequest page)
+    private static IResult ConnectionPage(IReadOnlyList<AdminConnection> values, PageRequest page)
     {
         var items = values.Skip(page.Offset).Take(page.Size + 1).ToArray();
         var hasMore = items.Length > page.Size;
@@ -272,6 +288,7 @@ internal static class AdminApi
         {
             Items = hasMore ? items[..page.Size] : items,
             NextCursor = hasMore ? Cursor.Encode(page.Offset + page.Size, page.Scope) : null,
+            KnownTotal = values.Count,
             CapturedAt = DateTimeOffset.UtcNow
         }, AdminJsonContext.Default.AdminPageAdminConnection);
     }

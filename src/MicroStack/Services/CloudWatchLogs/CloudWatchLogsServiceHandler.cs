@@ -41,6 +41,9 @@ internal sealed partial class CloudWatchLogsServiceHandler : IServiceHandler, IA
 
     public string ServiceName => "logs";
 
+    public IEnumerable<string> GetKnownAccountIds() =>
+        _logGroups.GetAccountIds().Concat(_destinations.GetAccountIds()).Concat(_queries.GetAccountIds());
+
     public Task<ServiceResponse> HandleAsync(ServiceRequest request)
     {
         var target = request.GetHeader("x-amz-target") ?? "";

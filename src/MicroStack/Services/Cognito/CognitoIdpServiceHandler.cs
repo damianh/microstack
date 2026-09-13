@@ -37,6 +37,8 @@ internal sealed partial class CognitoIdpServiceHandler : IServiceHandler, Intern
     // ── IServiceHandler ────────────────────────────────────────────────────
     public string ServiceName => "cognito-idp";
 
+    public IEnumerable<string> GetKnownAccountIds() => UserPools.GetAccountIds();
+
     public Task<ServiceResponse> HandleAsync(ServiceRequest request)
     {
         var path = request.Path;

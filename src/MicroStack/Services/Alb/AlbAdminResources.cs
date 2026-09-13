@@ -9,16 +9,17 @@ internal sealed partial class AlbServiceHandler
 {
     private static readonly AdminResourceKind[] AdminKinds =
     [
-        new("load-balancers", "Load balancers"), new("listeners", "Listeners"),
-        new("rules", "Rules"), new("target-groups", "Target groups"), new("targets", "Targets"),
+        new("load-balancers", "Load balancers"), new("listeners", "Listeners") { IsRoot = false },
+        new("rules", "Rules") { IsRoot = false }, new("target-groups", "Target groups"),
+        new("targets", "Targets") { IsRoot = false },
     ];
 
     public IReadOnlyList<AdminResourceKind> GetAdminResourceKinds(string serviceId) =>
-        serviceId == ServiceName ? AdminKinds : [];
+        serviceId == "alb" || serviceId == ServiceName ? AdminKinds : [];
 
     public IEnumerable<AdminNode> GetAdminResources(string serviceId)
     {
-        if (serviceId != ServiceName)
+        if (serviceId != "alb" && serviceId != ServiceName)
             return [];
         lock (_lock)
         {
@@ -39,6 +40,7 @@ internal sealed partial class AlbServiceHandler
         return node with
         {
             ReadContent = () => ResourceConfiguration(arn, lb, _lbAttrs),
+            ChildKinds = [AdminKinds[1]],
             ReadChildren = () =>
             {
                 lock (_lock)
@@ -56,6 +58,7 @@ internal sealed partial class AlbServiceHandler
         var port = NetworkingAdminData.Get(listener, "Port");
         return ObjectNode("listeners", arn, $"{protocol}:{port}", listener, arn) with
         {
+            ChildKinds = [AdminKinds[2]],
             ReadChildren = () =>
             {
                 lock (_lock)
@@ -95,6 +98,7 @@ internal sealed partial class AlbServiceHandler
         return node with
         {
             ReadContent = () => ResourceConfiguration(arn, targetGroup, _tgAttrs),
+            ChildKinds = [AdminKinds[4]],
             ReadChildren = () =>
             {
                 lock (_lock)

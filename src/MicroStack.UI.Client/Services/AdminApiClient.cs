@@ -16,6 +16,7 @@ public sealed class AdminApiClient(HttpClient http)
 {
     private const string Root = "/_microstack/admin/v1";
     public Task<AdminContext> ContextAsync(CancellationToken ct) => GetAsync(Root + "/context", AdminJsonContext.Default.AdminContext, ct);
+    public Task<string[]> AccountsAsync(CancellationToken ct) => GetAsync(Root + "/accounts", AdminJsonContext.Default.StringArray, ct);
     public Task<AdminService[]> ServicesAsync(string account, CancellationToken ct) =>
         GetAsync(Url("/services", account), AdminJsonContext.Default.AdminServiceArray, ct);
     public Task<AdminPage<AdminResourceSummary>> ResourcesAsync(string service, string account, string? kind, string? filter, string? cursor, CancellationToken ct) =>

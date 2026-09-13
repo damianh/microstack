@@ -46,6 +46,7 @@ internal sealed partial class CloudWatchServiceHandler
                 AdminData.Field("Metric name", name),
                 AdminData.Field("Dimensions", dimensions),
             ],
+            ChildKinds = [new("datapoint", "Datapoints") { IsRoot = false }],
             ReadChildren = () => ReadMetricPoints(key),
         };
 

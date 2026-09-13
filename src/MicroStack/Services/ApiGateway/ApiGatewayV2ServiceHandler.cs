@@ -53,6 +53,9 @@ internal sealed partial class ApiGatewayV2ServiceHandler : IServiceHandler, IAdm
 
     public string ServiceName => "apigateway";
 
+    public IEnumerable<string> GetKnownAccountIds() =>
+        _apis.GetAccountIds().Concat(_v1Handler.GetKnownAccountIds());
+
     public Task<ServiceResponse> HandleAsync(ServiceRequest request)
     {
         lock (_lock)

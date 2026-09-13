@@ -1,0 +1,68 @@
+@implements IDisposable
+<div class="search live-filter">
+    <svg aria-hidden="true" viewBox="0 0 20 20"><circle cx="8.5" cy="8.5" r="5.5" /><path d="m13 13 4 4" /></svg>
+    <input @ref="_input" type="search" aria-label="@Label" placeholder="@Placeholder" value="@_text" @oninput="InputAsync" @onkeydown="KeyDownAsync" />
+    @if (_text.Length > 0)
+    {
+        <button type="button" class="filter-clear" aria-label="@($"Clear {Label.ToLowerInvariant()}")" title="Clear filter" @onclick="ClearAsync">
+            <svg aria-hidden="true" viewBox="0 0 20 20"><path d="m5 5 10 10M15 5 5 15" /></svg>
+        </button>
+    }
+</div>
+@code {
+    [Parameter] public string? Value { get; set; }
+    [Parameter] public string Scope { get; set; } = "";
+    [Parameter] public string Label { get; set; } = "Filter resources";
+    [Parameter] public string Placeholder { get; set; } = "Filter by name or identifier…";
+    [Parameter] public EventCallback<string> Changed { get; set; }
+    [Parameter] public TimeProvider Clock { get; set; } = TimeProvider.System;
+    private DebouncedAction? _debounce;
+    private ElementReference _input;
+    private string _text = "", _parameter = "";
+    private string? _scope, _submitted;
+
+    protected override void OnParametersSet()
+    {
+        _debounce ??= new(Clock);
+        var value = Value ?? "";
+        if (_scope != Scope)
+        {
+            _debounce.Cancel();
+            _scope = Scope;
+            _text = value;
+            _submitted = null;
+        }
+        else if (_parameter != value && value != _submitted)
+        {
+            _debounce.Cancel();
+            _text = value;
+        }
+        _parameter = value;
+    }
+
+    private Task InputAsync(ChangeEventArgs args)
+    {
+        _text = args.Value?.ToString() ?? "";
+        return ApplyAsync(_text.Length == 0);
+    }
+
+    private Task KeyDownAsync(KeyboardEventArgs args) => args.Key == "Enter" ? ApplyAsync(true) : Task.CompletedTask;
+    private async Task ClearAsync()
+    {
+        _text = "";
+        var apply = ApplyAsync(true);
+        await _input.FocusAsync(preventScroll: true);
+        await apply;
+    }
+    private Task ApplyAsync(bool immediately)
+    {
+        var text = _text;
+        return _debounce!.RunAsync(token => InvokeAsync(async () =>
+        {
+            if (token.IsCancellationRequested) return;
+            _submitted = text;
+            await Changed.InvokeAsync(text);
+        }), immediately);
+    }
+    public void Dispose() => _debounce?.Dispose();
+}

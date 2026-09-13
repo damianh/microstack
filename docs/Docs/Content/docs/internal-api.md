@@ -32,11 +32,14 @@ data-plane operations to discover resources.
 # Configured region, default account, and API capabilities
 curl http://localhost:4566/_microstack/admin/v1/context
 
+# Known accounts with retained resources, plus the configured default
+curl http://localhost:4566/_microstack/admin/v1/accounts
+
 # Declared service catalog and current availability
 curl "http://localhost:4566/_microstack/admin/v1/services?accountId=000000000000"
 
 # First page of S3 resources
-curl "http://localhost:4566/_microstack/admin/v1/services/s3/resources?accountId=000000000000&limit=50"
+curl "http://localhost:4566/_microstack/admin/v1/services/s3/resources?accountId=000000000000&pageSize=50"
 ```
 
 The service endpoints are:
@@ -55,10 +58,114 @@ Append these paths to `/_microstack/admin/v1`. Resource and child identities are
 opaque JSON paths passed in the `path` query parameter. Clients should use the
 paths returned by the API rather than constructing or splitting identifiers.
 
-Lists default to 50 entries and accept `limit` values from 1 through 200.
+Lists default to 50 entries and accept `pageSize` values from 1 through 200.
 Continuation tokens are opaque and scoped to the service, account, kind, and
 parent path; a token cannot be reused in another scope. The optional `accountId`
 must contain exactly 12 ASCII digits and defaults to the configured account.
+
+### Known accounts
+
+`GET /_microstack/admin/v1/accounts` returns a JSON string array, for example
+`["000000000000","111111111111","222222222222"]`. IDs are distinct, sorted
+ordinally, and contain exactly 12 ASCII digits. The configured default is always
+included, even without resources; invalid `MICROSTACK_ACCOUNT_ID` configuration
+is rejected at startup. The response uses `Cache-Control: no-store`.
+
+Discovery reads explicit retained-resource ownership from enabled handlers,
+including restored persistent state. It does not inspect request logs, remember
+previously selected accounts, create resources, or scan resource payloads.
+Reading an empty account does not add it. An account disappears once its last
+retained resource is removed, or after reset, unless it is the configured default.
+Retained execution/query resources can keep an account present; secondary
+indexes, tags left behind after deletion, and empty child containers do not.
+Concurrent mutations are not a transactionally simultaneous cross-service snapshot.
+EC2's automatically seeded default VPC, subnets, security group, route table, and
+internet gateway do not qualify on their own: the handler initializes these even
+on read requests. User-created EC2 resources do qualify.
+
+Instance-global resources have no account ownership and do not add accounts.
+These include Firehose streams, RDS Data transactions, Athena workgroups/catalogs,
+EventBridge buses/partner sources, and SES sent-email history. Other account-scoped
+resources in those services still participate. Discovery does not add persistence
+support to handlers that do not already implement it. The UI selects known
+accounts only; there is no admin account-creation endpoint.
+
+The canonical browser routes are `/ui/accounts/{accountId}/services` and
+`/ui/accounts/{accountId}/services/{serviceId}`, with a 12-digit account ID.
+Legacy `/ui/`, `/ui/resources`, and `/ui/services/{serviceId}` links redirect to
+the account-scoped routes, using the legacy `account` query parameter when
+present, otherwise the last explorer account in this tab or the configured default.
+Redirects replace the current history entry and preserve the remaining
+query-based inspection state. An unknown account in a URL prompts the user to
+choose a known account rather than creating an account or querying its resources.
+The account selector lives in the application header on explorer pages. With one
+known account it displays plain text; with multiple accounts it switches immediately,
+retaining the service but clearing resource and payload selections. Only the last
+known selected account ID is saved in browser session storage, scoped to this origin
+and tab; this is navigation context, not account discovery. Explicit account routes
+and legacy account query parameters take precedence over saved context. A deleted
+saved account requires an explicit known-account selection, not a silent fallback.
+
+Overview and Request log remain instance-wide and show "Instance-wide" in the header
+instead of a selector. Visiting or refreshing either page does not change the
+remembered explorer account: Services and the brand link return to that account.
+Overview's legacy resource summary still covers only the configured default account,
+as labeled; its reset affects every account. Storage failures are shown explicitly;
+in-memory account navigation still works when browser storage is unavailable.
+These browser routes do not change the admin API's `accountId` query parameter or
+AWS request scoping.
+
+### Inspector metadata and filtering
+
+The explorer uses the same inspection shell across all services, with
+service-specific summaries where the handler retains the necessary data.
+Service `kinds` include an `isRoot` flag: only root kinds belong in the resource
+picker. Child kinds remain available through opaque resource paths. A detail's
+`childKinds` describe its collections even when they are empty.
+
+Resource summaries may supply a `type` and small `summary` fields for list rows.
+Details may supply their own `summary` fields and a known `connectionCount`.
+Missing metadata is not a zero count or a healthy status. Fields marked
+`secondary` remain available as additional metadata; sensitive-field masking
+and reveal restrictions are unchanged.
+
+Resource and child lists accept `filter`, which matches retained names,
+identifiers and ARNs, not payload bodies. The UI applies filters after a short
+typing pause, or immediately on Enter or clear. Filtering resets the relevant
+continuation token; it does not run an AWS Query, Scan, or ReceiveMessage.
+Counts labeled as loaded describe the returned page, not the complete resource.
+Provider summary counts describe retained state and may differ from a filtered
+page. Snapshots can change between requests.
+
+### Service-specific inspection
+
+- **SQS:** queues show their retained type, settings and message-state counts.
+  Message inspection is non-consuming: it does not receive messages, change
+  visibility, increment receive counts or advance consumers.
+- **S3:** prefixes are virtual groupings of object keys. Browsing preserves full
+  object and version identities; previews do not automatically download binary
+  or oversized objects.
+- **DynamoDB:** item keys and JSON retain DynamoDB attribute types. Browsing
+  modeled items is not execution of a DynamoDB Query or Scan.
+- **SNS:** the topic view inspects subscriptions, not a retained message inbox.
+  Subscription endpoints and confirmation/filter settings describe configuration.
+- **EventBridge:** the inspector shows retained rules, patterns or schedules and
+  targets. It does not manufacture event history or delivery traces.
+
+### Configured connections
+
+Connections describe configuration, not evidence of successful delivery or
+processing. Topic and event-bus context can include destinations configured by
+their subscriptions or rules. SQS context also includes same-account SNS
+subscriptions, EventBridge targets and dead-letter source queues that explicitly
+reference the queue. Matching names alone never establish a relationship.
+
+Connections use full identities, preserve source resource paths, and are paged
+in a stable order. External or missing destinations are not silently treated as
+live inspectable resources. Supported reverse relationships do not constitute a
+universal dependency graph across every service. Cross-provider reads are not
+transactionally simultaneous. Activity remains a bounded service/account log,
+not a resource-specific delivery trace.
 
 Text and JSON previews are limited to 1 MiB of UTF-8 data. Binary and larger
 values remain metadata-only. Known secrets are masked in ordinary responses.

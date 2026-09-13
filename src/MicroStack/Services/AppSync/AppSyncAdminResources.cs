@@ -9,9 +9,9 @@ internal sealed partial class AppSyncServiceHandler
 {
     private static readonly AdminResourceKind[] AdminKinds =
     [
-        new("graphql-apis", "GraphQL APIs"), new("api-keys", "API keys"),
-        new("data-sources", "Data sources"), new("types", "Schema types"),
-        new("resolvers", "Resolvers"),
+        new("graphql-apis", "GraphQL APIs"), new("api-keys", "API keys") { IsRoot = false },
+        new("data-sources", "Data sources") { IsRoot = false }, new("types", "Schema types") { IsRoot = false },
+        new("resolvers", "Resolvers") { IsRoot = false },
     ];
 
     public IReadOnlyList<AdminResourceKind> GetAdminResourceKinds(string serviceId) =>
@@ -32,6 +32,7 @@ internal sealed partial class AppSyncServiceHandler
             NetworkingAdminData.Get(api, "name", apiId), api,
             NetworkingAdminData.Get(api, "arn")) with
         {
+            ChildKinds = AdminKinds[1..],
             ReadChildren = () =>
             {
                 lock (_lock)

@@ -60,6 +60,8 @@ internal sealed partial class SqsServiceHandler : IServiceHandler, IResourceProv
 
     public string ServiceName => "sqs";
 
+    public IEnumerable<string> GetKnownAccountIds() => _queues.GetAccountIds();
+
     public async Task<ServiceResponse> HandleAsync(ServiceRequest request)
     {
         var target = request.GetHeader("x-amz-target") ?? "";

@@ -63,6 +63,17 @@ internal sealed class AccountScopedDictionary<TKey, TValue>
         _data.Where(kv => IsMine(kv.Key))
              .Select(kv => new KeyValuePair<TKey, TValue>(kv.Key.Key, kv.Value));
 
+    /// <summary>
+    /// Enumerates retained owners without taking a persistence snapshot or entering
+    /// an account scope. A typed predicate can exclude empty resource containers.
+    /// </summary>
+    internal IEnumerable<string> GetAccountIds(
+        Func<TValue, bool>? hasResource = null, Func<TKey, bool>? includeKey = null) =>
+        _data.Where(entry => (includeKey is null || includeKey(entry.Key.Key))
+                            && (hasResource is null || hasResource(entry.Value)))
+            .Select(entry => entry.Key.AccountId)
+            .Distinct(StringComparer.Ordinal);
+
     /// <summary>Clear ALL accounts' data (used by service Reset).</summary>
     internal void Clear() => _data.Clear();
 

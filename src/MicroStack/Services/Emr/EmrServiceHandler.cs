@@ -39,6 +39,8 @@ internal sealed class EmrServiceHandler : IServiceHandler, IAdminResourceSource
 
     public string ServiceName => "elasticmapreduce";
 
+    public IEnumerable<string> GetKnownAccountIds() => _clusters.GetAccountIds();
+
     public Task<ServiceResponse> HandleAsync(ServiceRequest request)
     {
         var target = request.GetHeader("x-amz-target") ?? "";
@@ -153,6 +155,13 @@ internal sealed class EmrServiceHandler : IServiceHandler, IAdminResourceSource
                     ];
                 }
             },
+            ChildKinds =
+            [
+                new("step", "Steps") { IsRoot = false },
+                new("instance-fleet", "Instance fleets") { IsRoot = false },
+                new("instance-group", "Instance groups") { IsRoot = false },
+                new("bootstrap-action", "Bootstrap actions") { IsRoot = false },
+            ],
             ReadChildren = () =>
             {
                 lock (_lock)

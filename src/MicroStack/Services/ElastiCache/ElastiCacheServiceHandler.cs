@@ -31,6 +31,12 @@ internal sealed class ElastiCacheServiceHandler : IServiceHandler, IAdminResourc
 {
     public string ServiceName => "elasticache";
 
+    public IEnumerable<string> GetKnownAccountIds() =>
+        _clusters.GetAccountIds().Concat(_replicationGroups.GetAccountIds())
+            .Concat(_subnetGroups.GetAccountIds()).Concat(_paramGroups.GetAccountIds())
+            .Concat(_snapshots.GetAccountIds()).Concat(_users.GetAccountIds())
+            .Concat(_userGroups.GetAccountIds());
+
     private const string ElastiCacheNs = "http://elasticache.amazonaws.com/doc/2015-02-02/";
 
     private static string Region =>
@@ -133,6 +139,12 @@ internal sealed class ElastiCacheServiceHandler : IServiceHandler, IAdminResourc
                 lock (_lock)
                     return source.TryGetValue(id, out var current) ? ElastiCacheFields(current) : [];
             },
+            ChildKinds = kind == "cache-parameter-groups"
+                ? [
+                    new("parameters", "Parameters") { IsRoot = false },
+                    new("tags", "Tags") { IsRoot = false },
+                ]
+                : [new("tags", "Tags") { IsRoot = false }],
             ReadChildren = () => ElastiCacheChildren(kind, id, arn),
         };
     }

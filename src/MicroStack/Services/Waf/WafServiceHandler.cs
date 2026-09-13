@@ -32,6 +32,9 @@ internal sealed partial class WafServiceHandler : IServiceHandler, Internal.Admi
 
     public string ServiceName => "wafv2";
 
+    public IEnumerable<string> GetKnownAccountIds() =>
+        _webAcls.GetAccountIds().Concat(_ipSets.GetAccountIds()).Concat(_ruleGroups.GetAccountIds());
+
     public Task<ServiceResponse> HandleAsync(ServiceRequest request)
     {
         var target = request.GetHeader("x-amz-target") ?? "";

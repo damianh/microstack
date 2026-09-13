@@ -60,6 +60,11 @@ internal sealed partial class IamServiceHandler : IServiceHandler, Internal.Admi
 
     public string ServiceName => "iam";
 
+    public IEnumerable<string> GetKnownAccountIds() =>
+        _users.GetAccountIds().Concat(_roles.GetAccountIds()).Concat(_policies.GetAccountIds())
+            .Concat(_accessKeys.GetAccountIds()).Concat(_instanceProfiles.GetAccountIds())
+            .Concat(_groups.GetAccountIds()).Concat(_oidcProviders.GetAccountIds());
+
     public Task<ServiceResponse> HandleAsync(ServiceRequest request)
     {
         var formParams = new Dictionary<string, string>(StringComparer.Ordinal);

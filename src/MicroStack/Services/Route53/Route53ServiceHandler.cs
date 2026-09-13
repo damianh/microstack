@@ -64,6 +64,9 @@ internal sealed partial class Route53ServiceHandler : IServiceHandler, IAdminRes
 
     public string ServiceName => "route53";
 
+    public IEnumerable<string> GetKnownAccountIds() =>
+        _zones.GetAccountIds().Concat(_healthChecks.GetAccountIds());
+
     public Task<ServiceResponse> HandleAsync(ServiceRequest request)
     {
         var (status, headers, body) = HandleRequest(request);

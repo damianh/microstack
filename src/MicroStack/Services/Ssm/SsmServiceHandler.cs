@@ -30,6 +30,8 @@ internal sealed partial class SsmServiceHandler : IServiceHandler, IAdminResourc
 
     public string ServiceName => "ssm";
 
+    public IEnumerable<string> GetKnownAccountIds() => _parameters.GetAccountIds();
+
     public Task<ServiceResponse> HandleAsync(ServiceRequest request)
     {
         var target = request.GetHeader("x-amz-target") ?? "";

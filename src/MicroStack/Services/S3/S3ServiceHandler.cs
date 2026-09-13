@@ -65,6 +65,8 @@ internal sealed partial class S3ServiceHandler : IServiceHandler, IResourceProvi
 
     public string ServiceName => "s3";
 
+    public IEnumerable<string> GetKnownAccountIds() => _buckets.GetAccountIds();
+
     public Task<ServiceResponse> HandleAsync(ServiceRequest request)
     {
         int status;
@@ -169,9 +171,17 @@ internal sealed partial class S3ServiceHandler : IServiceHandler, IResourceProvi
         if (!_buckets.TryGetValue(bucketName, out var bucket))
             return AdminData.Node("buckets", bucketName, bucketName, $"arn:aws:s3:::{bucketName}");
 
-        return AdminData.Node("buckets", bucketName, bucketName, $"arn:aws:s3:::{bucketName}")
+        return AdminData.Node("buckets", bucketName, bucketName, $"arn:aws:s3:::{bucketName}",
+                type: "Bucket", summary: S3BucketSummary(bucketName, bucket))
             with
             {
+                ChildKinds = S3ContentsKinds(),
+                ReadSummary = () =>
+                {
+                    lock (_adminLock)
+                        return _buckets.TryGetValue(bucketName, out var current)
+                            ? S3BucketSummary(bucketName, current) : [];
+                },
                 ReadFields = () =>
                 {
                     lock (_adminLock)
@@ -180,16 +190,79 @@ internal sealed partial class S3ServiceHandler : IServiceHandler, IResourceProvi
                             return [];
                         return
                         [
-                            AdminData.Field("CreationDate", current.Created),
+                            AdminData.Field("CreationDate", current.Created, format: "datetime"),
                             AdminData.Field("Region", current.Region ?? Region),
                             AdminData.Field("ObjectCount", current.Objects.Count.ToString()),
-                            AdminData.Field("Versioning", _bucketVersioning.TryGetValue(bucketName, out var v) ? v : null),
+                            AdminData.Field("Versioning", _bucketVersioning.TryGetValue(bucketName, out var v) ? v : "Disabled"),
                             AdminData.Field("AccountId", AccountContext.GetAccountId()),
+                            .. S3BucketConfiguration(bucketName, current),
+                            .. (_bucketTags.TryGetValue(bucketName, out var tags) ? tags : [])
+                                .OrderBy(x => x.Key, StringComparer.Ordinal)
+                                .Select(x => AdminData.Field($"Tags.{x.Key}", x.Value, IsSensitiveName(x.Key))),
                         ];
                     }
                 },
                 ReadChildren = () => ReadS3Children(bucketName, ""),
             };
+    }
+
+    private static IReadOnlyList<AdminResourceKind> S3ContentsKinds() =>
+        [new("prefixes", "Prefixes") { IsRoot = false }, new("objects", "Objects") { IsRoot = false }];
+
+    private IReadOnlyList<AdminField> S3BucketSummary(string bucketName, S3Bucket bucket) =>
+    new[]
+    {
+        AdminData.Field("ObjectCount", bucket.Objects.Count.ToString()),
+        AdminData.Field("Versioning", _bucketVersioning.TryGetValue(bucketName, out var value) ? value : "Disabled"),
+    }.Where(field => field.Value is not { Length: > 4096 }).ToArray();
+
+    private IReadOnlyList<AdminField> S3BucketConfiguration(string bucketName, S3Bucket bucket)
+    {
+        var fields = new List<AdminField>
+        {
+            AdminData.Field("PolicyConfigured", _bucketPolicies.ContainsKey(bucketName).ToString()),
+            AdminData.Field("EncryptionConfigured", _bucketEncryption.ContainsKey(bucketName).ToString()),
+            AdminData.Field("LifecycleConfigured", _bucketLifecycle.ContainsKey(bucketName).ToString()),
+            AdminData.Field("CorsConfigured", _bucketCors.ContainsKey(bucketName).ToString()),
+            AdminData.Field("NotificationsConfigured", _bucketNotifications.ContainsKey(bucketName).ToString()),
+            AdminData.Field("WebsiteConfigured", _bucketWebsites.ContainsKey(bucketName).ToString()),
+            AdminData.Field("LoggingConfigured", _bucketLoggingConfig.ContainsKey(bucketName).ToString()),
+            AdminData.Field("AclConfigured", _bucketAcl.ContainsKey(bucketName).ToString()),
+            AdminData.Field("OwnershipControlsConfigured", (bucket.OwnershipControls is not null).ToString()),
+            AdminData.Field("PublicAccessBlockConfigured", (bucket.PublicAccessBlock is not null).ToString()),
+        };
+        if (_bucketObjectLock.TryGetValue(bucketName, out var objectLock))
+        {
+            fields.Add(AdminData.Field("ObjectLockEnabled", objectLock.Enabled.ToString()));
+            fields.Add(AdminData.Field("DefaultRetention.Mode", objectLock.DefaultRetention?.Mode));
+            fields.Add(AdminData.Field("DefaultRetention.Days", objectLock.DefaultRetention?.Days?.ToString()));
+            fields.Add(AdminData.Field("DefaultRetention.Years", objectLock.DefaultRetention?.Years?.ToString()));
+        }
+        if (_bucketReplication.TryGetValue(bucketName, out var replication))
+        {
+            fields.Add(AdminData.Field("ReplicationRole", replication.Role));
+            fields.Add(AdminData.Field("ReplicationRuleCount", replication.Rules.Count.ToString()));
+        }
+        // These settings retain arbitrary XML; inspect only known encryption facts.
+        if (_bucketEncryption.TryGetValue(bucketName, out var encryption) &&
+            encryption.Length <= AdminData.PreviewMaxBytes)
+        {
+            try
+            {
+                var document = XDocument.Parse(Encoding.UTF8.GetString(encryption));
+                var algorithm = document.Descendants().FirstOrDefault(x => x.Name.LocalName == "SSEAlgorithm");
+                var key = document.Descendants().FirstOrDefault(x => x.Name.LocalName == "KMSMasterKeyID");
+                if (algorithm is not null)
+                    fields.Add(AdminData.Field("EncryptionAlgorithm", algorithm.Value));
+                if (key is not null)
+                    fields.Add(AdminData.Field("KMSMasterKeyID", key.Value));
+            }
+            catch (System.Xml.XmlException)
+            {
+                // The AWS emulator retains unvalidated configuration bytes.
+            }
+        }
+        return fields;
     }
 
     private IReadOnlyList<AdminNode> ReadS3Children(string bucketName, string prefix)
@@ -213,8 +286,12 @@ internal sealed partial class S3ServiceHandler : IServiceHandler, IResourceProvi
 
             return
             [
-                .. prefixes.Select(p => AdminData.Node("prefixes", p, p)
-                    with { ReadChildren = () => ReadS3Children(bucketName, p) }),
+                .. prefixes.Select(p => AdminData.Node("prefixes", p, p[prefix.Length..], type: "Prefix")
+                    with
+                    {
+                        ChildKinds = S3ContentsKinds(),
+                        ReadChildren = () => ReadS3Children(bucketName, p),
+                    }),
                 .. objects.OrderBy(k => k, StringComparer.Ordinal).Select(k => ObjectNode(bucketName, k)),
             ];
         }
@@ -222,16 +299,40 @@ internal sealed partial class S3ServiceHandler : IServiceHandler, IResourceProvi
 
     private AdminNode ObjectNode(string bucketName, string key)
     {
-        var node = AdminData.Node("objects", key, key);
+        var name = key[(key.LastIndexOf('/') + 1)..];
+        var node = AdminData.Node("objects", key, name.Length == 0 ? key : name, type: "Object");
         if (!_buckets.TryGetValue(bucketName, out var bucket) || !bucket.Objects.TryGetValue(key, out var obj))
             return node;
 
         return node with
         {
+            Resource = node.Resource with { Summary = S3ObjectSummary(obj) },
+            ChildKinds = [new("versions", "Versions") { IsRoot = false }],
+            ReadSummary = () => ReadS3ObjectSummary(bucketName, key),
             ReadFields = () => ReadS3ObjectFields(bucketName, key),
             ReadContent = () => ReadS3ObjectContent(bucketName, key),
-            ReadChildren = obj.VersionId is null ? null : () => ReadS3Versions(bucketName, key),
+            ReadChildren = () => ReadS3Versions(bucketName, key),
         };
+    }
+
+    private static IReadOnlyList<AdminField> S3ObjectSummary(S3Object obj) =>
+    new[]
+    {
+        AdminData.Field("ContentType", obj.ContentType),
+        AdminData.Field("Length", obj.Size.ToString()),
+        AdminData.Field("LastModified", obj.LastModified, format: "datetime"),
+    }.Where(field => field.Value is not { Length: > 4096 }).ToArray();
+
+    private IReadOnlyList<AdminField> ReadS3ObjectSummary(string bucketName, string key, string? versionId = null)
+    {
+        lock (_adminLock)
+        {
+            if (!_buckets.TryGetValue(bucketName, out var bucket) ||
+                !bucket.Objects.TryGetValue(key, out var obj) ||
+                (versionId is not null && obj.VersionId != versionId))
+                return [];
+            return S3ObjectSummary(obj);
+        }
     }
 
     private IReadOnlyList<AdminField> ReadS3ObjectFields(string bucketName, string key)
@@ -243,13 +344,18 @@ internal sealed partial class S3ServiceHandler : IServiceHandler, IResourceProvi
             return
             [
                 AdminData.Field("ContentType", obj.ContentType),
-                AdminData.Field("ContentEncoding", obj.ContentEncoding),
+                AdminData.Field("ContentEncoding", obj.ContentEncoding, secondary: true),
                 AdminData.Field("Length", obj.Size.ToString()),
-                AdminData.Field("ETag", obj.ETag),
-                AdminData.Field("LastModified", obj.LastModified),
-                AdminData.Field("VersionId", obj.VersionId),
+                AdminData.Field("ETag", obj.ETag, secondary: true),
+                AdminData.Field("LastModified", obj.LastModified, format: "datetime"),
+                AdminData.Field("VersionId", obj.VersionId, secondary: true),
                 .. obj.Metadata.OrderBy(x => x.Key, StringComparer.Ordinal)
-                    .Select(x => AdminData.Field($"Metadata.{x.Key}", x.Value, IsSensitiveName(x.Key))),
+                    .Select(x => AdminData.Field($"Metadata.{x.Key}", x.Value, IsSensitiveName(x.Key), secondary: true)),
+                .. obj.PreservedHeaders.OrderBy(x => x.Key, StringComparer.Ordinal)
+                    .Select(x => AdminData.Field($"Headers.{x.Key}", x.Value, IsSensitiveName(x.Key), secondary: true)),
+                .. (_objectTags.TryGetValue((bucketName, key), out var tags) ? tags : [])
+                    .OrderBy(x => x.Key, StringComparer.Ordinal)
+                    .Select(x => AdminData.Field($"Tags.{x.Key}", x.Value, IsSensitiveName(x.Key), secondary: true)),
             ];
         }
     }
@@ -292,8 +398,9 @@ internal sealed partial class S3ServiceHandler : IServiceHandler, IResourceProvi
             var versionId = obj.VersionId;
             return
             [
-                AdminData.Node("versions", versionId, versionId) with
+                AdminData.Node("versions", versionId, versionId, type: "Version", summary: S3ObjectSummary(obj)) with
                 {
+                    ReadSummary = () => ReadS3ObjectSummary(bucketName, key, versionId),
                     ReadFields = () => ReadS3VersionFields(bucketName, key, versionId),
                     ReadContent = () => ReadS3VersionContent(bucketName, key, versionId),
                 },

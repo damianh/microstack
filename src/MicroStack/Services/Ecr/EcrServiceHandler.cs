@@ -27,6 +27,8 @@ internal sealed class EcrServiceHandler : IServiceHandler, IAdminResourceSource
 {
     public string ServiceName => "ecr";
 
+    public IEnumerable<string> GetKnownAccountIds() => _repositories.GetAccountIds();
+
     private static string Region =>
         MicroStackOptions.Instance.Region;
 
@@ -75,9 +77,9 @@ internal sealed class EcrServiceHandler : IServiceHandler, IAdminResourceSource
         serviceId == ServiceName ?
     [
         new("repositories", "Repositories"),
-        new("images", "Images"),
-        new("lifecycle-policies", "Lifecycle policies"),
-        new("repository-policies", "Repository policies"),
+        new("images", "Images") { IsRoot = false },
+        new("lifecycle-policies", "Lifecycle policies") { IsRoot = false },
+        new("repository-policies", "Repository policies") { IsRoot = false },
     ] : [];
 
     public IEnumerable<AdminNode> GetAdminResources(string serviceId)
@@ -104,6 +106,12 @@ internal sealed class EcrServiceHandler : IServiceHandler, IAdminResourceSource
                     ReadFields = () => AdminProjection.Fields(snapshot,
                         "repositoryUri", "createdAt", "imageTagMutability", "registryId"),
                     ReadContent = () => AdminProjection.Content(snapshot),
+                    ChildKinds =
+                    [
+                        new("images", "Images") { IsRoot = false },
+                        new("lifecycle-policies", "Lifecycle policies") { IsRoot = false },
+                        new("repository-policies", "Repository policies") { IsRoot = false },
+                    ],
                     ReadChildren = () => children,
                 });
             }

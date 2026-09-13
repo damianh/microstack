@@ -27,6 +27,11 @@ internal sealed partial class SsmServiceHandler
         return AdminData.Node("parameter", name, name, arn, $"{type} v{version}") with
         {
             ReadFields = () => ReadParameterFields(name),
+            ChildKinds =
+            [
+                new("parameter-version", "Parameter versions") { IsRoot = false },
+                new("tag", "Tags") { IsRoot = false },
+            ],
             ReadChildren = () => ReadParameterChildren(name),
             ReadContent = () => ReadParameterContent(name),
             RevealableFields = secure ? ["Value"] : [],

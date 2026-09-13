@@ -1,6 +1,7 @@
 @page "/overview"
 @implements IDisposable
 @inject MicroStackApiService Api
+@inject AdminApiClient AdminApi
 <PageTitle>Overview · MicroStack</PageTitle>
 <section class="overview">
     <div class="service-heading"><div><h1>Overview</h1><p>Instance status and global operations.</p></div><button class="button" disabled="@_busy" @onclick="LoadAsync">Refresh</button></div>
@@ -11,6 +12,7 @@
         <dl class="metadata overview-facts">
             <div><dt>Edition</dt><dd>@_health.Edition</dd></div>
             <div><dt>Version</dt><dd><code>@_health.Version</code></dd></div>
+            <div><dt>Region</dt><dd><code>@_context?.Region</code></dd></div>
             <div><dt>Enabled handlers</dt><dd>@_health.Services.Count</dd></div>
             <div><dt>Legacy resource summary</dt><dd>@_resources.Sum(resource => resource.Count) resources across @_resources.Count legacy providers</dd></div>
         </dl>
@@ -44,6 +46,7 @@
 @code {
     private readonly CancellationTokenSource _cts = new();
     private HealthResponse? _health;
+    private AdminContext? _context;
     private IReadOnlyList<ResourceSummary> _resources = [];
     private bool _busy, _confirmReset;
     private string? _error, _message;
@@ -56,7 +59,8 @@
         {
             var health = await Api.GetHealthAsync(_cts.Token);
             var resources = await Api.GetResourcesAsync(_cts.Token);
-            if (!_cts.IsCancellationRequested) { _health = health; _resources = resources; }
+            var context = await AdminApi.ContextAsync(_cts.Token);
+            if (!_cts.IsCancellationRequested) { _health = health; _resources = resources; _context = context; }
         }
         catch (OperationCanceledException) when (_cts.IsCancellationRequested) { }
         catch (Exception) { _error = "Instance status could not be loaded. Check the API connection and refresh. Previously loaded data may be stale."; }

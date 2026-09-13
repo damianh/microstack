@@ -82,9 +82,7 @@ foreach (var obsoleteSetting in new[] { "MICROSTACK_UI_PORT", "MICROSTACK_API_UR
         app.Logger.LogWarning("{Setting} is ignored because the UI is served from the gateway at /ui/.", obsoleteSetting);
 }
 
-// Restore persisted state on startup
 var persistence = app.Services.GetRequiredService<StatePersistence>();
-persistence.RestoreAll();
 
 // Wire up admin endpoints before the main AWS middleware
 var registry = app.Services.GetRequiredService<ServiceRegistry>();
@@ -136,6 +134,9 @@ registry.Register(cognitoIdpHandler);
 registry.Register(new CognitoIdentityServiceHandler(cognitoIdpHandler));
 registry.Register(new CloudFormationServiceHandler(registry));
 registry.Register(new S3FilesServiceHandler());
+
+// Restore only after registration so persisted resources are loaded into the live handlers.
+persistence.RestoreAll();
 
 app.MapAdminApi(registry, app.Services.GetRequiredService<RequestLog>(), options, adminCorsPolicy);
 

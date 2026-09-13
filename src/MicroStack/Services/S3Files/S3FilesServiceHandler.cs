@@ -58,6 +58,9 @@ internal sealed partial class S3FilesServiceHandler : IServiceHandler, IAdminRes
 
     public string ServiceName => "s3files";
 
+    public IEnumerable<string> GetKnownAccountIds() =>
+        _fileSystems.GetAccountIds().Concat(_mountTargets.GetAccountIds()).Concat(_accessPoints.GetAccountIds());
+
     public Task<ServiceResponse> HandleAsync(ServiceRequest request)
     {
         JsonElement body;
@@ -138,6 +141,14 @@ internal sealed partial class S3FilesServiceHandler : IServiceHandler, IAdminRes
             fs.GetValueOrDefault("LifeCycleState")?.ToString()) with
         {
             ReadFields = () => ReadS3FilesFields(_fileSystems, fsId),
+            ChildKinds =
+            [
+                new("mount-targets", "Mount targets") { IsRoot = false },
+                new("access-points", "Access points") { IsRoot = false },
+                new("policies", "File system policies") { IsRoot = false },
+                new("synchronization-configurations", "Synchronization configurations") { IsRoot = false },
+                new("tags", "Tags") { IsRoot = false },
+            ],
             ReadChildren = () => ReadS3FilesChildren(fsId),
             ReadConnections = () =>
             {
@@ -203,7 +214,11 @@ internal sealed partial class S3FilesServiceHandler : IServiceHandler, IAdminRes
     {
         var node = DictionaryAdminNode("access-points", id, value, _accessPoints);
         var arn = value.GetValueOrDefault("AccessPointArn")?.ToString();
-        return arn is null ? node : node with { ReadChildren = () => TagAdminNodes(arn) };
+        return arn is null ? node : node with
+        {
+            ChildKinds = [new("tags", "Tags") { IsRoot = false }],
+            ReadChildren = () => TagAdminNodes(arn),
+        };
     }
 
     private IReadOnlyList<AdminNode> TagAdminNodes(string arn)

@@ -57,6 +57,8 @@ internal sealed partial class CloudFrontServiceHandler : IServiceHandler, IAdmin
 
     public string ServiceName => "cloudfront";
 
+    public IEnumerable<string> GetKnownAccountIds() => _distributions.GetAccountIds();
+
     public Task<ServiceResponse> HandleAsync(ServiceRequest request)
     {
         var (status, headers, body) = HandleRequest(request);

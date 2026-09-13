@@ -15,6 +15,9 @@ internal sealed partial class CloudFormationServiceHandler : IServiceHandler, IA
 {
     public string ServiceName => "cloudformation";
 
+    public IEnumerable<string> GetKnownAccountIds() =>
+        _stacks.GetAccountIds().Concat(_changeSets.GetAccountIds());
+
     private const string CfnNs = "http://cloudformation.amazonaws.com/doc/2010-05-15/";
 
     private static string Region =>

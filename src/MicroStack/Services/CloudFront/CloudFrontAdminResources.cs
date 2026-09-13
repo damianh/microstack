@@ -8,7 +8,7 @@ internal sealed partial class CloudFrontServiceHandler
 {
     private static readonly AdminResourceKind[] AdminKinds =
     [
-        new("distributions", "Distributions"), new("invalidations", "Invalidations"),
+        new("distributions", "Distributions"), new("invalidations", "Invalidations") { IsRoot = false },
     ];
 
     public IReadOnlyList<AdminResourceKind> GetAdminResourceKinds(string serviceId) =>
@@ -39,6 +39,7 @@ internal sealed partial class CloudFrontServiceHandler
                 AdminData.Field("LastModifiedTime", distribution.LastModifiedTime),
             ],
             ReadContent = () => AdminData.Text(distribution.ConfigXml, "application/xml"),
+            ChildKinds = [AdminKinds[1]],
             ReadChildren = () =>
             {
                 lock (_lock)

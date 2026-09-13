@@ -12,6 +12,14 @@ internal sealed class RdsServiceHandler : IServiceHandler, IAdminResourceSource
 {
     public string ServiceName => "rds";
 
+    public IEnumerable<string> GetKnownAccountIds() =>
+        _instances.GetAccountIds().Concat(_clusters.GetAccountIds())
+            .Concat(_subnetGroups.GetAccountIds()).Concat(_paramGroups.GetAccountIds())
+            .Concat(_snapshots.GetAccountIds()).Concat(_clusterParamGroups.GetAccountIds())
+            .Concat(_clusterSnapshots.GetAccountIds()).Concat(_eventSubscriptions.GetAccountIds())
+            .Concat(_dbProxies.GetAccountIds()).Concat(_optionGroups.GetAccountIds())
+            .Concat(_globalClusters.GetAccountIds());
+
     private const string RdsNs = "http://rds.amazonaws.com/doc/2014-10-31/";
 
     private static string Region =>
@@ -91,33 +99,31 @@ internal sealed class RdsServiceHandler : IServiceHandler, IAdminResourceSource
         {
             return
             [
-                .. RdsNodes("db-instances", _instances),
-                .. RdsNodes("db-clusters", _clusters),
-                .. RdsNodes("db-subnet-groups", _subnetGroups),
-                .. RdsNodes("db-parameter-groups", _paramGroups),
-                .. RdsNodes("db-cluster-parameter-groups", _clusterParamGroups),
-                .. RdsNodes("db-snapshots", _snapshots),
-                .. RdsNodes("db-cluster-snapshots", _clusterSnapshots),
-                .. RdsNodes("event-subscriptions", _eventSubscriptions),
-                .. RdsNodes("db-proxies", _dbProxies),
-                .. RdsNodes("option-groups", _optionGroups),
-                .. RdsNodes("global-clusters", _globalClusters),
+                .. RdsNodes("db-instances", _instances, "DBInstanceArn"),
+                .. RdsNodes("db-clusters", _clusters, "DBClusterArn"),
+                .. RdsNodes("db-subnet-groups", _subnetGroups, "DBSubnetGroupArn"),
+                .. RdsNodes("db-parameter-groups", _paramGroups, "DBParameterGroupArn"),
+                .. RdsNodes("db-cluster-parameter-groups", _clusterParamGroups, "DBClusterParameterGroupArn"),
+                .. RdsNodes("db-snapshots", _snapshots, "DBSnapshotArn"),
+                .. RdsNodes("db-cluster-snapshots", _clusterSnapshots, "DBClusterSnapshotArn"),
+                .. RdsNodes("event-subscriptions", _eventSubscriptions, "EventSubscriptionArn"),
+                .. RdsNodes("db-proxies", _dbProxies, "DBProxyArn"),
+                .. RdsNodes("option-groups", _optionGroups, "OptionGroupArn"),
+                .. RdsNodes("global-clusters", _globalClusters, "GlobalClusterArn"),
             ];
         }
     }
 
     private IEnumerable<AdminNode> RdsNodes(
-        string kind, AccountScopedDictionary<string, Dictionary<string, object?>> source) =>
+        string kind, AccountScopedDictionary<string, Dictionary<string, object?>> source, string arnField) =>
         source.Items.OrderBy(x => x.Key, StringComparer.Ordinal)
-            .Select(x => RdsNode(kind, x.Key, x.Value, source));
+            .Select(x => RdsNode(kind, x.Key, x.Value, source, arnField));
 
     private AdminNode RdsNode(
         string kind, string id, Dictionary<string, object?> value,
-        AccountScopedDictionary<string, Dictionary<string, object?>> source)
+        AccountScopedDictionary<string, Dictionary<string, object?>> source, string arnField)
     {
-        var arn = value.FirstOrDefault(x =>
-            x.Key.EndsWith("Arn", StringComparison.Ordinal) &&
-            x.Value is string).Value?.ToString();
+        var arn = value.GetValueOrDefault(arnField) as string;
         var status = value.FirstOrDefault(x =>
             x.Key.EndsWith("Status", StringComparison.Ordinal) &&
             x.Value is string).Value?.ToString();
@@ -128,6 +134,7 @@ internal sealed class RdsServiceHandler : IServiceHandler, IAdminResourceSource
                 lock (_lock)
                     return source.TryGetValue(id, out var current) ? RdsFields(current) : [];
             },
+            ChildKinds = [new("tags", "Tags") { IsRoot = false }],
             ReadChildren = arn is null ? null : () => RdsTagNodes(arn),
         };
     }

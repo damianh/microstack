@@ -26,6 +26,14 @@ internal sealed partial class CloudWatchServiceHandler : IServiceHandler, IAdmin
 {
     public string ServiceName => "monitoring";
 
+    public IEnumerable<string> GetKnownAccountIds()
+    {
+        lock (_lock)
+            return _metrics.GetAccountIds(points => points.Count > 0)
+                .Concat(_alarms.GetAccountIds()).Concat(_compositeAlarms.GetAccountIds())
+                .Concat(_dashboards.GetAccountIds()).ToArray();
+    }
+
     private static string Region =>
         MicroStackOptions.Instance.Region;
 

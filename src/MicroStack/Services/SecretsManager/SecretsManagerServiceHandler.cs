@@ -36,6 +36,8 @@ internal sealed partial class SecretsManagerServiceHandler : IServiceHandler, In
 
     public string ServiceName => "secretsmanager";
 
+    public IEnumerable<string> GetKnownAccountIds() => _secrets.GetAccountIds();
+
     public Task<ServiceResponse> HandleAsync(ServiceRequest request)
     {
         var target = request.GetHeader("x-amz-target") ?? "";

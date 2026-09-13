@@ -12,5 +12,6 @@ var apiBaseUri = new Uri(applicationBaseUri.GetLeftPart(UriPartial.Authority) + 
 builder.Services.AddScoped(_ => new HttpClient { BaseAddress = apiBaseUri });
 builder.Services.AddScoped<MicroStackApiService>();
 builder.Services.AddScoped<AdminApiClient>();
+builder.Services.AddScoped<ExplorerAccountState>();
 
 await builder.Build().RunAsync();

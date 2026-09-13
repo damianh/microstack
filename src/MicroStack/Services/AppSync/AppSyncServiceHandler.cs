@@ -42,6 +42,8 @@ internal sealed partial class AppSyncServiceHandler : IServiceHandler, IAdminRes
 
     public string ServiceName => "appsync";
 
+    public IEnumerable<string> GetKnownAccountIds() => _apis.GetAccountIds();
+
     public Task<ServiceResponse> HandleAsync(ServiceRequest request)
     {
         var response = HandleRequest(request);

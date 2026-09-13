@@ -10,6 +10,10 @@ internal sealed partial class AlbServiceHandler : IServiceHandler, IAdminResourc
 {
     public string ServiceName => "elasticloadbalancing";
 
+    public IEnumerable<string> GetKnownAccountIds() =>
+        _lbs.GetAccountIds().Concat(_tgs.GetAccountIds())
+            .Concat(_listeners.GetAccountIds()).Concat(_rules.GetAccountIds());
+
     private const string Ns = "http://elasticloadbalancing.amazonaws.com/doc/2015-12-01/";
 
     private static string Region =>

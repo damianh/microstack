@@ -8,8 +8,10 @@ internal sealed partial class ApiGatewayV2ServiceHandler
 {
     private static readonly AdminResourceKind[] V2Kinds =
     [
-        new("apis", "APIs"), new("routes", "Routes"), new("integrations", "Integrations"),
-        new("stages", "Stages"), new("deployments", "Deployments"), new("authorizers", "Authorizers"),
+        new("apis", "APIs"), new("routes", "Routes") { IsRoot = false },
+        new("integrations", "Integrations") { IsRoot = false },
+        new("stages", "Stages") { IsRoot = false }, new("deployments", "Deployments") { IsRoot = false },
+        new("authorizers", "Authorizers") { IsRoot = false },
     ];
 
     public IReadOnlyList<AdminResourceKind> GetAdminResourceKinds(string serviceId) =>
@@ -48,6 +50,7 @@ internal sealed partial class ApiGatewayV2ServiceHandler
                         value["tags"] = tags;
                     return NetworkingAdminData.Json(value);
                 },
+                ChildKinds = V2Kinds[1..],
                 ReadChildren = () =>
                 [
                     .. ChildNodes(_routes, id, "routes", "routeId", "routeKey"),
@@ -110,13 +113,16 @@ internal sealed partial class ApiGatewayV1ServiceHandler
 {
     private static readonly AdminResourceKind[] V1Kinds =
     [
-        new("rest-apis", "REST APIs"), new("resources", "Resources"), new("methods", "Methods"),
-        new("method-responses", "Method responses"), new("integrations", "Integrations"),
-        new("integration-responses", "Integration responses"),
-        new("stages", "Stages"), new("deployments", "Deployments"),
-        new("authorizers", "Authorizers"), new("models", "Models"), new("api-keys", "API keys"),
-        new("usage-plans", "Usage plans"), new("usage-plan-keys", "Usage plan keys"),
-        new("domain-names", "Domain names"), new("base-path-mappings", "Base path mappings"),
+        new("rest-apis", "REST APIs"), new("resources", "Resources") { IsRoot = false },
+        new("methods", "Methods") { IsRoot = false },
+        new("method-responses", "Method responses") { IsRoot = false },
+        new("integrations", "Integrations") { IsRoot = false },
+        new("integration-responses", "Integration responses") { IsRoot = false },
+        new("stages", "Stages") { IsRoot = false }, new("deployments", "Deployments") { IsRoot = false },
+        new("authorizers", "Authorizers") { IsRoot = false }, new("models", "Models") { IsRoot = false },
+        new("api-keys", "API keys"),
+        new("usage-plans", "Usage plans"), new("usage-plan-keys", "Usage plan keys") { IsRoot = false },
+        new("domain-names", "Domain names"), new("base-path-mappings", "Base path mappings") { IsRoot = false },
     ];
 
     internal IReadOnlyList<AdminResourceKind> GetAdminResourceKinds() => V1Kinds;
@@ -144,6 +150,7 @@ internal sealed partial class ApiGatewayV1ServiceHandler
                     value["tags"] = tags;
                 return NetworkingAdminData.Json(value);
             },
+            ChildKinds = [V1Kinds[1], V1Kinds[6], V1Kinds[7], V1Kinds[8], V1Kinds[9]],
             ReadChildren = () =>
             [
                 .. ResourceNodes(id),
@@ -165,6 +172,7 @@ internal sealed partial class ApiGatewayV1ServiceHandler
             return DictionaryNode("resources", pair.Key,
                 NetworkingAdminData.Get(resource, "path", pair.Key), resource) with
             {
+                ChildKinds = [V1Kinds[2]],
                 ReadChildren = () => MethodNodes(resource),
             };
         }).ToArray();
@@ -194,6 +202,7 @@ internal sealed partial class ApiGatewayV1ServiceHandler
                     children.Add(DictionaryNode("integrations", pair.Key, pair.Key, integration)
                         with
                         {
+                            ChildKinds = [V1Kinds[5]],
                             ReadChildren = () =>
                             {
                                 if (!integration.TryGetValue("integrationResponses", out var value)
@@ -210,7 +219,8 @@ internal sealed partial class ApiGatewayV1ServiceHandler
                 var authorizerId = NetworkingAdminData.Get(method, "authorizerId");
                 return DictionaryNode("methods", pair.Key, pair.Key, method) with
                 {
-                    ReadChildren = children.Count == 0 ? null : () => children,
+                    ChildKinds = [V1Kinds[3], V1Kinds[4]],
+                    ReadChildren = () => children,
                     ReadConnections = string.IsNullOrEmpty(authorizerId) ? null : () =>
                     [
                         new("Authorizer", "authorized-by", "apigateway",
@@ -224,6 +234,7 @@ internal sealed partial class ApiGatewayV1ServiceHandler
         DictionaryNode("usage-plans", pair.Key, NetworkingAdminData.Get(pair.Value, "name", pair.Key), pair.Value)
         with
         {
+            ChildKinds = [V1Kinds[12]],
             ReadChildren = () => V1Children(_usagePlanKeys, pair.Key, "usage-plan-keys", "id", "name", true),
         };
 
@@ -231,6 +242,7 @@ internal sealed partial class ApiGatewayV1ServiceHandler
         DictionaryNode("domain-names", pair.Key,
             NetworkingAdminData.Get(pair.Value, "domainName", pair.Key), pair.Value) with
         {
+            ChildKinds = [V1Kinds[14]],
             ReadChildren = () => V1Children(_basePathMappings, pair.Key,
                 "base-path-mappings", "basePath", "basePath"),
         };

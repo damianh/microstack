@@ -40,6 +40,9 @@ internal sealed class KinesisServiceHandler : IServiceHandler, IAdminResourceSou
 
     public string ServiceName => "kinesis";
 
+    public IEnumerable<string> GetKnownAccountIds() =>
+        _streams.GetAccountIds().Concat(_consumers.GetAccountIds());
+
     public Task<ServiceResponse> HandleAsync(ServiceRequest request)
     {
         var target = request.GetHeader("x-amz-target") ?? "";
@@ -151,6 +154,11 @@ internal sealed class KinesisServiceHandler : IServiceHandler, IAdminResourceSou
                     ];
                 }
             },
+            ChildKinds =
+            [
+                new("shard", "Shards") { IsRoot = false },
+                new("consumer", "Consumers") { IsRoot = false },
+            ],
             ReadChildren = () =>
             {
                 lock (_lock)
@@ -192,6 +200,7 @@ internal sealed class KinesisServiceHandler : IServiceHandler, IAdminResourceSou
                     ];
                 }
             },
+            ChildKinds = [new("record", "Records") { IsRoot = false }],
             ReadChildren = () =>
             {
                 lock (_lock)

@@ -63,6 +63,11 @@ internal sealed partial class EventBridgeServiceHandler : IServiceHandler
 
     public string ServiceName => "events";
 
+    public IEnumerable<string> GetKnownAccountIds() =>
+        _rules.GetAccountIds().Concat(_archives.GetAccountIds())
+            .Concat(_connections.GetAccountIds()).Concat(_apiDestinations.GetAccountIds())
+            .Concat(_replays.GetAccountIds()).Concat(_endpoints.GetAccountIds());
+
     public Task<ServiceResponse> HandleAsync(ServiceRequest request)
     {
         var target = request.GetHeader("x-amz-target") ?? "";

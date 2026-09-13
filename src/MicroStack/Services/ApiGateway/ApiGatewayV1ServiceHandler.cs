@@ -48,6 +48,10 @@ internal sealed partial class ApiGatewayV1ServiceHandler
     /// <summary>Returns true if this handler owns the given API ID (for execute-api dispatch).</summary>
     internal bool OwnsApiId(string apiId) => _restApis.ContainsKey(apiId);
 
+    internal IEnumerable<string> GetKnownAccountIds() =>
+        _restApis.GetAccountIds().Concat(_apiKeys.GetAccountIds())
+            .Concat(_usagePlans.GetAccountIds()).Concat(_domainNames.GetAccountIds());
+
     internal void Reset()
     {
         _restApis.Clear();

@@ -1,0 +1,28 @@
+<div class="connection-list">
+    @foreach (var connection in Connections)
+    {
+        <div class="connection">
+            <div><strong>@connection.Label</strong><small>@connection.Relation <span class="tag">@connection.State</span></small>
+                @if (connection.SourcePath is { Length: > 0 } sourcePath)
+                {
+                    <small>Configuration · <code>@sourcePath[^1].Id</code></small>
+                }
+                @if (connection.ExternalUri is not null)
+                {
+                    <div class="field-value"><code>@connection.ExternalUri</code><CopyButton Text="@connection.ExternalUri" Label="Copy endpoint" /></div>
+                }
+            </div>
+            <div class="connection-actions">
+                @if (CanFollow(connection)) { <a class="button" href="@Destination(connection)">Inspect destination →</a> }
+                @if (Source?.Invoke(connection) is { } sourceUrl) { <a class="button" href="@sourceUrl">Inspect configuration →</a> }
+            </div>
+        </div>
+    }
+</div>
+@code {
+    [Parameter] public IReadOnlyList<AdminConnection> Connections { get; set; } = [];
+    [Parameter, EditorRequired] public Func<AdminConnection, string> Destination { get; set; } = default!;
+    [Parameter] public Func<AdminConnection, string?>? Source { get; set; }
+    private static bool CanFollow(AdminConnection connection) => connection.TargetServiceId is not null && connection.TargetPath is { Length: > 0 } &&
+        connection.State is not ("missing" or "disabled" or "external" or "inaccessible" or "unavailable");
+}

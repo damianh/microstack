@@ -26,16 +26,30 @@ public static class ExplorerLocation
         return keys;
     }
 
+    public static string DirectoryUrl(NavigationManager navigation, string account) =>
+        navigation.BaseUri + "accounts/" + Uri.EscapeDataString(account) + "/services";
+
     public static string ServiceUrl(NavigationManager navigation, string serviceId, string account, AdminKey[]? path = null, string? returnTo = null) =>
-        navigation.GetUriWithQueryParameters(navigation.BaseUri + "services/" + Uri.EscapeDataString(serviceId),
-            new Dictionary<string, object?> { ["account"] = account, ["path"] = path is { Length: > 0 } ? EncodePath(path) : null, ["returnTo"] = SafeReturn(returnTo) });
+        navigation.GetUriWithQueryParameters(DirectoryUrl(navigation, account) + "/" + Uri.EscapeDataString(serviceId),
+            new Dictionary<string, object?> { ["path"] = path is { Length: > 0 } ? EncodePath(path) : null, ["returnTo"] = SafeReturn(returnTo) });
+
+    public static string? RouteAccount(NavigationManager navigation)
+    {
+        var segments = navigation.ToBaseRelativePath(navigation.Uri).Split('?')[0].Split('/');
+        return segments.Length >= 3 && segments[0] == "accounts" && segments[2] == "services" && ValidAccount(segments[1])
+            ? segments[1] : null;
+    }
 
     public static string? SafeReturn(string? value)
     {
         if (string.IsNullOrWhiteSpace(value) || value.Length > 16_384 || !value.StartsWith('/') || value.StartsWith("//") || value.Contains('\\'))
             return null;
         var route = value.Split('?')[0];
-        return route is "/" or "/resources" || route.StartsWith("/services/", StringComparison.Ordinal) ? value : null;
+        var segments = route.Split('/');
+        var accountRoute = segments.Length is 4 or 5 && segments[1] == "accounts" &&
+            ValidAccount(segments[2]) && segments[3] == "services" &&
+            (segments.Length == 4 || segments[4].Length > 0 && segments[4] is not "." and not ".." && !segments[4].Contains('%'));
+        return route is "/" or "/resources" || route.StartsWith("/services/", StringComparison.Ordinal) || accountRoute ? value : null;
     }
 
     public static string? ResolveReturn(NavigationManager navigation, string? value) =>

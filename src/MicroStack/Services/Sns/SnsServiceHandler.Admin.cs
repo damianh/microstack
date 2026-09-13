@@ -3,14 +3,14 @@ using MicroStack.Internal.Admin;
 
 namespace MicroStack.Services.Sns;
 
-internal sealed partial class SnsServiceHandler : IAdminResourceSource
+internal sealed partial class SnsServiceHandler : IAdminResourceSource, IAdminRelationshipSource
 {
     private static readonly AdminResourceKind[] AdminKinds =
     [
         new("topics", "Topics"),
-        new("subscriptions", "Subscriptions"),
+        new("subscriptions", "Subscriptions") { IsRoot = false },
         new("platform-applications", "Platform applications"),
-        new("platform-endpoints", "Platform endpoints")
+        new("platform-endpoints", "Platform endpoints") { IsRoot = false }
     ];
 
     public IReadOnlyList<AdminResourceKind> GetAdminResourceKinds(string serviceId) =>
@@ -54,31 +54,50 @@ internal sealed partial class SnsServiceHandler : IAdminResourceSource
     }
 
     private static AdminNode TopicNode(TopicSnapshot topic) =>
-        AdminData.Node("topics", topic.Arn, topic.Name, topic.Arn, "active") with
+        AdminData.Node("topics", topic.Arn, topic.Name, topic.Arn, "active",
+            type: topic.Attributes.GetValueOrDefault("FifoTopic") == "true" ? "FIFO" : "Standard",
+            summary: [AdminData.Field("Subscriptions", topic.Subscriptions.Length.ToString())]) with
         {
-            ReadFields = () =>
+            ReadSummary = () =>
             [
-                AdminData.Field("Display name", topic.Attributes.GetValueOrDefault("DisplayName")),
-                AdminData.Field("Owner", topic.Attributes.GetValueOrDefault("Owner")),
                 AdminData.Field("Confirmed subscriptions", topic.Subscriptions.Count(item => item.Confirmed).ToString()),
-                AdminData.Field("Pending subscriptions", topic.Subscriptions.Count(item => !item.Confirmed).ToString()),
-                AdminData.Field("Tags", topic.Tags.Count.ToString())
+                AdminData.Field("Pending subscriptions", topic.Subscriptions.Count(item => !item.Confirmed).ToString())
             ],
-            ReadChildren = () => topic.Subscriptions.Select(SubscriptionNode).ToArray()
+            ReadFields = () => topic.Attributes.OrderBy(item => item.Key, StringComparer.Ordinal)
+                .Select(item => AdminData.Field(item.Key, item.Value,
+                    format: item.Key is "Policy" or "DeliveryPolicy" or "EffectiveDeliveryPolicy" ? "json" : null,
+                    secondary: item.Key is not ("DisplayName" or "Owner")))
+                .Concat(topic.Tags.OrderBy(item => item.Key, StringComparer.Ordinal)
+                    .Select(item => AdminData.Field($"Tag: {item.Key}", item.Value, secondary: true))).ToArray(),
+            ChildKinds = [AdminKinds[1]],
+            ReadChildren = () => topic.Subscriptions.Select(SubscriptionNode).ToArray(),
+            ReadConnections = () => topic.Subscriptions.SelectMany(SubscriptionConnections).ToArray()
         };
 
     private static AdminNode SubscriptionNode(SubscriptionSnapshot subscription) =>
         AdminData.Node("subscriptions", subscription.Arn, subscription.Endpoint,
-            subscription.Arn, subscription.Confirmed ? "confirmed" : "pending") with
-        {
-            ReadFields = () =>
+            subscription.Arn, subscription.Confirmed ? "confirmed" : "pending",
+            type: subscription.Protocol,
+            summary:
             [
                 AdminData.Field("Protocol", subscription.Protocol),
                 AdminData.Field("Endpoint", subscription.Endpoint),
-                AdminData.Field("Owner", subscription.Owner),
+                AdminData.Field("Confirmation", subscription.Confirmed ? "confirmed" : "pending"),
+                AdminData.Field("Filter policy", subscription.Attributes.GetValueOrDefault("FilterPolicy"), format: "json")
+            ]) with
+        {
+            ReadFields = () => new[]
+            {
+                AdminData.Field("Protocol", subscription.Protocol),
+                AdminData.Field("Endpoint", subscription.Endpoint),
+                AdminData.Field("Confirmation", subscription.Confirmed ? "confirmed" : "pending"),
+                AdminData.Field("Topic ARN", subscription.TopicArn),
+                AdminData.Field("Owner", subscription.Owner, secondary: true),
                 AdminData.Field("Raw message delivery", subscription.Attributes.GetValueOrDefault("RawMessageDelivery")),
                 AdminData.Field("Filter policy", subscription.Attributes.GetValueOrDefault("FilterPolicy"), format: "json")
-            ],
+            }.Concat(subscription.Attributes.OrderBy(item => item.Key, StringComparer.Ordinal)
+                .Where(item => item.Key is not ("RawMessageDelivery" or "FilterPolicy" or "Protocol" or "Endpoint" or "Owner"))
+                .Select(item => AdminData.Field(item.Key, item.Value, secondary: true))).ToArray(),
             ReadConnections = () => SubscriptionConnections(subscription)
         };
 
@@ -93,7 +112,7 @@ internal sealed partial class SnsServiceHandler : IAdminResourceSource
         if (subscription.Protocol is "http" or "https"
             && Uri.TryCreate(subscription.Endpoint, UriKind.Absolute, out _))
             return [new("Subscribed endpoint", "delivers-to", ExternalUri: subscription.Endpoint, State: "configured")];
-        return [new(subscription.Endpoint, "delivers-to", State: "configured")];
+        return [new(subscription.Endpoint, "delivers-to", State: "external")];
     }
 
     private static AdminNode ApplicationNode(AppSnapshot application) =>
@@ -102,6 +121,7 @@ internal sealed partial class SnsServiceHandler : IAdminResourceSource
         {
             ReadFields = () => SafeAttributes(application.Attributes)
                 .Prepend(AdminData.Field("Platform", application.Platform)).ToArray(),
+            ChildKinds = [AdminKinds[3]],
             ReadChildren = () => application.Endpoints.Select(EndpointNode).ToArray()
         };
 
@@ -124,6 +144,42 @@ internal sealed partial class SnsServiceHandler : IAdminResourceSource
         || name.Contains("secret", StringComparison.OrdinalIgnoreCase)
         || name.Contains("token", StringComparison.OrdinalIgnoreCase)
         || name.Contains("key", StringComparison.OrdinalIgnoreCase);
+
+    public AdminRelationshipSnapshot GetAdminRelationshipSnapshot()
+    {
+        lock (_lock)
+        {
+            var resources = new List<AdminRelationshipResource>();
+            var relationships = new List<AdminConfiguredRelationship>();
+            foreach (var topic in _topics.Values)
+            {
+                AdminKey[] topicPath = [new("topics", topic.Arn)];
+                resources.Add(new(topicPath, topic.Name));
+                foreach (var subscription in topic.Subscriptions)
+                {
+                    AdminKey[] path = [.. topicPath, new("subscriptions", subscription.Arn)];
+                    resources.Add(new(path, subscription.Endpoint));
+                    var snapshot = new SubscriptionSnapshot(subscription.Arn, subscription.Protocol,
+                        subscription.Endpoint, subscription.Confirmed, subscription.TopicArn,
+                        subscription.Owner, new(subscription.Attributes, StringComparer.Ordinal));
+                    relationships.AddRange(SubscriptionConnections(snapshot).Select(connection =>
+                        new AdminConfiguredRelationship("sns", path, $"{topic.Name} / {subscription.Arn}", connection)));
+                    relationships.Add(new("sns", path, topic.Name,
+                        new("Parent topic", "belongs-to", "sns", [new("topics", subscription.TopicArn)])));
+                }
+            }
+            foreach (var application in _platformApps.Values)
+            {
+                AdminKey[] path = [new("platform-applications", application.Arn)];
+                resources.Add(new(path, application.Name));
+                resources.AddRange(_platformEndpoints.Values.Where(endpoint => endpoint.ApplicationArn == application.Arn)
+                    .Select(endpoint => new AdminRelationshipResource(
+                        [.. path, new("platform-endpoints", endpoint.Arn)], endpoint.Arn,
+                        endpoint.Attributes.GetValueOrDefault("Enabled", "true") == "true" ? "enabled" : "disabled")));
+            }
+            return new(resources.ToArray(), relationships.ToArray());
+        }
+    }
 
     private sealed record TopicSnapshot(
         string Name, string Arn, Dictionary<string, string> Attributes,

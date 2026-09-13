@@ -48,6 +48,9 @@ internal sealed partial class ServiceDiscoveryServiceHandler : IServiceHandler, 
 
     public string ServiceName => "servicediscovery";
 
+    public IEnumerable<string> GetKnownAccountIds() =>
+        _namespaces.GetAccountIds().Concat(_services.GetAccountIds()).Concat(_operations.GetAccountIds());
+
     public async Task<ServiceResponse> HandleAsync(ServiceRequest request)
     {
         var target = request.GetHeader("x-amz-target") ?? "";

@@ -8,8 +8,8 @@ internal sealed partial class ServiceDiscoveryServiceHandler
 {
     private static readonly AdminResourceKind[] AdminKinds =
     [
-        new("namespaces", "Namespaces"), new("services", "Services"),
-        new("instances", "Instances"),
+        new("namespaces", "Namespaces"), new("services", "Services") { IsRoot = false },
+        new("instances", "Instances") { IsRoot = false },
     ];
 
     public IReadOnlyList<AdminResourceKind> GetAdminResourceKinds(string serviceId) =>
@@ -30,6 +30,7 @@ internal sealed partial class ServiceDiscoveryServiceHandler
         {
             ReadFields = () => NetworkingAdminData.Fields(ns.ToDict()),
             ReadContent = () => NetworkingAdminData.Json(ns.ToDict()),
+            ChildKinds = [AdminKinds[1]],
             ReadChildren = () =>
             {
                 lock (_lock)
@@ -60,6 +61,7 @@ internal sealed partial class ServiceDiscoveryServiceHandler
         {
             ReadFields = () => NetworkingAdminData.Fields(service.ToDict()),
             ReadContent = () => NetworkingAdminData.Json(service.ToDict()),
+            ChildKinds = [AdminKinds[2]],
             ReadChildren = () =>
             {
                 lock (_lock)

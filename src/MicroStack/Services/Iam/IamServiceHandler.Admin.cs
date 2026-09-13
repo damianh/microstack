@@ -8,12 +8,12 @@ internal sealed partial class IamServiceHandler
     private static readonly AdminResourceKind[] AdminKinds =
     [
         new("user", "Users"),
-        new("access-key", "Access keys"),
-        new("user-inline-policy", "User inline policies"),
+        new("access-key", "Access keys") { IsRoot = false },
+        new("user-inline-policy", "User inline policies") { IsRoot = false },
         new("role", "Roles"),
-        new("role-inline-policy", "Role inline policies"),
+        new("role-inline-policy", "Role inline policies") { IsRoot = false },
         new("policy", "Policies"),
-        new("policy-version", "Policy versions"),
+        new("policy-version", "Policy versions") { IsRoot = false },
         new("group", "Groups"),
         new("instance-profile", "Instance profiles"),
         new("oidc-provider", "OpenID Connect providers")
@@ -60,6 +60,7 @@ internal sealed partial class IamServiceHandler
                     ];
                 }
             },
+            ChildKinds = [AdminKinds[1], AdminKinds[2]],
             ReadChildren = () =>
             {
                 lock (_lock)
@@ -130,6 +131,7 @@ internal sealed partial class IamServiceHandler
                     ];
                 }
             },
+            ChildKinds = [AdminKinds[4]],
             ReadChildren = () =>
             {
                 lock (_lock)
@@ -208,6 +210,7 @@ internal sealed partial class IamServiceHandler
                     ];
                 }
             },
+            ChildKinds = [AdminKinds[6]],
             ReadChildren = () =>
             {
                 lock (_lock)

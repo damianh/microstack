@@ -1,7 +1,8 @@
 <div class="service-picker" data-service-picker>
     <button class="service-picker-trigger" data-picker-trigger aria-expanded="false" aria-haspopup="listbox" aria-controls="service-options">
         @if (Selected is not null) { <img class="aws-service-icon" src="@($"icons/{Selected.Icon}.svg")" alt="" /> }
-        @(Selected?.Label ?? "Choose service") <span aria-hidden="true">⌄</span>
+        @(Selected?.Label ?? "Choose service")
+        <svg class="service-picker-chevron" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m6 9 6 6 6-6" /></svg>
     </button>
     <div class="service-picker-panel" data-picker-panel hidden>
         <div class="search">

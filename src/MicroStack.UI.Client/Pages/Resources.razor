@@ -1,26 +1,30 @@
-@page "/"
-@page "/resources"
-@page "/services/{ServiceId}"
+@page "/accounts/{AccountId}/services"
+@page "/accounts/{AccountId}/services/{ServiceId}"
 @implements IDisposable
+@using Microsoft.AspNetCore.Components.Sections
 @inject AdminApiClient Api
+@inject ExplorerAccountState AccountState
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
 
 <PageTitle>@(_service?.Label ?? "Services") · MicroStack</PageTitle>
-<div class="workspace-context">
-    @if (ServiceId is not null)
-    {
+<SectionContent SectionName="explorer-account">
+    @if (_context is not null)
+    { <AccountScope Account="@_account" DefaultAccount="@_context.DefaultAccount" Accounts="@_accounts" AccountChanged="SwitchAccount" /> }
+</SectionContent>
+@if (ServiceId is not null)
+{
+    <div class="workspace-context">
         <nav class="service-breadcrumb" aria-label="Service workspace">
             <a href="@HomeUrl">All services</a><span aria-hidden="true">/</span>
             <ServicePicker Services="@_services" Selected="@_service" SelectedChanged="SwitchService" />
         </nav>
-    }
-    @if (_context is not null)
-    { <AccountScope Account="@_account" Region="@_context.Region" AccountChanged="SwitchAccount" /> }
-</div>
+    </div>
+}
 @if (_error is not null)
 {
     <div class="notice error" role="alert"><p>@_error</p>
+        @if (_detail is not null || _resources is not null) { <p>Previously loaded data may be stale until the snapshot refresh succeeds.</p> }
         <button class="button" disabled="@_busy" @onclick="LoadAsync">Retry snapshot</button>
         @if (_missing) { <button class="button" @onclick="ClearSelection">Return to resource list</button> }
     </div>
@@ -28,15 +32,19 @@
 @if (ServiceId is null)
 {
     <section class="directory">
-        <header class="directory-heading"><h1>Services</h1><p>Find a service, inspect its resources, and follow configured connections.</p></header>
+        <header class="directory-heading">
+            <h1>Services</h1>
+            <p>Find a service, inspect its resources, and follow configured connections.</p>
+        </header>
         <div class="directory-tools">
             <div class="search"><input type="search" aria-label="Find services" placeholder="Find a service…" value="@Filter" @oninput="FilterServices" /></div>
             <label><input type="checkbox" checked="@(Enabled == true)" @onchange="FilterEnabled" /> Enabled services only</label>
+            @if (_services.Count > 0)
+            { <p class="directory-result-count" role="status">@DirectoryServices.Count of @_services.Count services</p> }
         </div>
-        @if (_busy) { <LoadingState Label="Loading service catalog…" /> }
+        @if (_busy && _showLoading) { <LoadingState Label="Loading service catalog…" /> }
         else if (_services.Count > 0)
         {
-            <p class="directory-result-count" role="status">@DirectoryServices.Count of @_services.Count services</p>
             @if (DirectoryServices.Count == 0) { <p class="empty-list">No services match. Try a service name, identifier, or category.</p> }
             <div class="directory-grid">
                 @foreach (var group in DirectoryServices.GroupBy(service => service.Category))
@@ -60,7 +68,9 @@ else if (_service is not null)
     @if (ExplorerLocation.ResolveReturn(Navigation, ReturnTo) is { } returnTo) { <a class="return-link" href="@returnTo">← Return to previous inspection</a> }
     <header class="service-heading">
         <div><div class="service-title-line"><img class="aws-service-icon" src="@($"icons/{_service.Icon}.svg")" alt="" /><h1>@_service.Label</h1></div>
-            <p>@_service.Name · @ScopeLabel(_service.Scope)</p></div>
+            <p>@InspectionProfile.Description(ServiceId)</p>
+            @if (_service.Scope != "account") { <p class="scope-exception">@ScopeLabel(_service.Scope)@(IsGlobalScope(_service.Scope) ? " · shared across accounts" : "")</p> }
+        </div>
         <button class="button mobile-resources" @onclick="ToggleBrowse">@(_browsing ? "Return to detail" : "Browse resources")</button>
     </header>
     @if (!string.IsNullOrEmpty(_service.Notice)) { <p class="notice">@_service.Notice</p> }
@@ -69,20 +79,17 @@ else if (_service is not null)
     else
     {
         <div class="resource-workspace @(_browsing ? "browsing" : "")">
-            <section id="resource-index" class="resource-index" aria-label="Resources" tabindex="-1">
-                <div class="index-heading"><span>@RootKindLabel</span><span class="count">@(_resources?.Items.Count ?? 0)</span></div>
-                @if (_service.Kinds.Count > 1)
+            <section id="resource-index" class="resource-index" aria-label="Resources" aria-busy="@(_busy ? "true" : "false")" tabindex="-1">
+                <div class="index-heading"><span>@RootKindLabel</span><span class="count">@(_resources?.Items.Count ?? 0) loaded</span></div>
+                @if (RootKinds.Count > 1)
                 {
                     <label class="sr-only" for="resource-kind">Resource kind</label>
                     <select id="resource-kind" class="kind-select" value="@_kind" @onchange="ChangeKind">
-                        @foreach (var kind in _service.Kinds) { <option value="@kind.Id">@kind.Label</option> }
+                        @foreach (var kind in RootKinds) { <option value="@kind.Id">@kind.Label</option> }
                     </select>
                 }
-                <form @onsubmit="ApplyResourceFilter" @onsubmit:preventDefault>
-                    <div class="search"><input type="search" aria-label="Filter resources" placeholder="Filter resources…" @bind="_resourceFilter" /></div>
-                    <button class="button" type="submit">Apply filter</button>
-                </form>
-                @if (_busy && _resources is null) { <LoadingState Label="Loading resources…" /> }
+                <DebouncedFilter Value="@Filter" Scope="@FilterScope" Label="@RootFilterLabel" Placeholder="@($"{RootFilterLabel}…")" Changed="ApplyResourceFilter" />
+                @if (_showLoading && _resources is null) { <LoadingState Label="Loading resources…" /> }
                 @if (_resources is not null)
                 {
                     <div class="resource-list">
@@ -90,18 +97,19 @@ else if (_service is not null)
                         {
                             <a @key="resource.Key" class="resource-button @(IsRootSelected(resource.Key) ? "selected" : "")"
                                aria-current="@(IsRootSelected(resource.Key) ? "true" : null)" href="@RootUrl(resource.Key)">
-                                <strong>@resource.Name</strong><small>@resource.Status</small>
+                                <strong>@resource.Name</strong>
+                                @if (resource.Type is not null) { <small>@resource.Type</small> }
                             </a>
                         }
                     </div>
                     @if (_resources.Items.Count == 0) { <p class="empty-list">No @RootKindLabel.ToLowerInvariant()@(string.IsNullOrEmpty(Filter) ? " in this scope." : " match this filter.")</p> }
                     <PageNavigation Loaded="@_resources.Items.Count" KnownTotal="@_resources.KnownTotal" NextCursor="@_resources.NextCursor" HasCursor="@(!string.IsNullOrEmpty(Cursor))" Changed="ChangeResourcePage" />
                 }
-                <p class="index-note">@ScopeLabel(_service.Scope). Lists are snapshots; use Refresh to see changes.</p>
+                <p class="index-note">Name / identifier search · server snapshots</p>
             </section>
-            <section class="inspector" aria-label="Selected resource">
-                @if (_busy) { <LoadingState /> }
-                else if (_detail is not null)
+            <section class="inspector" aria-label="Selected resource" aria-busy="@(_busy ? "true" : "false")">
+                @if (_showLoading && _detail is null) { <LoadingState /> }
+                @if (_detail is not null)
                 {
                     <div class="resource-heading">
                         @if (_path.Length > 1)
@@ -115,9 +123,15 @@ else if (_service is not null)
                             </nav>
                         }
                         <div class="resource-top"><div><h2 id="resource-title" tabindex="-1">@_detail.Resource.Name</h2>
-                            <div class="resource-type"><span>@KindLabel(_detail.Resource.Key.Kind)</span><span class="tag">@(_detail.Resource.Status ?? "Retained resource")</span><span>@ScopeLabel(_detail.Resource.Scope)</span></div>
-                        </div><button class="button" @onclick="LoadAsync">Refresh</button></div>
+                            <div class="resource-type"><span>@(_detail.Resource.Type ?? KindLabel(_detail.Resource.Key.Kind))</span>
+                                @if (InspectionProfile.DisplayStatus(_detail.Resource) is { } status) { <span class="tag">@status</span> }
+                                @if (_detail.Resource.Scope != "account") { <span>@ScopeLabel(_detail.Resource.Scope)</span> }
+                            </div>
+                        </div><button class="button" disabled="@_busy" @onclick="LoadAsync">
+                            <svg aria-hidden="true" viewBox="0 0 20 20"><path d="M16 6a7 7 0 1 0 1 7M16 2v5h-5" /></svg>Refresh snapshot
+                        </button></div>
                         <div class="arn-row"><code>@(_detail.Resource.Arn ?? _detail.Resource.Key.Id)</code><CopyButton Text="@(_detail.Resource.Arn ?? _detail.Resource.Key.Id)" Label="Copy identifier" /></div>
+                        <ResourceFacts Fields="@(_detail.Summary.Count > 0 ? _detail.Summary : _detail.Resource.Summary)" Copyable="true" />
                     </div>
                     <div class="tabs" role="tablist" aria-label="Resource inspection">
                         @foreach (var tab in Tabs)
@@ -127,30 +141,23 @@ else if (_service is not null)
                         }
                     </div>
                     <div id="inspection-panel" class="tab-body" role="tabpanel" aria-labelledby="@($"tab-{ActiveTab}")">
+                        @if (_showLoading) { <p class="snapshot-updating" role="status">Updating snapshot…</p> }
                         @if (ActiveTab == "configuration")
                         {
-                            <FieldList @key="_scopeKey" Fields="@_detail.Fields" RevealableFields="@_detail.RevealableFields" Service="@ServiceId" Account="@_account" Path="@_path" />
-                            @if (_detail.Fields.Count == 0 && _detail.RevealableFields.Count == 0) { <p class="empty-list">No additional configuration is retained for this resource.</p> }
+                            <ResourceInspector @key="_loadedScope" Detail="@_detail" ShowContent="false" ShowSummary="false" SummaryShownExternally="true" Service="@ServiceId" Account="@_account" Path="@_path" />
                         }
                         else if (ActiveTab == "connections")
                         {
                             <p class="notice">Explicit configured relationships only. A configured connection does not establish successful delivery.</p>
                             @if (_connections is { Items.Count: > 0 })
                             {
-                                <div class="connection-list">
-                                    @foreach (var connection in _connections.Items)
-                                    {
-                                        <div class="connection"><div><strong>@connection.Label</strong><small>@connection.Relation</small>
-                                            <small><span class="tag">@connection.State</span></small>
-                                            @if (connection.ExternalUri is not null) { <code>@connection.ExternalUri</code> }
-                                        </div>
-                                            @if (CanFollow(connection)) { <a class="button" href="@ConnectionUrl(connection)">Inspect destination →</a> }
-                                        </div>
-                                    }
-                                </div>
-                                <PageNavigation Loaded="@_connections.Items.Count" KnownTotal="@_connections.KnownTotal" NextCursor="@_connections.NextCursor" HasCursor="@(!string.IsNullOrEmpty(ConnectionCursor))" Changed="ChangeConnectionPage" />
+                                <ConnectionList Connections="@_connections.Items" Destination="ConnectionUrl" Source="ConnectionSourceUrl" />
                             }
                             else { <p class="empty-list">No configured connections are retained for this resource.</p> }
+                            @if (_connections is not null)
+                            {
+                                <PageNavigation Loaded="@_connections.Items.Count" KnownTotal="@_connections.KnownTotal" NextCursor="@_connections.NextCursor" HasCursor="@(!string.IsNullOrEmpty(ConnectionCursor))" Changed="ChangeConnectionPage" />
+                            }
                         }
                         else if (ActiveTab == "activity")
                         { <RequestActivity @key="@($"{ServiceId}:{_account}")" Service="@ServiceId" Account="@_account" /> }
@@ -158,10 +165,24 @@ else if (_service is not null)
                         {
                             @if (ServiceId == "sqs") { <p class="notice">Read-only queue snapshot. Inspection does not receive messages, change visibility, or advance consumers.</p> }
                             @if (ServiceId == "dynamodb") { <p class="notice">Items retain DynamoDB attribute types (S, N, M, L, and other modeled types). Browsing does not execute a query or alter items.</p> }
+                            @if (_detail.HasContent)
+                            {
+                                <ResourceInspector @key="_loadedScope" Detail="@_detail" ShowSummary="false" SummaryShownExternally="true" Content="@_content" Service="@ServiceId" Account="@_account" Path="@_path" />
+                            }
                             @if (_detail.HasChildren)
                             {
+                                @if (IsS3PrefixBrowser)
+                                {
+                                    <nav class="prefix-breadcrumb" aria-label="Object prefix">
+                                        <a href="@PrefixUrl("")">Bucket root</a>
+                                        @foreach (var ancestor in PrefixAncestors)
+                                        {
+                                            <span aria-hidden="true">/</span><a href="@PrefixUrl(ancestor.Prefix)">@ancestor.Name</a>
+                                        }
+                                    </nav>
+                                }
                                 <div class="content-tools">
-                                    <form @onsubmit="ApplyChildFilter" @onsubmit:preventDefault class="toolbar">
+                                    <div class="toolbar collection-toolbar">
                                         @if (ChildKinds.Count > 1)
                                         {
                                             <label for="child-kind">Collection</label><select id="child-kind" value="@ChildKind" @onchange="ChangeChildKind">
@@ -169,10 +190,15 @@ else if (_service is not null)
                                                 @foreach (var kind in ChildKinds) { <option value="@kind.Id">@kind.Label</option> }
                                             </select>
                                         }
-                                        <div class="search"><input type="search" aria-label="Filter stored entries" placeholder="Filter entries…" @bind="_childFilter" /></div>
-                                        @if (ServiceId == "s3") { <label for="object-prefix">Prefix</label><input id="object-prefix" type="text" placeholder="Path prefix" @bind="_prefixFilter" /> }
-                                        <button class="button" type="submit">Apply</button>
-                                    </form>
+                                        <DebouncedFilter Value="@ChildFilter" Scope="@FilterScope" Label="@ChildFilterLabel" Placeholder="@($"{ChildFilterLabel}…")" Changed="ApplyChildFilter" />
+                                        @if (IsS3PrefixBrowser)
+                                        {
+                                            <form class="prefix-form" @onsubmit="ApplyPrefix" @onsubmit:preventDefault>
+                                                <label for="object-prefix">Prefix</label><input id="object-prefix" type="text" placeholder="Path prefix" @bind="_prefixFilter" />
+                                                <button class="button" type="submit">Go</button>
+                                            </form>
+                                        }
+                                    </div>
                                 </div>
                                 <div class="data-split">
                                     <section class="records" aria-label="@ChildrenLabel">
@@ -186,11 +212,16 @@ else if (_service is not null)
                                                 {
                                                     <a @key="child.Key" class="record-button @(IsChildSelected(child.Key) ? "selected" : "")"
                                                        aria-current="@(IsChildSelected(child.Key) ? "true" : null)" href="@ChildUrl(child.Key)">
-                                                        <div class="record-title">@child.Name</div><div class="record-meta"><span>@KindLabel(child.Key.Kind)</span><span>@child.Status</span></div>
+                                                        <div class="record-title">@ChildName(child)</div>
+                                                        <div class="record-meta"><span>@(child.Type ?? KindLabel(child.Key.Kind))</span>
+                                                            @if (InspectionProfile.DisplayStatus(child) is { } childStatus) { <span class="tag">@childStatus</span> }
+                                                            @if (ServiceId == "s3" && child.Key.Kind == "prefixes") { <span>Browse →</span> }
+                                                        </div>
+                                                        <ResourceFacts Fields="@child.Summary" Compact="true" />
                                                     </a>
                                                 }
                                             }
-                                            @if (_children.Items.Count == 0) { <p class="empty-list">No stored entries match this collection and filter.</p> }
+                                            @if (_children.Items.Count == 0) { <p class="empty-list">@(string.IsNullOrEmpty(ChildFilter) ? $"No {ChildrenLabel.ToLowerInvariant()} are retained in this collection." : "No entries match this name or identifier. Try a different filter.")</p> }
                                         }
                                     </section>
                                     <section class="payload" aria-label="Selected entry">
@@ -198,14 +229,25 @@ else if (_service is not null)
                                         @if (_selectedDetail is not null)
                                         {
                                             <div class="payload-head"><strong>@_selectedDetail.Resource.Name</strong>
-                                                @if (_selectedDetail.HasChildren) { <a class="button" href="@OpenChildUrl">Browse @KindLabel(_selectedDetail.Resource.Key.Kind) →</a> }
+                                                <CopyButton Text="@(_selectedDetail.Resource.Arn ?? _selectedDetail.Resource.Key.Id)" Label="Copy entry identifier" />
+                                                @if (_selectedDetail.HasChildren) { <a class="button" href="@OpenChildUrl">Browse @SelectedBrowseLabel →</a> }
                                             </div>
-                                            <div class="payload-body">
-                                                <FieldList @key="@(_scopeKey + "-selected")" Fields="@_selectedDetail.Fields" RevealableFields="@_selectedDetail.RevealableFields" Service="@ServiceId" Account="@_account" Path="@SelectedPath" />
-                                                @if (_selectedDetail.HasConnections) { <a class="button" href="@SelectedConnectionsUrl">View configured connections</a> }
-                                            </div>
-                                            @if (_selectedDetail.HasContent) { <ContentPreview Content="@_selectedContent" /> }
-                                            else if (!_selectedDetail.HasChildren && _selectedDetail.Fields.Count == 0) { <p class="empty-list">This entry retains metadata only.</p> }
+                                            <ResourceInspector @key="_scopeKey" Detail="@_selectedDetail" Content="@_selectedContent" Service="@ServiceId" Account="@_account" Path="@SelectedPath">
+                                                @if (_selectedDetail.HasConnections)
+                                                {
+                                                    <section class="entry-connections" aria-label="Configured connections">
+                                                        <h3>Configured connections@(_selectedDetail.ConnectionCount is { } count ? $" ({count:N0})" : "")</h3>
+                                                        @if (_selectedConnectionError is not null) { <p class="notice error" role="alert">@_selectedConnectionError</p> }
+                                                        @if (_selectedConnections is { Items.Count: > 0 })
+                                                        {
+                                                            <ConnectionList Connections="@_selectedConnections.Items" Destination="ConnectionUrl" Source="ConnectionSourceUrl" />
+                                                            <p class="index-note">@_selectedConnections.Items.Count loaded@(_selectedConnections.KnownTotal is { } total ? $" · {total:N0} total" : "")</p>
+                                                        }
+                                                        else if (_selectedConnections is not null) { <p class="empty-list">No configured connections are retained for this entry.</p> }
+                                                        <a class="button" href="@SelectedConnectionsUrl">View all configured connections →</a>
+                                                    </section>
+                                                }
+                                            </ResourceInspector>
                                         }
                                         else if (_childError is null) { <p class="empty-list">Select an entry to inspect its content and metadata.</p> }
                                     </section>
@@ -213,17 +255,16 @@ else if (_service is not null)
                                 @if (_children is not null)
                                 { <PageNavigation Loaded="@_children.Items.Count" KnownTotal="@_children.KnownTotal" NextCursor="@_children.NextCursor" HasCursor="@(!string.IsNullOrEmpty(ChildCursor))" Changed="ChangeChildPage" /> }
                             }
-                            @if (_detail.HasContent) { <ContentPreview Content="@_content" /> }
                             @if (!_detail.HasChildren && !_detail.HasContent)
                             { <p class="notice">This resource retains configuration, not a browsable content collection. Inspect the Configuration tab for its modeled fields.</p> }
                         }
                     </div>
                 }
-                else if (!_missing)
+                else if (!_missing && !_busy)
                 {
                     <div class="state-panel"><h2>@(_service.Kinds.Count == 0 ? "No retained resources" : "Choose a resource")</h2>
                         <p>@(_service.Kinds.Count == 0 ? "This service does not retain a resource collection. Its scope and request activity remain available." : "Select a resource from the index, or refresh after creating one through its AWS API.")</p>
-                        <button class="button" @onclick="LoadAsync">Refresh</button>
+                        <button class="button" @onclick="LoadAsync">Refresh snapshot</button>
                     </div>
                     @if (_service.Kinds.Count == 0) { <div class="tab-body"><RequestActivity Service="@ServiceId" Account="@_account" /></div> }
                 }
@@ -234,4 +275,4 @@ else if (_service is not null)
         @if (_captured is { } captured) { <span>Snapshot · @ExplorerLocation.Utc(captured)</span> }
     </footer>
 }
-else if (_busy) { <LoadingState /> }
+else if (_busy && _showLoading) { <LoadingState /> }

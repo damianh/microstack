@@ -56,6 +56,9 @@ internal sealed partial class StepFunctionsServiceHandler : IServiceHandler
 
     public string ServiceName => "states";
 
+    public IEnumerable<string> GetKnownAccountIds() =>
+        _stateMachines.GetAccountIds().Concat(_executions.GetAccountIds()).Concat(_activities.GetAccountIds());
+
     public async Task<ServiceResponse> HandleAsync(ServiceRequest request)
     {
         var target = request.GetHeader("x-amz-target") ?? "";

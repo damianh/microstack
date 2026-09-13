@@ -5,13 +5,13 @@ using MicroStack.Internal.Admin;
 
 namespace MicroStack.Services.EventBridge;
 
-internal sealed partial class EventBridgeServiceHandler : IAdminResourceSource
+internal sealed partial class EventBridgeServiceHandler : IAdminResourceSource, IAdminRelationshipSource
 {
     private static readonly AdminResourceKind[] AdminKinds =
     [
         new("event-buses", "Event buses"),
-        new("rules", "Rules"),
-        new("targets", "Targets"),
+        new("rules", "Rules") { IsRoot = false },
+        new("targets", "Targets") { IsRoot = false },
         new("archives", "Archives"),
         new("replays", "Replays"),
         new("connections", "Connections"),
@@ -32,6 +32,7 @@ internal sealed partial class EventBridgeServiceHandler : IAdminResourceSource
         Dictionary<string, object?>[] buses;
         Dictionary<string, object?>[] rules;
         Dictionary<string, Dictionary<string, object?>[]> targets;
+        Dictionary<string, Dictionary<string, string>> tags;
         Dictionary<string, object?>[] archives;
         Dictionary<string, object?>[] replays;
         Dictionary<string, object?>[] connections;
@@ -45,11 +46,16 @@ internal sealed partial class EventBridgeServiceHandler : IAdminResourceSource
                 .Where(bus => GetText(bus, "Name") != "default"
                     && ArnAccount(GetText(bus, "Arn")) == account)
                 .Select(CloneMap).ToArray();
+            foreach (var bus in buses)
+                if (_eventBusPolicies.TryGetValue(GetText(bus, "Name"), out var busPolicy))
+                    bus["Policy"] = CloneMap(busPolicy);
             rules = _rules.Values.Select(CloneMap).ToArray();
             targets = _targets.Items.ToDictionary(
                 item => item.Key,
                 item => item.Value.Select(CloneMap).ToArray(),
                 StringComparer.Ordinal);
+            tags = _tags.Items.ToDictionary(item => item.Key,
+                item => new Dictionary<string, string>(item.Value, StringComparer.Ordinal), StringComparer.Ordinal);
             archives = _archives.Values.Select(CloneMap).ToArray();
             replays = _replays.Values.Select(CloneMap).ToArray();
             connections = _connections.Values.Select(CloneMap).ToArray();
@@ -70,7 +76,7 @@ internal sealed partial class EventBridgeServiceHandler : IAdminResourceSource
         };
         buses = [defaultBus, .. buses];
 
-        return buses.Select(bus => BusNode(bus, rules, targets))
+        return buses.Select(bus => BusNode(bus, rules, targets, tags))
             .Concat(archives.Select(ArchiveNode))
             .Concat(replays.Select(ReplayNode))
             .Concat(connections.Select(ConnectionNode))
@@ -83,21 +89,28 @@ internal sealed partial class EventBridgeServiceHandler : IAdminResourceSource
     private static AdminNode BusNode(
         Dictionary<string, object?> bus,
         IReadOnlyList<Dictionary<string, object?>> rules,
-        IReadOnlyDictionary<string, Dictionary<string, object?>[]> targets)
+        IReadOnlyDictionary<string, Dictionary<string, object?>[]> targets,
+        IReadOnlyDictionary<string, Dictionary<string, string>> tags)
     {
         var name = GetText(bus, "Name");
         var arn = GetText(bus, "Arn");
         var busRules = rules.Where(rule => GetText(rule, "EventBusName", "default") == name).ToArray();
-        return AdminData.Node("event-buses", arn, name, arn, "active") with
+        return AdminData.Node("event-buses", arn, name, arn, "active", type: "Event bus",
+            summary: [AdminData.Field("Rules", busRules.Length.ToString(CultureInfo.InvariantCulture))]) with
         {
-            ReadFields = () =>
-            [
+            ReadSummary = () => [AdminData.Field("Rules", busRules.Length.ToString(CultureInfo.InvariantCulture))],
+            ReadFields = () => new[]
+            {
                 AdminData.Field("Description", GetText(bus, "Description")),
                 AdminData.Field("Rules", busRules.Length.ToString(CultureInfo.InvariantCulture)),
-                AdminData.Field("Created", Epoch(bus, "CreationTime"), format: "datetime"),
-                AdminData.Field("Last modified", Epoch(bus, "LastModifiedTime"), format: "datetime")
-            ],
-            ReadChildren = () => busRules.Select(rule => RuleNode(rule, targets)).ToArray(),
+                AdminData.Field("Created", Epoch(bus, "CreationTime"), format: "datetime", secondary: true),
+                AdminData.Field("Last modified", Epoch(bus, "LastModifiedTime"), format: "datetime", secondary: true)
+            }.Concat(TagFields(tags, arn)).ToArray(),
+            ChildKinds = [AdminKinds[1]],
+            ReadChildren = () => busRules.Select(rule => RuleNode(rule, targets, tags)).ToArray(),
+            ReadConnections = () => busRules.SelectMany(rule =>
+                (targets.GetValueOrDefault(RuleKey(GetText(rule, "Name"), name)) ?? [])
+                    .SelectMany(TargetConnections)).ToArray(),
             ReadContent = bus.TryGetValue("Policy", out var policy) && policy is not null
                 ? () => AdminData.Json(policy)
                 : null
@@ -106,26 +119,38 @@ internal sealed partial class EventBridgeServiceHandler : IAdminResourceSource
 
     private static AdminNode RuleNode(
         Dictionary<string, object?> rule,
-        IReadOnlyDictionary<string, Dictionary<string, object?>[]> targets)
+        IReadOnlyDictionary<string, Dictionary<string, object?>[]> targets,
+        IReadOnlyDictionary<string, Dictionary<string, string>> tags)
     {
         var name = GetText(rule, "Name");
         var bus = GetText(rule, "EventBusName", "default");
         var key = RuleKey(name, bus);
         var ruleTargets = targets.GetValueOrDefault(key) ?? [];
         var pattern = GetText(rule, "EventPattern");
+        var schedule = GetText(rule, "ScheduleExpression");
         return AdminData.Node("rules", GetText(rule, "Arn"), name,
-            GetText(rule, "Arn"), GetText(rule, "State")) with
-        {
-            ReadFields = () =>
+            GetText(rule, "Arn"), GetText(rule, "State"),
+            type: string.IsNullOrWhiteSpace(schedule) ? "Event pattern rule" : "Scheduled rule",
+            summary:
             [
+                AdminData.Field("Description", GetText(rule, "Description")),
+                AdminData.Field("Schedule", schedule),
+                AdminData.Field("Targets", ruleTargets.Length.ToString(CultureInfo.InvariantCulture))
+            ]) with
+        {
+            ReadSummary = () => [AdminData.Field("Targets", ruleTargets.Length.ToString(CultureInfo.InvariantCulture))],
+            ReadFields = () => new[]
+            {
                 AdminData.Field("Event bus", bus),
                 AdminData.Field("Description", GetText(rule, "Description")),
-                AdminData.Field("Schedule", GetText(rule, "ScheduleExpression")),
-                AdminData.Field("Role ARN", GetText(rule, "RoleArn")),
+                AdminData.Field("Schedule", schedule),
+                AdminData.Field("Role ARN", GetText(rule, "RoleArn"), secondary: true),
                 AdminData.Field("Targets", ruleTargets.Length.ToString(CultureInfo.InvariantCulture))
-            ],
+            }.Concat(TagFields(tags, GetText(rule, "Arn"))).ToArray(),
+            ChildKinds = [AdminKinds[2]],
             ReadChildren = () => ruleTargets.Select(TargetNode).ToArray(),
-            ReadContent = string.IsNullOrWhiteSpace(pattern) ? null : () => AdminData.JsonText(pattern),
+            ReadContent = !string.IsNullOrWhiteSpace(pattern) ? () => AdminData.JsonText(pattern)
+                : !string.IsNullOrWhiteSpace(schedule) ? () => AdminData.Text(schedule) : null,
             ReadConnections = () => ruleTargets.SelectMany(TargetConnections).ToArray()
         };
     }
@@ -134,12 +159,13 @@ internal sealed partial class EventBridgeServiceHandler : IAdminResourceSource
     {
         var id = GetText(target, "Id");
         var arn = GetText(target, "Arn");
-        return AdminData.Node("targets", id, id, arn, "configured") with
+        return AdminData.Node("targets", id, id, arn, "configured", type: MapArn(arn)?.Label,
+            summary: [AdminData.Field("Target ARN", arn)]) with
         {
             ReadFields = () =>
             [
                 AdminData.Field("Target ARN", arn),
-                AdminData.Field("Role ARN", GetText(target, "RoleArn")),
+                AdminData.Field("Role ARN", GetText(target, "RoleArn"), secondary: true),
                 AdminData.Field("Input path", GetText(target, "InputPath"))
             ],
             ReadContent = () => AdminData.Json(target),
@@ -277,20 +303,78 @@ internal sealed partial class EventBridgeServiceHandler : IAdminResourceSource
                 [new(mapped.Value.Kind, arn)], State: "configured")];
     }
 
-    private static (string Service, string Kind, string Label)? MapArn(string arn) =>
-        arn.StartsWith("arn:aws:sqs:", StringComparison.Ordinal) ? ("sqs", "queues", "Queue")
-        : arn.StartsWith("arn:aws:sns:", StringComparison.Ordinal) ? ("sns", "topics", "Topic")
-        : arn.StartsWith("arn:aws:lambda:", StringComparison.Ordinal) ? ("lambda", "functions", "Function")
-        : arn.StartsWith("arn:aws:states:", StringComparison.Ordinal) ? ("stepfunctions", "state-machines", "State machine")
-        : arn.Contains(":event-bus/", StringComparison.Ordinal) ? ("events", "event-buses", "Event bus")
-        : arn.Contains(":archive/", StringComparison.Ordinal) ? ("events", "archives", "Archive")
-        : null;
+    private static (string Service, string Kind, string Label)? MapArn(string arn)
+    {
+        var parts = arn.Split(':', 6);
+        if (parts.Length != 6 || parts[0] != "arn")
+            return null;
+        return parts[2] switch
+        {
+            "sqs" => ("sqs", "queues", "Queue"),
+            "sns" => ("sns", "topics", "Topic"),
+            "lambda" => ("lambda", "functions", "Function"),
+            "states" => ("stepfunctions", "state-machines", "State machine"),
+            "events" when parts[5].StartsWith("event-bus/", StringComparison.Ordinal) => ("events", "event-buses", "Event bus"),
+            "events" when parts[5].StartsWith("archive/", StringComparison.Ordinal) => ("events", "archives", "Archive"),
+            "events" when parts[5].StartsWith("api-destination/", StringComparison.Ordinal) => ("events", "api-destinations", "API destination"),
+            _ => null
+        };
+    }
+
+    public AdminRelationshipSnapshot GetAdminRelationshipSnapshot()
+    {
+        var account = AccountContext.GetAccountId();
+        lock (_lock)
+        {
+            var resources = new List<AdminRelationshipResource>();
+            var relationships = new List<AdminConfiguredRelationship>();
+            var buses = _eventBuses.Values.Where(bus => GetText(bus, "Name") != "default"
+                && ArnAccount(GetText(bus, "Arn")) == account)
+                .Select(bus => (Name: GetText(bus, "Name"), Arn: GetText(bus, "Arn")))
+                .Prepend(("default", $"arn:aws:events:{Region}:{account}:event-bus/default"));
+            foreach (var (name, arn) in buses)
+            {
+                AdminKey[] busPath = [new("event-buses", arn)];
+                resources.Add(new(busPath, name));
+                foreach (var rule in _rules.Values.Where(rule => GetText(rule, "EventBusName", "default") == name))
+                {
+                    var ruleName = GetText(rule, "Name");
+                    AdminKey[] rulePath = [.. busPath, new("rules", GetText(rule, "Arn"))];
+                    resources.Add(new(rulePath, ruleName, GetText(rule, "State")));
+                    relationships.Add(new("events", rulePath, ruleName,
+                        new("Parent event bus", "belongs-to", "events", busPath)));
+                    if (!_targets.TryGetValue(RuleKey(ruleName, name), out var targets))
+                        continue;
+                    foreach (var target in targets)
+                    {
+                        AdminKey[] targetPath = [.. rulePath, new("targets", GetText(target, "Id"))];
+                        resources.Add(new(targetPath, GetText(target, "Id")));
+                        relationships.AddRange(TargetConnections(target).Select(connection =>
+                            new AdminConfiguredRelationship("events", targetPath,
+                                $"{name} / {ruleName} / {GetText(target, "Id")}", connection)));
+                    }
+                }
+            }
+            resources.AddRange(_archives.Values.Select(value => new AdminRelationshipResource(
+                [new("archives", GetText(value, "ArchiveArn"))], GetText(value, "ArchiveName"), GetText(value, "State"))));
+            resources.AddRange(_connections.Values.Select(value => new AdminRelationshipResource(
+                [new("connections", GetText(value, "ConnectionArn"))], GetText(value, "Name"), GetText(value, "ConnectionState"))));
+            resources.AddRange(_apiDestinations.Values.Select(value => new AdminRelationshipResource(
+                [new("api-destinations", GetText(value, "ApiDestinationArn"))], GetText(value, "Name"), GetText(value, "ApiDestinationState"))));
+            return new(resources.ToArray(), relationships.ToArray());
+        }
+    }
 
     private static string ArnAccount(string arn)
     {
         var parts = arn.Split(':');
         return parts.Length > 4 ? parts[4] : "";
     }
+
+    private static IEnumerable<AdminField> TagFields(
+        IReadOnlyDictionary<string, Dictionary<string, string>> tags, string arn) =>
+        (tags.GetValueOrDefault(arn) ?? []).OrderBy(item => item.Key, StringComparer.Ordinal)
+            .Select(item => AdminData.Field($"Tag: {item.Key}", item.Value, secondary: true));
 
     private static string GetText(IReadOnlyDictionary<string, object?> value, string key, string fallback = "") =>
         value.TryGetValue(key, out var item) && item is not null

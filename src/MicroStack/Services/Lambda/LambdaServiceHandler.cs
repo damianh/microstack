@@ -18,7 +18,7 @@ namespace MicroStack.Services.Lambda;
 ///           Concurrency, Function URLs, Event Source Mappings CRUD, Invoke stub,
 ///           Event Invoke Config, Provisioned Concurrency, Code Signing Config stub.
 /// </summary>
-internal sealed class LambdaServiceHandler : IServiceHandler, IAdminResourceSource
+internal sealed class LambdaServiceHandler : IServiceHandler, IAdminResourceSource, IAdminRelationshipSource
 {
     private readonly AccountScopedDictionary<string, FunctionRecord> _functions = new();
     private readonly AccountScopedDictionary<string, LayerRecord> _layers = new();
@@ -43,6 +43,14 @@ internal sealed class LambdaServiceHandler : IServiceHandler, IAdminResourceSour
     // -- IServiceHandler -------------------------------------------------------
 
     public string ServiceName => "lambda";
+
+    public IEnumerable<string> GetKnownAccountIds()
+    {
+        lock (_lock)
+            return _functions.GetAccountIds()
+                .Concat(_layers.GetAccountIds(layer => layer.Versions.Count > 0))
+                .Concat(_esms.GetAccountIds()).ToArray();
+    }
 
     public Task<ServiceResponse> HandleAsync(ServiceRequest request)
     {
@@ -85,12 +93,26 @@ internal sealed class LambdaServiceHandler : IServiceHandler, IAdminResourceSour
             serviceId == ServiceName ?
         [
             new("functions", "Functions"),
-            new("versions", "Versions"),
-            new("aliases", "Aliases"),
+            new("versions", "Versions") { IsRoot = false },
+            new("aliases", "Aliases") { IsRoot = false },
             new("layers", "Layers"),
-            new("layer-versions", "Layer versions"),
+            new("layer-versions", "Layer versions") { IsRoot = false },
             new("event-source-mappings", "Event source mappings"),
         ] : [];
+
+    public AdminRelationshipSnapshot GetAdminRelationshipSnapshot()
+    {
+        lock (_lock)
+        {
+            var resources = _functions.Items.OrderBy(item => item.Key, StringComparer.Ordinal)
+                .Select(item => new AdminRelationshipResource(
+                    [new("functions", item.Key)], item.Key,
+                    item.Value.Config.GetValueOrDefault("State") as string,
+                    item.Value.Config.GetValueOrDefault("FunctionArn") as string))
+                .ToArray();
+            return new(resources, []);
+        }
+    }
 
         public IEnumerable<AdminNode> GetAdminResources(string serviceId)
         {
@@ -162,6 +184,11 @@ internal sealed class LambdaServiceHandler : IServiceHandler, IAdminResourceSour
                         ReadFields = () => AdminProjection.Fields(config,
                             "Runtime", "Handler", "Role", "PackageType", "MemorySize", "Timeout", "LastModified"),
                         ReadContent = () => AdminProjection.Content(config),
+                        ChildKinds =
+                        [
+                            new("versions", "Versions") { IsRoot = false },
+                            new("aliases", "Aliases") { IsRoot = false },
+                        ],
                         ReadChildren = () => versions.Concat(aliases),
                         ReadConnections = connections.Count == 0 ? null : () => connections,
                     });
@@ -178,6 +205,7 @@ internal sealed class LambdaServiceHandler : IServiceHandler, IAdminResourceSour
                             AdminData.Field("LayerArn", layer.LayerArn),
                             AdminData.Field("VersionCount", versions.Length.ToString()),
                         ],
+                        ChildKinds = [new("layer-versions", "Layer versions") { IsRoot = false }],
                         ReadChildren = () => versions,
                     });
                 }

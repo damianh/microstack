@@ -50,18 +50,57 @@ public sealed class AdminClientTests
     {
         using var context = new BunitContext();
         context.JSInterop.Mode = JSRuntimeMode.Loose;
+        context.Services.AddScoped<ExplorerAccountState>();
         var services = Enumerable.Range(1, 40).Select(index =>
             new AdminService($"service-{index}", $"Live service {index}", $"Service {index}", "Live category", "s3", $"handler-{index}", "enabled", "account")
             { Kinds = [new("resources", "Resources")] }).ToArray();
-        using var handler = new Handler((request, _) => Task.FromResult(request.RequestUri!.AbsolutePath.EndsWith("/context", StringComparison.Ordinal)
-            ? Json(new AdminContext("000000000000", "eu-west-1"), AdminJsonContext.Default.AdminContext)
-            : Json(services, AdminJsonContext.Default.AdminServiceArray)));
+        using var handler = new Handler((request, _) => Task.FromResult(request.RequestUri!.AbsolutePath.Split('/').Last() switch
+        {
+            "context" => Json(new AdminContext("000000000000", "eu-west-1"), AdminJsonContext.Default.AdminContext),
+            "accounts" => Json(new[] { "000000000000" }, AdminJsonContext.Default.StringArray),
+            _ => Json(services, AdminJsonContext.Default.AdminServiceArray)
+        }));
         context.Services.AddSingleton(new AdminApiClient(new HttpClient(handler) { BaseAddress = new("http://localhost:4566") }));
-        var view = context.Render<Resources>();
+        var view = context.Render<MicroStack.UI.Client.App>();
         view.WaitForAssertion(() => Assert.Equal(40, view.FindAll(".directory-service").Count));
-        Assert.Contains("eu-west-1", view.Markup);
+        Assert.DoesNotContain("eu-west-1", view.Markup);
         Assert.Contains("Live category", view.Markup);
         Assert.DoesNotContain("SQS", view.Markup);
+        Assert.Equal("http://localhost/accounts/000000000000/services",
+            context.Services.GetRequiredService<NavigationManager>().Uri);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Overview_reads_instance_region_and_reports_context_failure(bool failContext)
+    {
+        using var context = new BunitContext();
+        using var handler = new Handler((request, _) => Task.FromResult(request.RequestUri!.AbsolutePath switch
+        {
+            "/_microstack/health" => new HttpResponseMessage(HttpStatusCode.OK)
+            { Content = new StringContent("""{"services":{},"edition":"test","version":"1"}""") },
+            "/_microstack/resources" => new HttpResponseMessage(HttpStatusCode.OK)
+            { Content = new StringContent("[]") },
+            "/_microstack/admin/v1/context" when failContext => new HttpResponseMessage(HttpStatusCode.ServiceUnavailable),
+            "/_microstack/admin/v1/context" => Json(new AdminContext("000000000000", "eu-west-1"), AdminJsonContext.Default.AdminContext),
+            _ => throw new InvalidOperationException(request.RequestUri.AbsolutePath)
+        }));
+        using var http = new HttpClient(handler) { BaseAddress = new("http://localhost:4566") };
+        context.Services.AddSingleton(new MicroStackApiService(http));
+        context.Services.AddSingleton(new AdminApiClient(http));
+        var view = context.Render<Overview>();
+        if (failContext)
+        {
+            view.WaitForAssertion(() => Assert.Contains("Instance status could not be loaded", view.Find("[role=alert]").TextContent));
+            Assert.Empty(view.FindAll(".overview-facts"));
+        }
+        else
+        {
+            view.WaitForAssertion(() => Assert.Contains("eu-west-1", view.Find(".overview-facts").TextContent));
+            Assert.Contains(view.FindAll(".overview-facts dt"), label => label.TextContent == "Region");
+            Assert.Empty(view.FindAll("#account-id"));
+        }
     }
 
     [Fact]
@@ -95,6 +134,7 @@ public sealed class AdminClientTests
     {
         using var context = new BunitContext();
         context.JSInterop.Mode = JSRuntimeMode.Loose;
+        context.Services.AddScoped<ExplorerAccountState>();
         var account = "111111111111";
         var bucket = new AdminResourceSummary(new("buckets", "a"), "Bucket A");
         var child = new AdminResourceSummary(new("objects", "folder/a.json"), "folder/a.json");
@@ -111,6 +151,7 @@ public sealed class AdminClientTests
             return Task.FromResult(endpoint switch
             {
                 "context" => Json(new AdminContext("000000000000", "eu-west-1"), AdminJsonContext.Default.AdminContext),
+                "accounts" => Json(new[] { "000000000000", account }, AdminJsonContext.Default.StringArray),
                 "services" => Json(new[] { service }, AdminJsonContext.Default.AdminServiceArray),
                 "resources" => Json(new AdminPage<AdminResourceSummary> { Items = [bucket] }, AdminJsonContext.Default.AdminPageAdminResourceSummary),
                 "children" => Json(new AdminPage<AdminResourceSummary> { Items = [child] }, AdminJsonContext.Default.AdminPageAdminResourceSummary),
@@ -124,11 +165,14 @@ public sealed class AdminClientTests
         context.Services.AddSingleton(new AdminApiClient(new HttpClient(handler) { BaseAddress = new("http://localhost:4566") }));
         var navigation = context.Services.GetRequiredService<NavigationManager>();
         navigation.NavigateTo($"/services/s3?account={account}&path={Uri.EscapeDataString(ExplorerLocation.EncodePath([bucket.Key]))}&item={Uri.EscapeDataString(ExplorerLocation.EncodePath([child.Key]))}");
-        var view = context.Render<Resources>(parameters => parameters.Add(component => component.ServiceId, "s3"));
+        var view = context.Render<MicroStack.UI.Client.App>();
         view.WaitForAssertion(() => Assert.Contains("\"live\": true", view.Find("pre").TextContent));
         Assert.NotEmpty(observedAccounts);
         Assert.All(observedAccounts, actual => Assert.Equal(account, actual));
         Assert.Contains("folder/a.json", view.Markup);
+        Assert.StartsWith("http://localhost/accounts/111111111111/services/s3?", navigation.Uri, StringComparison.Ordinal);
+        Assert.DoesNotContain("account=", navigation.Uri, StringComparison.Ordinal);
+        Assert.Contains("item=", navigation.Uri, StringComparison.Ordinal);
     }
 
     [Fact]

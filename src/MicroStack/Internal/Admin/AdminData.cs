@@ -23,12 +23,14 @@ internal static class AdminData
             : IsoUtc(new DateTimeOffset(value));
 
     public static AdminField Field(
-        string name, string? value, bool sensitive = false, bool canReveal = false, string? format = null) =>
-        new(name, sensitive ? MaskedValue : value, sensitive, canReveal, format);
+        string name, string? value, bool sensitive = false, bool canReveal = false, string? format = null,
+        bool secondary = false) =>
+        new(name, sensitive ? MaskedValue : value, sensitive, canReveal, format) { Secondary = secondary };
 
     public static AdminNode Node(
-        string kind, string id, string name, string? arn = null, string? status = null, string scope = "account") =>
-        new(new(new(kind, id), name, arn, status, scope));
+        string kind, string id, string name, string? arn = null, string? status = null, string scope = "account",
+        string? type = null, IReadOnlyList<AdminField>? summary = null) =>
+        new(new(new(kind, id), name, arn, status, scope) { Type = type, Summary = summary ?? [] });
 
     public static AdminContent Text(string text, string contentType = "text/plain", bool sensitive = false)
     {

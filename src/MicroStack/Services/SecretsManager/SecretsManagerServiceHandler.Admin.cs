@@ -9,7 +9,7 @@ internal sealed partial class SecretsManagerServiceHandler
     private static readonly AdminResourceKind[] AdminKinds =
     [
         new("secret", "Secrets"),
-        new("secret-version", "Secret versions")
+        new("secret-version", "Secret versions") { IsRoot = false }
     ];
 
     public IReadOnlyList<AdminResourceKind> GetAdminResourceKinds(string serviceId) => AdminKinds;
@@ -48,6 +48,7 @@ internal sealed partial class SecretsManagerServiceHandler
                     ];
                 }
             },
+            ChildKinds = [AdminKinds[1]],
             ReadChildren = () =>
             {
                 lock (_lock)

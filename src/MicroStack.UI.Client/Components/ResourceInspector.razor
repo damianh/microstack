@@ -1,0 +1,42 @@
+<div class="entry-inspector @(Detail.HasContent && ShowContent ? "content-first" : "configuration-first")">
+    @if (Detail.HasContent && ShowContent)
+    {
+        <ContentPreview Content="@Content" Title="@InspectionProfile.ContentTitle(Service, Detail.Resource.Key.Kind)" />
+    }
+    @if (ShowSummary) { <ResourceFacts Fields="@Summary" Copyable="true" /> }
+    @if (Primary.Count > 0 || Detail.RevealableFields.Count > 0)
+    {
+        <div class="entry-facts">
+            <FieldList Fields="@Primary" RevealableFields="@Detail.RevealableFields" Service="@Service" Account="@Account" Path="@Path" />
+        </div>
+    }
+    @if (Secondary.Count > 0)
+    {
+        <details class="secondary-metadata">
+            <summary>Additional metadata <span class="count">@Secondary.Count</span></summary>
+            <FieldList Fields="@Secondary" Service="@Service" Account="@Account" Path="@Path" />
+        </details>
+    }
+    @ChildContent
+    @if ((!Detail.HasContent || !ShowContent) && Detail.Fields.Count == 0 && Detail.RevealableFields.Count == 0)
+    {
+        <p class="empty-list">@(ShowContent && Detail.HasChildren ? "Browse this resource to inspect its retained entries." : "No additional configuration is retained for this resource.")</p>
+    }
+</div>
+@code {
+    [Parameter, EditorRequired] public AdminResourceDetail Detail { get; set; } = default!;
+    [Parameter] public AdminContent? Content { get; set; }
+    [Parameter] public string Service { get; set; } = "";
+    [Parameter] public string Account { get; set; } = "";
+    [Parameter] public AdminKey[] Path { get; set; } = [];
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public bool ShowSummary { get; set; } = true;
+    [Parameter] public bool SummaryShownExternally { get; set; }
+    [Parameter] public bool ShowContent { get; set; } = true;
+    private IReadOnlyList<AdminField> Summary => Detail.Summary.Count > 0 ? Detail.Summary : Detail.Resource.Summary;
+    private IReadOnlyList<AdminField> Primary => Detail.Fields.Where(fact =>
+        (!fact.Secondary || fact.Sensitive) && !IsSummaryDuplicate(fact)).ToArray();
+    private IReadOnlyList<AdminField> Secondary => Detail.Fields.Where(fact => fact.Secondary && !fact.Sensitive).ToArray();
+    private bool IsSummaryDuplicate(AdminField fact) => (ShowSummary || SummaryShownExternally) && !fact.Sensitive && !fact.CanReveal &&
+        Summary.Any(summary => !summary.Sensitive && summary.Name == fact.Name && summary.Value == fact.Value && summary.Format == fact.Format);
+}

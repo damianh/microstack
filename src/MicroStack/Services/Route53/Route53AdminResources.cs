@@ -8,7 +8,7 @@ internal sealed partial class Route53ServiceHandler
 {
     private static readonly AdminResourceKind[] AdminKinds =
     [
-        new("hosted-zones", "Hosted zones"), new("record-sets", "Record sets"),
+        new("hosted-zones", "Hosted zones"), new("record-sets", "Record sets") { IsRoot = false },
     ];
 
     public IReadOnlyList<AdminResourceKind> GetAdminResourceKinds(string serviceId) =>
@@ -36,6 +36,7 @@ internal sealed partial class Route53ServiceHandler
                 AdminData.Field("Comment", zone.Comment),
                 AdminData.Field("CallerReference", zone.CallerReference),
             ],
+            ChildKinds = [AdminKinds[1]],
             ReadChildren = () =>
             {
                 lock (_lock)

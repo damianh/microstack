@@ -129,6 +129,7 @@ internal sealed class FirehoseServiceHandler : IServiceHandler, IAdminResourceSo
                     ];
                 }
             },
+            ChildKinds = [new("destination", "Destinations") { IsRoot = false }],
             ReadChildren = () =>
             {
                 lock (_lock)
@@ -175,6 +176,7 @@ internal sealed class FirehoseServiceHandler : IServiceHandler, IAdminResourceSo
                     ];
                 }
             },
+            ChildKinds = [new("record", "Records") { IsRoot = false }],
             ReadChildren = () =>
             {
                 lock (_lock)
