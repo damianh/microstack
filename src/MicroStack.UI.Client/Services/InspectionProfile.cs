@@ -8,16 +8,6 @@ public static class InspectionProfile
     public static IReadOnlyList<AdminResourceKind> RootKinds(AdminService? service) =>
         service?.Kinds.Where(kind => kind.IsRoot).ToArray() ?? [];
 
-    public static string Description(string service) => service switch
-    {
-        "sqs" => "Inspect retained queues, non-consuming message snapshots, and configured connections.",
-        "s3" => "Browse buckets and prefixes, inspect objects, and review retained configuration.",
-        "dynamodb" => "Inspect table schemas and retained items with their DynamoDB attribute types.",
-        "sns" => "Inspect subscriptions and configured destinations. Topics are not message inboxes.",
-        "events" => "Browse event buses, rule patterns or schedules, and configured targets.",
-        _ => "Browse retained resources, inspect their data, and follow configured connections."
-    };
-
     public static string ContentTitle(string service, string kind) => (service, kind) switch
     {
         ("sqs", "messages") => "Message body",

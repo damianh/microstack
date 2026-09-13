@@ -42,12 +42,15 @@
 }
 @if (_busy) { <p role="status">Retrieving the selected sensitive value…</p> }
 @if (_error is not null) { <p class="notice error" role="alert">@_error</p> }
+@if (Fields.Any(field => field.CanReveal) || RevealableFields.Count > 0)
+{ <p class="index-note">Live refresh hides revealed values. Pause live updates before revealing a value to keep it open.</p> }
 @code {
     [Parameter] public IReadOnlyList<AdminField> Fields { get; set; } = [];
     [Parameter] public IReadOnlyList<string> RevealableFields { get; set; } = [];
     [Parameter] public string Service { get; set; } = "";
     [Parameter] public string Account { get; set; } = "";
     [Parameter] public AdminKey[] Path { get; set; } = [];
+    [Parameter] public long Revision { get; set; }
     private readonly Dictionary<string, AdminContent> _revealed = [];
     private CancellationTokenSource _cts = new();
     private string? _scope;
@@ -56,7 +59,7 @@
     private IEnumerable<string> ExtraRevealFields => RevealableFields.Where(name => Fields.All(item => item.Name != name));
     protected override void OnParametersSet()
     {
-        var scope = Service + Account + ExplorerLocation.EncodePath(Path);
+        var scope = Service + Account + ExplorerLocation.EncodePath(Path) + ":" + Revision;
         if (scope == _scope) return;
         _cts.Cancel(); _cts.Dispose(); _cts = new();
         _scope = scope; _revealed.Clear(); _error = null; _busy = false;

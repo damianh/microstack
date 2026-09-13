@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using MicroStack.Admin.Contracts;
 using MicroStack.Internal;
 using MicroStack.Internal.Admin;
@@ -26,13 +27,33 @@ internal sealed partial class SqsServiceHandler : IAdminResourceSource, IAdminRe
         QueueSnapshot[] queues;
         lock (_lock)
         {
-            queues = _queues.Values.Select(queue => new QueueSnapshot(
-                queue.Name,
-                QueueUrl(QueueEndpoint(), queue.Name),
-                queue.IsFifo,
-                new(queue.Attributes, StringComparer.Ordinal),
-                new(queue.Tags, StringComparer.Ordinal),
-                queue.Messages.Select(message => new MessageSnapshot(
+            queues = _queues.Values.Select(queue =>
+            {
+                var visible = 0;
+                var delayed = 0;
+                foreach (var message in queue.Messages)
+                {
+                    if (message.VisibleAtMs <= now)
+                        visible++;
+                    else if (message.ReceiveCount == 0 && message.FirstReceiveAtMs is null)
+                        delayed++;
+                }
+                return new QueueSnapshot(queue.Name, QueueUrl(QueueEndpoint(), queue.Name), queue.IsFifo,
+                    new(queue.Attributes, StringComparer.Ordinal),
+                    new(queue.Tags, StringComparer.Ordinal),
+                    visible, delayed, queue.Messages.Count - visible - delayed,
+                    () => ReadMessages(queue));
+            }).ToArray();
+        }
+
+        return queues.Select(queue => QueueNode(queue, now)).ToArray();
+    }
+
+    private MessageSnapshot[] ReadMessages(SqsQueue queue)
+    {
+        lock (_lock)
+        {
+            return queue.Messages.Select(message => new MessageSnapshot(
                     message.Id,
                     message.Body,
                     message.Md5Body,
@@ -41,23 +62,21 @@ internal sealed partial class SqsServiceHandler : IAdminResourceSource, IAdminRe
                     message.VisibleAtMs,
                     message.ReceiveCount,
                     message.FirstReceiveAtMs,
-                    message.MessageAttributes.ToJsonString(),
+                    message.MessageAttributes.DeepClone(),
                     new(message.SystemAttributes, StringComparer.Ordinal),
                     message.GroupId,
                     message.DedupId,
-                    message.SequenceNumber)).ToArray())).ToArray();
+                    message.SequenceNumber)).ToArray();
         }
-
-        return queues.Select(queue => QueueNode(queue, now)).ToArray();
     }
 
     private static AdminNode QueueNode(QueueSnapshot queue, long capturedAt)
     {
         var arn = queue.Attributes.GetValueOrDefault("QueueArn")
             ?? $"arn:aws:sqs:{_region}:{AccountContext.GetAccountId()}:{queue.Name}";
-        var visible = queue.Messages.Count(message => MessageState(message, capturedAt) == "visible");
-        var delayed = queue.Messages.Count(message => MessageState(message, capturedAt) == "delayed");
-        var inFlight = queue.Messages.Length - visible - delayed;
+        var visible = queue.Visible;
+        var delayed = queue.Delayed;
+        var inFlight = queue.InFlight;
         AdminField[] summary =
         [
             AdminData.Field("Visible messages", visible.ToString(CultureInfo.InvariantCulture)),
@@ -85,7 +104,8 @@ internal sealed partial class SqsServiceHandler : IAdminResourceSource, IAdminRe
                     secondary: true)))
                 .Concat(queue.Tags.OrderBy(item => item.Key, StringComparer.Ordinal)
                     .Select(item => AdminData.Field($"Tag: {item.Key}", item.Value, secondary: true))).ToArray(),
-            ReadChildren = () => queue.Messages.Select(message => MessageNode(message, capturedAt, queue.IsFifo)).ToArray(),
+            ReadChildren = () => queue.ReadMessages()
+                .Select(message => MessageNode(message, capturedAt, queue.IsFifo)).ToArray(),
             ReadConnections = () => QueueConnections(queue.Attributes)
         };
     }
@@ -108,7 +128,7 @@ internal sealed partial class SqsServiceHandler : IAdminResourceSource, IAdminRe
                     ? AdminData.IsoUtc(DateTimeOffset.FromUnixTimeMilliseconds(first)) : null, format: "datetime"),
                 AdminData.Field("Body MD5", message.Md5Body, secondary: true),
                 AdminData.Field("Attributes MD5", message.Md5Attrs, secondary: true),
-                AdminData.Field("Message attributes", message.MessageAttributes, format: "json", secondary: true),
+                AdminData.Field("Message attributes", message.MessageAttributes.ToJsonString(), format: "json", secondary: true),
                 AdminData.Field("System attributes", string.Join(", ",
                     message.SystemAttributes.OrderBy(item => item.Key, StringComparer.Ordinal)
                         .Select(item => $"{item.Key}={item.Value}")), secondary: true),
@@ -221,11 +241,11 @@ internal sealed partial class SqsServiceHandler : IAdminResourceSource, IAdminRe
         string Name, string Url, bool IsFifo,
         Dictionary<string, string> Attributes,
         Dictionary<string, string> Tags,
-        MessageSnapshot[] Messages);
+        int Visible, int Delayed, int InFlight, Func<MessageSnapshot[]> ReadMessages);
 
     private sealed record MessageSnapshot(
         string Id, string Body, string Md5Body, string? Md5Attrs,
         long SentAtMs, long VisibleAtMs, int ReceiveCount, long? FirstReceiveAtMs,
-        string MessageAttributes, Dictionary<string, string> SystemAttributes,
+        JsonNode MessageAttributes, Dictionary<string, string> SystemAttributes,
         string? GroupId, string? DedupId, string? SequenceNumber);
 }

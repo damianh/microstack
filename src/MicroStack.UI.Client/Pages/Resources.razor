@@ -1,9 +1,10 @@
 @page "/accounts/{AccountId}/services"
 @page "/accounts/{AccountId}/services/{ServiceId}"
-@implements IDisposable
+@implements IAsyncDisposable
 @using Microsoft.AspNetCore.Components.Sections
 @inject AdminApiClient Api
 @inject ExplorerAccountState AccountState
+@inject LiveUpdateCoordinator Live
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
 
@@ -19,6 +20,8 @@
             <a href="@HomeUrl">All services</a><span aria-hidden="true">/</span>
             <ServicePicker Services="@_services" Selected="@_service" SelectedChanged="SwitchService" />
         </nav>
+        @if (_service is not null)
+        { <button class="button mobile-resources" @onclick="ToggleBrowse">@(_browsing ? "Return to detail" : "Browse resources")</button> }
     </div>
 }
 @if (_error is not null)
@@ -66,13 +69,8 @@
 else if (_service is not null)
 {
     @if (ExplorerLocation.ResolveReturn(Navigation, ReturnTo) is { } returnTo) { <a class="return-link" href="@returnTo">← Return to previous inspection</a> }
-    <header class="service-heading">
-        <div><div class="service-title-line"><img class="aws-service-icon" src="@($"icons/{_service.Icon}.svg")" alt="" /><h1>@_service.Label</h1></div>
-            <p>@InspectionProfile.Description(ServiceId)</p>
-            @if (_service.Scope != "account") { <p class="scope-exception">@ScopeLabel(_service.Scope)@(IsGlobalScope(_service.Scope) ? " · shared across accounts" : "")</p> }
-        </div>
-        <button class="button mobile-resources" @onclick="ToggleBrowse">@(_browsing ? "Return to detail" : "Browse resources")</button>
-    </header>
+    <h1 class="sr-only">@_service.Label</h1>
+    @if (_service.Scope != "account") { <p class="scope-exception">@ScopeLabel(_service.Scope)@(IsGlobalScope(_service.Scope) ? " · shared across accounts" : "")</p> }
     @if (!string.IsNullOrEmpty(_service.Notice)) { <p class="notice">@_service.Notice</p> }
     @if (_service.Availability == "disabled")
     { <section class="state-panel"><h2>Service disabled</h2><p>This service is declared in the catalog but its handler is not enabled on this instance.</p><a class="button" href="overview">View instance status</a></section> }
@@ -80,14 +78,21 @@ else if (_service is not null)
     {
         <div class="resource-workspace @(_browsing ? "browsing" : "")">
             <section id="resource-index" class="resource-index" aria-label="Resources" aria-busy="@(_busy ? "true" : "false")" tabindex="-1">
-                <div class="index-heading"><span>@RootKindLabel</span><span class="count">@(_resources?.Items.Count ?? 0) loaded</span></div>
-                @if (RootKinds.Count > 1)
-                {
-                    <label class="sr-only" for="resource-kind">Resource kind</label>
-                    <select id="resource-kind" class="kind-select" value="@_kind" @onchange="ChangeKind">
-                        @foreach (var kind in RootKinds) { <option value="@kind.Id">@kind.Label</option> }
-                    </select>
-                }
+                <div class="index-heading">
+                    @if (RootKinds.Count > 1)
+                    {
+                        <label class="sr-only" for="resource-kind">Resource kind</label>
+                        <div class="kind-picker">
+                            <select id="resource-kind" class="kind-select" value="@_kind" @onchange="ChangeKind">
+                                @foreach (var kind in RootKinds) { <option value="@kind.Id">@kind.Label</option> }
+                            </select>
+                            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m6 9 6 6 6-6" /></svg>
+                        </div>
+                    }
+                    else
+                    { <span>@RootKindLabel</span> }
+                    <span class="count">@(_resources?.Items.Count ?? 0)</span>
+                </div>
                 <DebouncedFilter Value="@Filter" Scope="@FilterScope" Label="@RootFilterLabel" Placeholder="@($"{RootFilterLabel}…")" Changed="ApplyResourceFilter" />
                 @if (_showLoading && _resources is null) { <LoadingState Label="Loading resources…" /> }
                 @if (_resources is not null)
@@ -103,9 +108,8 @@ else if (_service is not null)
                         }
                     </div>
                     @if (_resources.Items.Count == 0) { <p class="empty-list">No @RootKindLabel.ToLowerInvariant()@(string.IsNullOrEmpty(Filter) ? " in this scope." : " match this filter.")</p> }
-                    <PageNavigation Loaded="@_resources.Items.Count" KnownTotal="@_resources.KnownTotal" NextCursor="@_resources.NextCursor" HasCursor="@(!string.IsNullOrEmpty(Cursor))" Changed="ChangeResourcePage" />
                 }
-                <p class="index-note">Name / identifier search · server snapshots</p>
+                <p class="index-note">Name / identifier search · pause for stable inspection.</p>
             </section>
             <section class="inspector" aria-label="Selected resource" aria-busy="@(_busy ? "true" : "false")">
                 @if (_showLoading && _detail is null) { <LoadingState /> }
@@ -127,9 +131,7 @@ else if (_service is not null)
                                 @if (InspectionProfile.DisplayStatus(_detail.Resource) is { } status) { <span class="tag">@status</span> }
                                 @if (_detail.Resource.Scope != "account") { <span>@ScopeLabel(_detail.Resource.Scope)</span> }
                             </div>
-                        </div><button class="button" disabled="@_busy" @onclick="LoadAsync">
-                            <svg aria-hidden="true" viewBox="0 0 20 20"><path d="M16 6a7 7 0 1 0 1 7M16 2v5h-5" /></svg>Refresh snapshot
-                        </button></div>
+                        </div></div>
                         <div class="arn-row"><code>@(_detail.Resource.Arn ?? _detail.Resource.Key.Id)</code><CopyButton Text="@(_detail.Resource.Arn ?? _detail.Resource.Key.Id)" Label="Copy identifier" /></div>
                         <ResourceFacts Fields="@(_detail.Summary.Count > 0 ? _detail.Summary : _detail.Resource.Summary)" Copyable="true" />
                     </div>
@@ -144,7 +146,7 @@ else if (_service is not null)
                         @if (_showLoading) { <p class="snapshot-updating" role="status">Updating snapshot…</p> }
                         @if (ActiveTab == "configuration")
                         {
-                            <ResourceInspector @key="_loadedScope" Detail="@_detail" ShowContent="false" ShowSummary="false" SummaryShownExternally="true" Service="@ServiceId" Account="@_account" Path="@_path" />
+                            <ResourceInspector @key="_loadedScope" Revision="@_revealRevision" Detail="@_detail" ShowContent="false" ShowSummary="false" SummaryShownExternally="true" Service="@ServiceId" Account="@_account" Path="@_path" />
                         }
                         else if (ActiveTab == "connections")
                         {
@@ -154,10 +156,6 @@ else if (_service is not null)
                                 <ConnectionList Connections="@_connections.Items" Destination="ConnectionUrl" Source="ConnectionSourceUrl" />
                             }
                             else { <p class="empty-list">No configured connections are retained for this resource.</p> }
-                            @if (_connections is not null)
-                            {
-                                <PageNavigation Loaded="@_connections.Items.Count" KnownTotal="@_connections.KnownTotal" NextCursor="@_connections.NextCursor" HasCursor="@(!string.IsNullOrEmpty(ConnectionCursor))" Changed="ChangeConnectionPage" />
-                            }
                         }
                         else if (ActiveTab == "activity")
                         { <RequestActivity @key="@($"{ServiceId}:{_account}")" Service="@ServiceId" Account="@_account" /> }
@@ -167,7 +165,7 @@ else if (_service is not null)
                             @if (ServiceId == "dynamodb") { <p class="notice">Items retain DynamoDB attribute types (S, N, M, L, and other modeled types). Browsing does not execute a query or alter items.</p> }
                             @if (_detail.HasContent)
                             {
-                                <ResourceInspector @key="_loadedScope" Detail="@_detail" ShowSummary="false" SummaryShownExternally="true" Content="@_content" Service="@ServiceId" Account="@_account" Path="@_path" />
+                                <ResourceInspector @key="_loadedScope" Revision="@_revealRevision" Detail="@_detail" ShowSummary="false" SummaryShownExternally="true" Content="@_content" Service="@ServiceId" Account="@_account" Path="@_path" />
                             }
                             @if (_detail.HasChildren)
                             {
@@ -202,7 +200,7 @@ else if (_service is not null)
                                 </div>
                                 <div class="data-split">
                                     <section class="records" aria-label="@ChildrenLabel">
-                                        <div class="list-heading"><span>@ChildrenLabel</span><span>@(_children?.Items.Count ?? 0) loaded</span></div>
+                                        <div class="list-heading"><span>@ChildrenLabel</span><span>@(_children?.Items.Count ?? 0)</span></div>
                                         @if (_children is not null)
                                         {
                                             @foreach (var group in _children.Items.GroupBy(child => child.Key.Kind))
@@ -232,7 +230,7 @@ else if (_service is not null)
                                                 <CopyButton Text="@(_selectedDetail.Resource.Arn ?? _selectedDetail.Resource.Key.Id)" Label="Copy entry identifier" />
                                                 @if (_selectedDetail.HasChildren) { <a class="button" href="@OpenChildUrl">Browse @SelectedBrowseLabel →</a> }
                                             </div>
-                                            <ResourceInspector @key="_scopeKey" Detail="@_selectedDetail" Content="@_selectedContent" Service="@ServiceId" Account="@_account" Path="@SelectedPath">
+                                            <ResourceInspector @key="_scopeKey" Revision="@_revealRevision" Detail="@_selectedDetail" Content="@_selectedContent" Service="@ServiceId" Account="@_account" Path="@SelectedPath">
                                                 @if (_selectedDetail.HasConnections)
                                                 {
                                                     <section class="entry-connections" aria-label="Configured connections">
@@ -241,10 +239,8 @@ else if (_service is not null)
                                                         @if (_selectedConnections is { Items.Count: > 0 })
                                                         {
                                                             <ConnectionList Connections="@_selectedConnections.Items" Destination="ConnectionUrl" Source="ConnectionSourceUrl" />
-                                                            <p class="index-note">@_selectedConnections.Items.Count loaded@(_selectedConnections.KnownTotal is { } total ? $" · {total:N0} total" : "")</p>
                                                         }
                                                         else if (_selectedConnections is not null) { <p class="empty-list">No configured connections are retained for this entry.</p> }
-                                                        <a class="button" href="@SelectedConnectionsUrl">View all configured connections →</a>
                                                     </section>
                                                 }
                                             </ResourceInspector>
@@ -252,8 +248,6 @@ else if (_service is not null)
                                         else if (_childError is null) { <p class="empty-list">Select an entry to inspect its content and metadata.</p> }
                                     </section>
                                 </div>
-                                @if (_children is not null)
-                                { <PageNavigation Loaded="@_children.Items.Count" KnownTotal="@_children.KnownTotal" NextCursor="@_children.NextCursor" HasCursor="@(!string.IsNullOrEmpty(ChildCursor))" Changed="ChangeChildPage" /> }
                             }
                             @if (!_detail.HasChildren && !_detail.HasContent)
                             { <p class="notice">This resource retains configuration, not a browsable content collection. Inspect the Configuration tab for its modeled fields.</p> }

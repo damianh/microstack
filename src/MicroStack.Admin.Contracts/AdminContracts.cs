@@ -2,6 +2,10 @@ namespace MicroStack.Admin.Contracts;
 
 public sealed record AdminContext(string DefaultAccount, string Region, int PreviewMaxBytes = 1_048_576);
 
+public sealed record AdminChangeEvent(
+    int Version, string Epoch, long Sequence, bool Resync,
+    bool Resources, bool Accounts, bool Instance, bool Activity);
+
 public sealed record AdminService(
     string Id, string Name, string Label, string Category, string Icon,
     string CanonicalHandler, string Availability, string Scope, string? Notice = null)

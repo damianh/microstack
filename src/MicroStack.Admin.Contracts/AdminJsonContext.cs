@@ -6,6 +6,7 @@ namespace MicroStack.Admin.Contracts;
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
     GenerationMode = JsonSourceGenerationMode.Metadata)]
 [JsonSerializable(typeof(AdminContext))]
+[JsonSerializable(typeof(AdminChangeEvent))]
 [JsonSerializable(typeof(string[]))]
 [JsonSerializable(typeof(AdminService))]
 [JsonSerializable(typeof(AdminResourceKind))]

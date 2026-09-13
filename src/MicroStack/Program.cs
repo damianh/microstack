@@ -67,7 +67,8 @@ AccountContext.Configure(options);
 // so we use factory lambdas instead of letting DI locate a public constructor.
 builder.Services.AddSingleton<AwsServiceRouter>();
 builder.Services.AddSingleton<ServiceRegistry>(_ => new ServiceRegistry(options));
-builder.Services.AddSingleton<RequestLog>(_ => new RequestLog());
+builder.Services.AddSingleton<AdminChangeHub>(_ => new AdminChangeHub());
+builder.Services.AddSingleton<RequestLog>(sp => new RequestLog(changes: sp.GetRequiredService<AdminChangeHub>()));
 builder.Services.AddSingleton<StatePersistence>(sp => new StatePersistence(
     sp.GetRequiredService<ILogger<StatePersistence>>(),
     sp.GetRequiredService<ServiceRegistry>(),
@@ -100,7 +101,8 @@ registry.Register(new StsServiceHandler(iamHandler));
 registry.Register(new SecretsManagerServiceHandler());
 registry.Register(new SsmServiceHandler());
 registry.Register(new KmsServiceHandler());
-var lambdaHandler = new LambdaServiceHandler(sqsHandler, ddbHandler);
+var lambdaHandler = new LambdaServiceHandler(sqsHandler, ddbHandler,
+    app.Services.GetRequiredService<AdminChangeHub>());
 registry.Register(lambdaHandler);
 registry.Register(new ApiGatewayV2ServiceHandler(lambdaHandler));
 var sfnHandler = new StepFunctionsServiceHandler(lambdaHandler, registry);
@@ -153,9 +155,16 @@ foreach (var healthPath in new[] { "/_microstack/health", "/health", "/_localsta
 // Reset endpoint
 app.MapPost("/_microstack/reset", () =>
 {
-    registry.ResetAll();
-    persistence.DeleteAll();
-    return Results.Ok(new ResetResponse("ok"));
+    try
+    {
+        registry.ResetAll();
+        persistence.DeleteAll();
+        return Results.Ok(new ResetResponse("ok"));
+    }
+    finally
+    {
+        app.Services.GetRequiredService<AdminChangeHub>().Publish(AdminDirty.All);
+    }
 }).RequireCors(adminCorsPolicy);
 
 // Config endpoint (stub — populated when services implement it)
@@ -174,7 +183,15 @@ app.MapPost("/_microstack/config", async (HttpContext ctx) =>
                 && sfnEl.TryGetProperty("_sfn_mock_config", out var mockEl))
             {
                 var mockConfig = DictionaryObjectJsonConverter.DeserializeElementDeep(mockEl);
-                sfnHandler.SetMockConfig(mockConfig);
+                try
+                {
+                    sfnHandler.SetMockConfig(mockConfig);
+                }
+                finally
+                {
+                    app.Services.GetRequiredService<AdminChangeHub>()
+                        .Publish(AdminDirty.Resources | AdminDirty.Instance);
+                }
                 applied["stepfunctions._sfn_mock_config"] = "applied";
             }
         }

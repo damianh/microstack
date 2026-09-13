@@ -7,11 +7,14 @@
 <header class="app-header">
     <a class="brand" href="@ServicesUrl" aria-label="MicroStack services"><img src="logo.png" alt="" width="32" height="30" /><strong>MicroStack</strong></a>
     <span class="header-divider" aria-hidden="true"></span>
-    <div class="header-context">
-        @if (IsInstancePage)
-        { <span class="header-title">Instance-wide</span> }
-        else
-        { <SectionOutlet SectionName="explorer-account" /> }
+    <div class="header-tools">
+        <div class="header-context">
+            @if (IsInstancePage)
+            { <span class="header-title">Instance-wide</span> }
+            else
+            { <SectionOutlet SectionName="explorer-account" /> }
+        </div>
+        <LiveControls />
     </div>
     <nav class="global-nav" aria-label="Main navigation">
         <NavLink href="@ServicesUrl">Services</NavLink>

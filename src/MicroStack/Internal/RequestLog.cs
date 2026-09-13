@@ -1,3 +1,5 @@
+using MicroStack.Internal.Admin;
+
 namespace MicroStack.Internal;
 
 internal sealed record RequestLogEntry(
@@ -17,13 +19,15 @@ internal sealed class RequestLog
     private int _nextIndex;
     private int _count;
     private readonly Lock _lock = new();
+    private readonly AdminChangeHub? _changes;
 
-    internal RequestLog(int capacity = 1000)
+    internal RequestLog(int capacity = 1000, AdminChangeHub? changes = null)
     {
         if (capacity <= 0)
             throw new ArgumentOutOfRangeException(nameof(capacity), "Capacity must be greater than zero.");
 
         _entries = new RequestLogEntry[capacity];
+        _changes = changes;
     }
 
     internal void Add(RequestLogEntry entry)
@@ -35,6 +39,7 @@ internal sealed class RequestLog
             if (_count < _entries.Length)
                 _count++;
         }
+        _changes?.Publish(AdminDirty.Activity);
     }
 
     internal List<RequestLogEntry> GetEntries(int limit = 1000)
@@ -69,5 +74,6 @@ internal sealed class RequestLog
             _nextIndex = 0;
             _count = 0;
         }
+        _changes?.Publish(AdminDirty.Activity);
     }
 }

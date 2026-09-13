@@ -57,9 +57,11 @@ public sealed class ResourceExplorerTests
         using var fixture = new ExplorerFixture("sqs", [new("queues", "Queues")]);
         var view = fixture.Render("?account=111111111111");
         view.WaitForAssertion(() => Assert.Single(view.FindAll(".app-header #account-id")));
+        Assert.Single(view.FindAll(".header-tools > .live-controls"));
         Assert.Empty(view.FindAll("main #account-id"));
         await view.InvokeAsync(() => fixture.Navigation.NavigateTo("/" + page));
         view.WaitForAssertion(() => Assert.Equal("Instance-wide", view.Find(".header-context").TextContent.Trim()));
+        Assert.Single(view.FindAll(".header-tools > .live-controls"));
         Assert.Empty(view.FindAll("#account-id"));
         foreach (var link in view.FindAll(".brand,.global-nav a:first-child"))
             Assert.Equal("http://localhost/accounts/111111111111/services", link.GetAttribute("href"));
@@ -185,7 +187,7 @@ public sealed class ResourceExplorerTests
         var view = fixture.Render(fixture.PathQuery + "&account=111111111111");
         view.WaitForAssertion(() => Assert.Single(view.FindAll("#resource-title")));
         fixture.Accounts = ["000000000000"];
-        await view.Find(".resource-heading button").ClickAsync(new());
+        await view.FindComponent<Resources>().Instance.RefreshLiveAsync(CancellationToken.None);
         view.WaitForAssertion(() => Assert.Contains("has no retained resources", view.Find("[role=alert]").TextContent));
         Assert.Empty(view.FindAll("#resource-title"));
         Assert.Empty(view.FindAll(".resource-button"));
@@ -210,6 +212,77 @@ public sealed class ResourceExplorerTests
         Assert.Empty(view.FindAll(".directory-service"));
         Assert.Contains("No services match", view.Find(".empty-list").TextContent);
         Assert.Single(view.FindAll("#account-id"));
+    }
+
+    [Fact]
+    public async Task Live_refresh_updates_content_without_resetting_route_filter_or_inspector()
+    {
+        using var fixture = new ExplorerFixture("sqs", [new("queues", "Queues")]);
+        fixture.Detail = fixture.Detail with { HasContent = true };
+        var view = fixture.Render(fixture.PathQuery + "&filter=root&cursor=page-two");
+        view.WaitForAssertion(() => Assert.Single(view.FindAll("pre[aria-label='Escaped content']")));
+        var uri = fixture.Navigation.Uri;
+        var filter = view.FindComponents<DebouncedFilter>()[0].Instance;
+        var inspector = view.FindComponent<ResourceInspector>().Instance;
+        fixture.Content = new("json", "application/json", Text: """{"updated":true}""");
+        await view.FindComponent<Resources>().Instance.RefreshLiveAsync(CancellationToken.None);
+        Assert.Contains("\"updated\": true", view.Find("pre[aria-label='Escaped content']").TextContent);
+        Assert.Equal(uri, fixture.Navigation.Uri);
+        Assert.Same(filter, view.FindComponents<DebouncedFilter>()[0].Instance);
+        Assert.Same(inspector, view.FindComponent<ResourceInspector>().Instance);
+        Assert.False(fixture.ResourceQueries.Last().ContainsKey("cursor"));
+        Assert.Empty(view.FindAll(".pagination"));
+        Assert.Empty(view.FindAll(".skeleton"));
+    }
+
+    [Fact]
+    public async Task Live_deletion_preserves_url_and_lists_and_can_recover()
+    {
+        using var fixture = new ExplorerFixture("sqs", [new("queues", "Queues")]);
+        fixture.Detail = fixture.Detail with { HasContent = true };
+        var view = fixture.Render(fixture.PathQuery);
+        view.WaitForAssertion(() => Assert.Single(view.FindAll("#resource-title")));
+        var uri = fixture.Navigation.Uri;
+        fixture.DetailResponse = (_, _) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound)
+        { Content = JsonContent.Create(new AdminError("not_found", "Gone"), AdminJsonContext.Default.AdminError) });
+        await view.FindComponent<Resources>().Instance.RefreshLiveAsync(CancellationToken.None);
+        Assert.Equal(uri, fixture.Navigation.Uri);
+        Assert.Empty(view.FindAll("#resource-title,pre[aria-label='Escaped content']"));
+        Assert.Single(view.FindAll(".resource-button"));
+        Assert.Contains("no longer exists", view.Find("[role=alert]").TextContent);
+        fixture.DetailResponse = null;
+        await view.FindComponent<Resources>().Instance.RefreshLiveAsync(CancellationToken.None);
+        Assert.Single(view.FindAll("#resource-title"));
+        Assert.Empty(view.FindAll("[role=alert]"));
+    }
+
+    [Fact]
+    public async Task Live_failure_preserves_last_frame_and_reports_failure_to_coordinator()
+    {
+        using var fixture = new ExplorerFixture("sqs", [new("queues", "Queues")]);
+        var view = fixture.Render(fixture.PathQuery);
+        view.WaitForAssertion(() => Assert.Single(view.FindAll("#resource-title")));
+        fixture.FailAccounts = true;
+        await Assert.ThrowsAsync<AdminApiException>(() =>
+            view.FindComponent<Resources>().Instance.RefreshLiveAsync(CancellationToken.None));
+        Assert.Single(view.FindAll("#resource-title"));
+        Assert.Contains("may be stale", view.Find("[role=alert]").TextContent);
+    }
+
+    [Fact]
+    public async Task Cancelled_live_response_cannot_replace_paused_frame()
+    {
+        using var fixture = new ExplorerFixture("sqs", [new("queues", "Queues")]);
+        var view = fixture.Render(fixture.PathQuery);
+        view.WaitForAssertion(() => Assert.Single(view.FindAll("#resource-title")));
+        var pending = new TaskCompletionSource<HttpResponseMessage>(TaskCreationOptions.RunContinuationsAsynchronously);
+        fixture.DetailResponse = (_, _) => pending.Task;
+        using var cancel = new CancellationTokenSource();
+        var refresh = view.FindComponent<Resources>().Instance.RefreshLiveAsync(cancel.Token);
+        await view.InvokeAsync(() => cancel.Cancel());
+        pending.SetResult(Json(new AdminResourceDetail(new(new("queues", "root"), "Updated")), AdminJsonContext.Default.AdminResourceDetail));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => refresh);
+        Assert.Equal("Root resource", view.Find("#resource-title").TextContent);
     }
 
     [Theory]
@@ -249,17 +322,27 @@ public sealed class ResourceExplorerTests
         var view = fixture.Render("?kind=objects");
         view.WaitForAssertion(() => Assert.Single(view.FindAll(".resource-button")));
         Assert.Empty(view.FindAll("#resource-kind"));
+        Assert.Contains("Buckets", view.Find(".index-heading").TextContent);
+        Assert.Empty(view.FindAll(".index-heading svg"));
         Assert.Equal("buckets", fixture.ResourceQueries.Single()["kind"]);
     }
 
     [Fact]
-    public void Multiple_roots_keep_selector_without_child_kinds()
+    public async Task Multiple_roots_use_selector_as_heading_without_duplicate_label_or_child_kinds()
     {
         using var fixture = new ExplorerFixture("sns",
             [new("topics", "Topics"), new("subscriptions", "Subscriptions") { IsRoot = false }, new("applications", "Platform applications")]);
-        var view = fixture.Render();
+        var view = fixture.Render(fixture.PathQuery + "&filter=old");
         view.WaitForAssertion(() => Assert.Equal(2, view.FindAll("#resource-kind option").Count));
         Assert.Equal(["topics", "applications"], view.FindAll("#resource-kind option").Select(option => option.GetAttribute("value")));
+        Assert.Single(view.FindAll(".index-heading #resource-kind"));
+        Assert.Equal("1", view.Find(".index-heading > span").TextContent);
+        Assert.Single(view.FindAll(".index-heading > span"));
+        await view.Find("#resource-kind").ChangeAsync(new() { Value = "applications" });
+        Assert.Equal("applications", fixture.ResourceQueries.Last()["kind"]);
+        Assert.False(fixture.ResourceQueries.Last().ContainsKey("filter"));
+        Assert.DoesNotContain("path=", fixture.Navigation.Uri, StringComparison.Ordinal);
+        Assert.Empty(view.FindAll("#resource-title"));
     }
 
     [Fact]
@@ -322,7 +405,7 @@ public sealed class ResourceExplorerTests
         ];
         var view = fixture.Render(fixture.PathQuery + "&item=" + Uri.EscapeDataString(ExplorerLocation.EncodePath([rule.Key])));
         view.WaitForAssertion(() => Assert.Contains("Event pattern / schedule", view.Find(".entry-inspector .payload-head").TextContent));
-        Assert.Contains("rule patterns or schedules", view.Find(".service-heading").TextContent);
+        Assert.Empty(view.FindAll(".service-heading"));
         Assert.Contains(view.FindAll(".payload-head a"), link => link.TextContent == "Browse Targets →");
         Assert.Equal("Configured connections (2)", view.Find(".entry-connections h3").TextContent);
         Assert.Equal(2, view.FindAll(".entry-connections .connection").Count);
@@ -417,6 +500,28 @@ public sealed class ResourceExplorerTests
         var view = fixture.Render(fixture.PathQuery);
         view.WaitForAssertion(() => Assert.Contains("Instance-global data", view.Find(".scope-exception").TextContent));
         Assert.DoesNotContain("Account-scoped data", view.Markup, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("sqs")]
+    [InlineData("sns")]
+    [InlineData("s3")]
+    [InlineData("dynamodb")]
+    [InlineData("events")]
+    public async Task Service_selector_replaces_visible_intro_without_losing_heading_or_mobile_browse(string service)
+    {
+        using var fixture = new ExplorerFixture(service, [new("resources", "Resources")]);
+        var view = fixture.Render(fixture.PathQuery);
+        view.WaitForAssertion(() => Assert.Single(view.FindAll("#resource-title")));
+        Assert.Empty(view.FindAll(".service-heading,.service-title-line"));
+        var heading = view.Find("h1");
+        Assert.Equal("sr-only", heading.GetAttribute("class"));
+        Assert.Contains(heading.TextContent, view.Find(".service-picker-trigger").TextContent, StringComparison.Ordinal);
+        Assert.Empty(view.FindAll(".resource-workspace.browsing"));
+        await view.Find(".workspace-context .mobile-resources").ClickAsync(new());
+        Assert.Single(view.FindAll(".resource-workspace.browsing"));
+        await view.Find(".workspace-context .mobile-resources").ClickAsync(new());
+        Assert.Empty(view.FindAll(".resource-workspace.browsing"));
     }
 
     [Fact]
@@ -543,6 +648,7 @@ public sealed class ResourceExplorerTests
         private readonly Handler _handler;
         public AdminResourceDetail Detail { get; set; }
         public AdminResourceDetail? SelectedDetail { get; set; }
+        public AdminContent Content { get; set; } = new("json", "application/json", Text: "{}");
         public IReadOnlyList<AdminResourceSummary> Children { get; set; } = [];
         public IReadOnlyList<AdminConnection> Connections { get; set; } = [];
         public string[] Accounts { get; set; } = ["000000000000", "111111111111", "222222222222"];
@@ -558,6 +664,7 @@ public sealed class ResourceExplorerTests
         public string PathQuery => "?path=" + Uri.EscapeDataString(ExplorerLocation.EncodePath([Detail.Resource.Key]));
         public ExplorerFixture(string service, IReadOnlyList<AdminResourceKind> kinds, string scope = "account")
         {
+            LiveTestServices.AddPaused(_context);
             _context.JSInterop.Mode = JSRuntimeMode.Loose;
             _service = new(service, service, service, "Test", "s3", service, "enabled", scope) { Kinds = kinds };
             Detail = new(new(new(kinds.First(kind => kind.IsRoot).Id, "root"), "Root resource", Scope: scope));
@@ -618,7 +725,7 @@ public sealed class ResourceExplorerTests
                 "resources" => Json(new AdminPage<AdminResourceSummary> { Items = [Detail.Resource] }, AdminJsonContext.Default.AdminPageAdminResourceSummary),
                 "resource" => Json(SelectedDetail is not null && ExplorerLocation.DecodePath(query["path"]).Length > 1 ? SelectedDetail : Detail, AdminJsonContext.Default.AdminResourceDetail),
                 "children" => Json(new AdminPage<AdminResourceSummary> { Items = Children }, AdminJsonContext.Default.AdminPageAdminResourceSummary),
-                "content" => Json(new AdminContent("json", "application/json", Text: "{}"), AdminJsonContext.Default.AdminContent),
+                "content" => Json(Content, AdminJsonContext.Default.AdminContent),
                 "connections" => Json(new AdminPage<AdminConnection> { Items = Connections }, AdminJsonContext.Default.AdminPageAdminConnection),
                 _ => throw new InvalidOperationException(endpoint)
             });

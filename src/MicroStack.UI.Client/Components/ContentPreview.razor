@@ -23,8 +23,13 @@
     [Parameter] public bool Revealed { get; set; }
     private string? _text;
     private string? _notice;
+    private AdminContent? _formattedContent;
+    private bool _formattedReveal;
+    private bool _formatted;
     protected override void OnParametersSet()
     {
+        if (_formatted && _formattedContent == Content && _formattedReveal == Revealed) return;
+        _formatted = true; _formattedContent = Content; _formattedReveal = Revealed;
         _text = null;
         _notice = null;
         if (Content is null) return;

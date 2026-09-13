@@ -7,14 +7,14 @@
     @if (Primary.Count > 0 || Detail.RevealableFields.Count > 0)
     {
         <div class="entry-facts">
-            <FieldList Fields="@Primary" RevealableFields="@Detail.RevealableFields" Service="@Service" Account="@Account" Path="@Path" />
+            <FieldList Fields="@Primary" RevealableFields="@Detail.RevealableFields" Service="@Service" Account="@Account" Path="@Path" Revision="@Revision" />
         </div>
     }
     @if (Secondary.Count > 0)
     {
         <details class="secondary-metadata">
             <summary>Additional metadata <span class="count">@Secondary.Count</span></summary>
-            <FieldList Fields="@Secondary" Service="@Service" Account="@Account" Path="@Path" />
+            <FieldList Fields="@Secondary" Service="@Service" Account="@Account" Path="@Path" Revision="@Revision" />
         </details>
     }
     @ChildContent
@@ -33,6 +33,7 @@
     [Parameter] public bool ShowSummary { get; set; } = true;
     [Parameter] public bool SummaryShownExternally { get; set; }
     [Parameter] public bool ShowContent { get; set; } = true;
+    [Parameter] public long Revision { get; set; }
     private IReadOnlyList<AdminField> Summary => Detail.Summary.Count > 0 ? Detail.Summary : Detail.Resource.Summary;
     private IReadOnlyList<AdminField> Primary => Detail.Fields.Where(fact =>
         (!fact.Secondary || fact.Sensitive) && !IsSummaryDuplicate(fact)).ToArray();

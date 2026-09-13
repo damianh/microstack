@@ -1,10 +1,11 @@
 @page "/overview"
-@implements IDisposable
+@implements IAsyncDisposable
 @inject MicroStackApiService Api
 @inject AdminApiClient AdminApi
+@inject LiveUpdateCoordinator Live
 <PageTitle>Overview · MicroStack</PageTitle>
 <section class="overview">
-    <div class="service-heading"><div><h1>Overview</h1><p>Instance status and global operations.</p></div><button class="button" disabled="@_busy" @onclick="LoadAsync">Refresh</button></div>
+    <div class="service-heading"><div><h1>Overview</h1><p>Instance status and global operations.</p></div></div>
     @if (_error is not null) { <div class="notice error" role="alert">@_error</div> }
     @if (_busy && _health is null) { <LoadingState Label="Loading instance status…" /> }
     @if (_health is not null)
@@ -14,14 +15,14 @@
             <div><dt>Version</dt><dd><code>@_health.Version</code></dd></div>
             <div><dt>Region</dt><dd><code>@_context?.Region</code></dd></div>
             <div><dt>Enabled handlers</dt><dd>@_health.Services.Count</dd></div>
-            <div><dt>Legacy resource summary</dt><dd>@_resources.Sum(resource => resource.Count) resources across @_resources.Count legacy providers</dd></div>
+            <div><dt>Legacy resource summary (default account)</dt><dd>@_resources.Sum(resource => resource.Count) resources across @_resources.Count legacy providers</dd></div>
         </dl>
         <h2>Service status</h2>
         <div class="table-scroll subsection"><table><thead><tr><th>Handler</th><th>Status</th></tr></thead><tbody>
             @foreach (var entry in _health.Services.OrderBy(entry => entry.Key, StringComparer.Ordinal))
             { <tr><td>@entry.Key</td><td><span class="tag">@entry.Value</span></td></tr> }
         </tbody></table></div>
-        <h2 class="subsection">Resource summary</h2>
+        <h2 class="subsection">Default-account resource summary</h2>
         <p class="notice">This compatible summary covers the original resource providers in the configured default account. Use Services for all-service, account-selectable inspection.</p>
         <div class="table-scroll"><table><thead><tr><th>Provider</th><th>Resources</th></tr></thead><tbody>
             @foreach (var entry in _resources.OrderBy(entry => entry.Service, StringComparer.Ordinal))
@@ -35,52 +36,128 @@
         {
             <div class="notice warning" role="alert">
                 <p>This deletes the instance's in-memory state. It cannot be undone.</p>
-                <button class="button danger" disabled="@_busy" @onclick="ResetAsync">Confirm reset all state</button>
-                <button class="button" disabled="@_busy" @onclick="() => _confirmReset = false">Cancel</button>
+                <button class="button danger" disabled="@_resetting" @onclick="ResetAsync">Confirm reset all state</button>
+                <button class="button" disabled="@_resetting" @onclick="() => _confirmReset = false">Cancel</button>
             </div>
         }
-        else { <button class="button danger" disabled="@_busy" @onclick="() => _confirmReset = true">Reset all state</button> }
+        else { <button class="button danger" disabled="@_resetting" @onclick="() => _confirmReset = true">Reset all state</button> }
     </section>
     @if (_message is not null) { <p role="status">@_message</p> }
 </section>
 @code {
-    private readonly CancellationTokenSource _cts = new();
+    private readonly CancellationTokenSource _lifetime = new();
+    private IAsyncDisposable? _subscription;
+    private LiveUpdateCoordinator? _live;
+    private CancellationTokenSource? _read;
+    private long _generation;
     private HealthResponse? _health;
     private AdminContext? _context;
     private IReadOnlyList<ResourceSummary> _resources = [];
-    private bool _busy, _confirmReset;
+    private bool _busy, _confirmReset, _resetting, _refreshContext, _disposed;
     private string? _error, _message;
-    protected override Task OnInitializedAsync() => LoadAsync();
-    private async Task LoadAsync()
+    protected override async Task OnInitializedAsync()
     {
-        if (_busy) return;
+        _live = Live;
+        await LoadExplicitAsync();
+        if (_disposed) return;
+        if (_live is not null)
+        {
+            _live.Changed += LiveChanged;
+            var registration = await _live.RegisterAsync(token => InvokeAsync(() => LoadAsync(token, _refreshContext)));
+            if (_disposed)
+            {
+                await registration.DisposeAsync();
+                return;
+            }
+            _subscription = registration;
+        }
+    }
+
+    private void LiveChanged()
+    {
+        if (_live?.ConnectionError is not null) _refreshContext = true;
+    }
+
+    private async Task LoadExplicitAsync()
+    {
+        try { await LoadAsync(_lifetime.Token); }
+        catch (OperationCanceledException) { }
+        catch (Exception) { }
+    }
+    private async Task LoadAsync(CancellationToken cancellationToken, bool refreshContext = false)
+    {
+        if (_disposed) return;
+        cancellationToken.ThrowIfCancellationRequested();
+        _read?.Cancel();
+        _read?.Dispose();
+        using var read = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token, cancellationToken);
+        _read = read;
+        var token = read.Token;
+        var generation = ++_generation;
         _busy = true; _error = null;
         try
         {
-            var health = await Api.GetHealthAsync(_cts.Token);
-            var resources = await Api.GetResourcesAsync(_cts.Token);
-            var context = await AdminApi.ContextAsync(_cts.Token);
-            if (!_cts.IsCancellationRequested) { _health = health; _resources = resources; _context = context; }
+            var health = await Api.GetHealthAsync(token);
+            var resources = await Api.GetResourcesAsync(token);
+            var context = _context is null || refreshContext ? await AdminApi.ContextAsync(token) : _context;
+            token.ThrowIfCancellationRequested();
+            if (generation != _generation) return;
+            _health = health; _resources = resources; _context = context;
+            _refreshContext = false;
         }
-        catch (OperationCanceledException) when (_cts.IsCancellationRequested) { }
-        catch (Exception) { _error = "Instance status could not be loaded. Check the API connection and refresh. Previously loaded data may be stale."; }
-        finally { _busy = false; }
+        catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
+        catch (Exception)
+        {
+            if (!token.IsCancellationRequested && generation == _generation)
+                _error = "Instance status could not be loaded. Check the API connection and refresh. Previously loaded data may be stale.";
+            throw;
+        }
+        finally
+        {
+            if (ReferenceEquals(_read, read)) _read = null;
+            if (generation == _generation)
+            {
+                _busy = false;
+                if (!_lifetime.IsCancellationRequested) StateHasChanged();
+            }
+        }
     }
     private async Task ResetAsync()
     {
-        if (_busy) return;
-        _busy = true; _error = null; _message = null;
+        if (_resetting) return;
+        _read?.Cancel();
+        _generation++;
+        _resetting = true; _error = null; _message = null;
         var reset = false;
         try
         {
-            await Api.ResetAsync(_cts.Token);
+            await Api.ResetAsync(_lifetime.Token);
+            if (_lifetime.IsCancellationRequested) return;
+            _read?.Cancel();
+            _generation++;
             _confirmReset = false; _message = "All in-memory state was reset.";
+            _resources = []; _context = null;
             reset = true;
+            StateHasChanged();
         }
-        catch (OperationCanceledException) when (_cts.IsCancellationRequested) { }
+        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested) { }
         catch (Exception) { _error = "The reset could not be confirmed. Refresh instance status before retrying."; }
-        finally { _busy = false; }
-        if (reset && !_cts.IsCancellationRequested) await LoadAsync();
+        finally { _resetting = false; _busy = false; }
+        if (reset && !_lifetime.IsCancellationRequested)
+        {
+            if (_live is not null && !_live.Hidden) await _live.RefreshOnceAsync();
+            else await LoadExplicitAsync();
+        }
     }
-    public void Dispose() { _cts.Cancel(); _cts.Dispose(); }
+    public async ValueTask DisposeAsync()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        _generation++;
+        _lifetime.Cancel();
+        _read?.Cancel();
+        if (_live is not null) _live.Changed -= LiveChanged;
+        if (_subscription is not null) await _subscription.DisposeAsync();
+        _lifetime.Dispose();
+    }
 }

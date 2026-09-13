@@ -26,6 +26,44 @@ public sealed class AdminMessagingTests(MicroStackFixture fixture) : IClassFixtu
     }
 
     [Fact]
+    public async Task QueueRootAndDetailReadsDoNotMaterializeLargeMessageAttributes()
+    {
+        var handler = Registry.Resolve("sqs")!;
+        var source = (IAdminResourceSource)handler;
+        await Json(handler, "AmazonSQS.CreateQueue", new { QueueName = "live-read-cost" });
+        var queue = source.GetAdminResources("sqs").Single();
+        var url = queue.ReadFields!().Single(field => field.Name == "Queue URL").Value!;
+        var payload = new
+        {
+            QueueUrl = url,
+            MessageBody = new string('b', 32_000),
+            MessageAttributes = new { large = new { DataType = "String", StringValue = new string('a', 32_000) } }
+        };
+        for (var i = 0; i < 100; i++)
+            (await Json(handler, "AmazonSQS.SendMessage", payload)).StatusCode.ShouldBe(200);
+
+        source.GetAdminResources("sqs").Single().ReadFields!();
+        var start = GC.GetAllocatedBytesForCurrentThread();
+        for (var i = 0; i < 10; i++)
+        {
+            var snapshot = source.GetAdminResources("sqs").Single();
+            snapshot.ReadFields!();
+            snapshot.ReadSummary!();
+            snapshot.ReadConnections!();
+        }
+        var allocated = GC.GetAllocatedBytesForCurrentThread() - start;
+        allocated.ShouldBeLessThan(256_000,
+            "Queue metadata reads must not copy/serialize the 6.4 MB of retained message payloads.");
+        var messages = source.GetAdminResources("sqs").Single().ReadChildren!().ToArray();
+        messages.Length.ShouldBe(100);
+        messages[0].ReadFields!().Single(field => field.Name == "Message attributes").Value!
+            .ShouldContain(new string('a', 32_000));
+        messages[0].ReadContent!().Text.ShouldBe(new string('b', 32_000));
+        source.GetAdminResources("sqs").Single().ReadSummary!()
+            .Single(field => field.Name == "Visible messages").Value.ShouldBe("100");
+    }
+
+    [Fact]
     public async Task SqsSnapshotIsNonConsumingAndDistinguishesMessageStates()
     {
         var handler = Registry.Resolve("sqs")!;

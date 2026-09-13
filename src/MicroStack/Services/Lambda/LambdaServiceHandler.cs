@@ -29,15 +29,18 @@ internal sealed class LambdaServiceHandler : IServiceHandler, IAdminResourceSour
     private readonly SqsServiceHandler? _sqsHandler;
     private readonly DynamoDbServiceHandler? _ddbHandler;
     private EventSourceMappingPoller? _poller;
+    private readonly AdminChangeHub? _changes;
 
     private static string Region => MicroStackOptions.Instance.Region;
 
     internal LambdaServiceHandler() { }
 
-    internal LambdaServiceHandler(SqsServiceHandler sqsHandler, DynamoDbServiceHandler ddbHandler)
+    internal LambdaServiceHandler(SqsServiceHandler sqsHandler, DynamoDbServiceHandler ddbHandler,
+        AdminChangeHub? changes = null)
     {
         _sqsHandler = sqsHandler;
         _ddbHandler = ddbHandler;
+        _changes = changes;
     }
 
     // -- IServiceHandler -------------------------------------------------------
@@ -2452,7 +2455,7 @@ internal sealed class LambdaServiceHandler : IServiceHandler, IAdminResourceSour
             // Start the ESM background poller if SQS and DynamoDB handlers are available
             if (_sqsHandler is not null && _ddbHandler is not null)
             {
-                _poller ??= new EventSourceMappingPoller(this, _sqsHandler, _ddbHandler);
+                _poller ??= new EventSourceMappingPoller(this, _sqsHandler, _ddbHandler, _changes);
                 _poller.EnsureStarted();
             }
 

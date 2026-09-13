@@ -41,7 +41,7 @@ public sealed class AdminClientTests
         using var handler = new Handler((_, _) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.ServiceUnavailable)
         { Content = JsonContent.Create(new AdminError("unavailable", "Service unavailable."), AdminJsonContext.Default.AdminError) }));
         var api = new AdminApiClient(new HttpClient(handler) { BaseAddress = new("http://localhost:4566") });
-        var exception = await Assert.ThrowsAsync<AdminApiException>(() => api.ResourcesAsync("s3", "000000000000", "buckets", null, null, CancellationToken.None));
+        var exception = await Assert.ThrowsAsync<AdminApiException>(() => api.ResourcesAsync("s3", "000000000000", "buckets", null, CancellationToken.None));
         Assert.Equal("unavailable", exception.Code);
     }
 
@@ -49,6 +49,7 @@ public sealed class AdminClientTests
     public void Directory_renders_every_live_catalog_entry_without_frontend_inventory()
     {
         using var context = new BunitContext();
+        LiveTestServices.AddPaused(context);
         context.JSInterop.Mode = JSRuntimeMode.Loose;
         context.Services.AddScoped<ExplorerAccountState>();
         var services = Enumerable.Range(1, 40).Select(index =>
@@ -76,6 +77,7 @@ public sealed class AdminClientTests
     public void Overview_reads_instance_region_and_reports_context_failure(bool failContext)
     {
         using var context = new BunitContext();
+        LiveTestServices.AddPaused(context);
         using var handler = new Handler((request, _) => Task.FromResult(request.RequestUri!.AbsolutePath switch
         {
             "/_microstack/health" => new HttpResponseMessage(HttpStatusCode.OK)
@@ -129,10 +131,49 @@ public sealed class AdminClientTests
         Assert.Equal(1, calls);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Live_revision_clears_reveal_and_cancels_late_result_without_fetching_again(bool pending)
+    {
+        using var context = new BunitContext();
+        context.JSInterop.Mode = JSRuntimeMode.Loose;
+        var response = new TaskCompletionSource<HttpResponseMessage>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var calls = 0;
+        using var handler = new Handler((_, _) =>
+        {
+            calls++;
+            return response.Task;
+        });
+        context.Services.AddSingleton(new AdminApiClient(new HttpClient(handler) { BaseAddress = new("http://localhost:4566") }));
+        var view = context.Render<FieldList>(parameters => parameters
+            .Add(component => component.Fields, [new AdminField("Password", null, true, true)])
+            .Add(component => component.Service, "rds")
+            .Add(component => component.Account, "000000000000")
+            .Add(component => component.Path, [new("databases", "db")]));
+        var click = view.Find("button").ClickAsync(new MouseEventArgs());
+        if (!pending)
+        {
+            response.SetResult(Json(new AdminContent("text", "text/plain", Text: "private-value", Sensitive: true), AdminJsonContext.Default.AdminContent));
+            await click;
+            Assert.Contains("private-value", view.Markup);
+        }
+        view.Render(parameters => parameters.Add(component => component.Revision, 1));
+        if (pending)
+        {
+            response.SetResult(Json(new AdminContent("text", "text/plain", Text: "private-value", Sensitive: true), AdminJsonContext.Default.AdminContent));
+            await click;
+        }
+        Assert.DoesNotContain("private-value", view.Markup);
+        Assert.Equal(1, calls);
+        Assert.Equal("Reveal Password", view.Find("button").TextContent);
+    }
+
     [Fact]
     public void Deep_link_loads_selected_nested_content_in_requested_account()
     {
         using var context = new BunitContext();
+        LiveTestServices.AddPaused(context);
         context.JSInterop.Mode = JSRuntimeMode.Loose;
         context.Services.AddScoped<ExplorerAccountState>();
         var account = "111111111111";

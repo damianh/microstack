@@ -13,5 +13,6 @@ builder.Services.AddScoped(_ => new HttpClient { BaseAddress = apiBaseUri });
 builder.Services.AddScoped<MicroStackApiService>();
 builder.Services.AddScoped<AdminApiClient>();
 builder.Services.AddScoped<ExplorerAccountState>();
+builder.Services.AddScoped<LiveUpdateCoordinator>();
 
 await builder.Build().RunAsync();

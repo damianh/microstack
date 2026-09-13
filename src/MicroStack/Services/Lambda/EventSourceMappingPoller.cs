@@ -1,4 +1,5 @@
 using MicroStack.Internal;
+using MicroStack.Internal.Admin;
 using MicroStack.Services.DynamoDb;
 using MicroStack.Services.Sqs;
 
@@ -16,15 +17,18 @@ internal sealed class EventSourceMappingPoller : IDisposable
     private readonly DynamoDbServiceHandler _ddbHandler;
     private Timer? _timer;
     private int _running; // 0 = idle, 1 = running (interlocked)
+    private readonly AdminChangeHub? _changes;
 
     internal EventSourceMappingPoller(
         LambdaServiceHandler lambdaHandler,
         SqsServiceHandler sqsHandler,
-        DynamoDbServiceHandler ddbHandler)
+        DynamoDbServiceHandler ddbHandler,
+        AdminChangeHub? changes = null)
     {
         _lambdaHandler = lambdaHandler;
         _sqsHandler = sqsHandler;
         _ddbHandler = ddbHandler;
+        _changes = changes;
     }
 
     internal void EnsureStarted()
@@ -69,22 +73,30 @@ internal sealed class EventSourceMappingPoller : IDisposable
             {
                 foreach (var esm in esms)
                 {
+                    var changed = false;
                     try
                     {
                         var sourceArn = esm["EventSourceArn"]?.ToString() ?? "";
                         if (sourceArn.Contains(":sqs:", StringComparison.Ordinal))
                         {
-                            PollSqs(esm, accountId);
+                            changed = true;
+                            changed = PollSqs(esm, accountId);
                         }
                         else if (sourceArn.Contains(":dynamodb:", StringComparison.Ordinal)
                                  && sourceArn.Contains("/stream/", StringComparison.Ordinal))
                         {
-                            PollDynamoDbStream(esm, accountId);
+                            changed = true;
+                            changed = PollDynamoDbStream(esm, accountId);
                         }
                     }
                     catch (Exception)
                     {
                         // Log but continue with other ESMs
+                    }
+                    finally
+                    {
+                        if (changed)
+                            _changes?.Publish(AdminDirty.Resources | AdminDirty.Accounts, accountId);
                     }
                 }
             }
@@ -95,7 +107,7 @@ internal sealed class EventSourceMappingPoller : IDisposable
         }
     }
 
-    private void PollSqs(Dictionary<string, object?> esm, string accountId)
+    private bool PollSqs(Dictionary<string, object?> esm, string accountId)
     {
         var sourceArn = esm["EventSourceArn"]?.ToString() ?? "";
         var batchSize = esm.TryGetValue("BatchSize", out var bs) && bs is int bsInt ? bsInt : 10;
@@ -104,7 +116,7 @@ internal sealed class EventSourceMappingPoller : IDisposable
         var parts = sourceArn.Split(':');
         if (parts.Length < 6)
         {
-            return;
+            return false;
         }
 
         var region = parts[3];
@@ -113,7 +125,7 @@ internal sealed class EventSourceMappingPoller : IDisposable
         var messages = _sqsHandler.ReceiveMessagesForEsm(queueName, batchSize);
         if (messages.Count == 0)
         {
-            return;
+            return false;
         }
 
         // Build SQS event payload
@@ -170,9 +182,10 @@ internal sealed class EventSourceMappingPoller : IDisposable
         {
             esm["LastProcessingResult"] = "FAILED";
         }
+        return true;
     }
 
-    private void PollDynamoDbStream(Dictionary<string, object?> esm, string accountId)
+    private bool PollDynamoDbStream(Dictionary<string, object?> esm, string accountId)
     {
         _ = accountId; // accountId already set via AccountContext before this call
 
@@ -182,7 +195,7 @@ internal sealed class EventSourceMappingPoller : IDisposable
         var tableSegments = sourceArn.Split('/');
         if (tableSegments.Length < 2)
         {
-            return;
+            return false;
         }
 
         var tableName = tableSegments[1]; // after "table/"
@@ -191,7 +204,7 @@ internal sealed class EventSourceMappingPoller : IDisposable
         var records = _ddbHandler.DrainStreamRecords(tableName, batchSize);
         if (records.Count == 0)
         {
-            return;
+            return false;
         }
 
         // Build DynamoDB Streams event payload
@@ -204,5 +217,6 @@ internal sealed class EventSourceMappingPoller : IDisposable
         var success = _lambdaHandler.InvokeForEsm(funcArn, ddbEvent);
 
         esm["LastProcessingResult"] = success ? $"OK - {records.Count} records" : "FAILED";
+        return true;
     }
 }

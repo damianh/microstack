@@ -14,6 +14,8 @@ internal static class AdminApi
         this WebApplication app, ServiceRegistry registry, RequestLog requestLog,
         MicroStackOptions options, string corsPolicy)
     {
+        app.MapGet(Root + "/events", AdminEvents.Stream).RequireCors(corsPolicy);
+
         app.MapGet(Root + "/context", () =>
             Ok(new AdminContext(options.DefaultAccountId, options.Region), AdminJsonContext.Default.AdminContext))
             .RequireCors(corsPolicy);
