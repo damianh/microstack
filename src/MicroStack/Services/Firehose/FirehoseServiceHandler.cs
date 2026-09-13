@@ -1,5 +1,7 @@
 using System.Text.Json;
+using MicroStack.Admin.Contracts;
 using MicroStack.Internal;
+using MicroStack.Internal.Admin;
 
 namespace MicroStack.Services.Firehose;
 
@@ -14,7 +16,7 @@ namespace MicroStack.Services.Firehose;
 ///           TagDeliveryStream, UntagDeliveryStream, ListTagsForDeliveryStream,
 ///           StartDeliveryStreamEncryption, StopDeliveryStreamEncryption.
 /// </summary>
-internal sealed class FirehoseServiceHandler : IServiceHandler
+internal sealed class FirehoseServiceHandler : IServiceHandler, IAdminResourceSource
 {
     private readonly Dictionary<string, FhStream> _streams = new(StringComparer.Ordinal);
     private readonly Lock _lock = new();
@@ -90,6 +92,145 @@ internal sealed class FirehoseServiceHandler : IServiceHandler
     public JsonElement? GetState() => null;
 
     public void RestoreState(JsonElement state) { }
+
+    public IReadOnlyList<AdminResourceKind> GetAdminResourceKinds(string serviceId) =>
+    [
+        new("delivery-stream", "Delivery streams"),
+    ];
+
+    public IEnumerable<AdminNode> GetAdminResources(string serviceId)
+    {
+        lock (_lock)
+        {
+            return _streams.OrderBy(x => x.Key, StringComparer.Ordinal)
+                .Select(x => StreamNode(x.Value)).ToArray();
+        }
+    }
+
+    public string? GetAdminNotice(string serviceId) =>
+        "Delivery stream state is shared globally by the emulator and is not account-isolated.";
+
+    private AdminNode StreamNode(FhStream stream) =>
+        AdminData.Node("delivery-stream", stream.Name, stream.Name, stream.Arn, stream.Status, "global") with
+        {
+            ReadFields = () =>
+            {
+                lock (_lock)
+                {
+                    return
+                    [
+                        AdminData.Field("type", stream.Type),
+                        AdminData.Field("version", stream.Version.ToString()),
+                        AdminData.Field("createdAt", AnalyticsAdminData.Epoch(stream.CreatedAt), format: "timestamp"),
+                        AdminData.Field("updatedAt", AnalyticsAdminData.Epoch(stream.UpdatedAt), format: "timestamp"),
+                        AdminData.Field("destinationCount", stream.Destinations.Count.ToString()),
+                        AdminData.Field("encryptionStatus",
+                            stream.Encryption is null ? "DISABLED" : AnalyticsAdminData.String(stream.Encryption, "Status")),
+                    ];
+                }
+            },
+            ChildKinds = [new("destination", "Destinations") { IsRoot = false }],
+            ReadChildren = () =>
+            {
+                lock (_lock)
+                    return stream.Destinations.OrderBy(x => x.Id, StringComparer.Ordinal)
+                        .Select(DestinationNode).ToArray();
+            },
+            ReadConnections = () =>
+            {
+                lock (_lock)
+                {
+                    var connections = new List<AdminConnection>();
+                    if (stream.KinesisSource is not null)
+                    {
+                        var arn = AnalyticsAdminData.String(stream.KinesisSource, "KinesisStreamARN");
+                        var name = arn?.Split('/').LastOrDefault();
+                        if (!string.IsNullOrEmpty(name))
+                            connections.Add(new("Kinesis source", "configured-source", "kinesis",
+                                [new AdminKey("stream", name)]));
+                    }
+                    if (stream.Encryption is not null)
+                    {
+                        var keyArn = AnalyticsAdminData.String(stream.Encryption, "KeyARN");
+                        if (!string.IsNullOrEmpty(keyArn))
+                            connections.Add(new("Encryption key", "configured-encryption-key", "kms",
+                                [new AdminKey("key", keyArn.Split('/').Last())]));
+                    }
+                    return connections;
+                }
+            },
+        };
+
+    private AdminNode DestinationNode(FhDestination destination) =>
+        AdminData.Node("destination", destination.Id, destination.Type, status: "configured", scope: "global") with
+        {
+            ReadFields = () =>
+            {
+                lock (_lock)
+                {
+                    return
+                    [
+                        AdminData.Field("id", destination.Id),
+                        AdminData.Field("type", destination.Type),
+                        AdminData.Field("recordCount", destination.Records.Count.ToString()),
+                    ];
+                }
+            },
+            ChildKinds = [new("record", "Records") { IsRoot = false }],
+            ReadChildren = () =>
+            {
+                lock (_lock)
+                    return destination.Records.OrderBy(x => x.Timestamp).ThenBy(x => x.Id, StringComparer.Ordinal)
+                        .Select(RecordNode).ToArray();
+            },
+            ReadContent = () =>
+            {
+                lock (_lock)
+                {
+                    var config = destination.ConfigAsObject as IReadOnlyDictionary<string, object?>
+                                 ?? new Dictionary<string, object?>();
+                    return AnalyticsAdminData.Json(config);
+                }
+            },
+            ReadConnections = () =>
+            {
+                lock (_lock)
+                {
+                    var config = destination.ConfigAsObject as IReadOnlyDictionary<string, object?>
+                                 ?? new Dictionary<string, object?>();
+                    var bucketArn = AnalyticsAdminData.String(config, "BucketARN");
+                    if (!string.IsNullOrEmpty(bucketArn))
+                    {
+                        var bucket = bucketArn.Split(':').LastOrDefault();
+                        return string.IsNullOrEmpty(bucket)
+                            ? []
+                            : [new AdminConnection("S3 destination", "configured-destination", "s3",
+                                [new AdminKey("bucket", bucket)])];
+                    }
+                    var endpoint = AnalyticsAdminData.String(config, "Url") ??
+                                   AnalyticsAdminData.String(config, "Endpoint");
+                    return string.IsNullOrEmpty(endpoint)
+                        ? []
+                        : [new AdminConnection("External destination", "configured-destination",
+                            ExternalUri: endpoint)];
+                }
+            },
+        };
+
+    private AdminNode RecordNode(FhRecord record) =>
+        AdminData.Node("record", record.Id, record.Id, scope: "global") with
+        {
+            ReadFields = () =>
+            [
+                AdminData.Field("recordId", record.Id),
+                AdminData.Field("timestamp", AnalyticsAdminData.Epoch(record.Timestamp), format: "timestamp"),
+            ],
+            ReadContent = () =>
+            {
+                lock (_lock)
+                    return AnalyticsAdminData.DecodedBase64(record.Data);
+            },
+        };
 
     // -- Helpers ---------------------------------------------------------------
 

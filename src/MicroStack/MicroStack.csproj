@@ -16,9 +16,8 @@
   </PropertyGroup>
 
   <!-- OCI container image publishing via 'dotnet publish /t:PublishContainer' -->
-  <!-- AOT produces a fully self-contained native binary; bare Alpine is sufficient -->
   <PropertyGroup>
-    <ContainerBaseImage>docker.io/alpine:3.21</ContainerBaseImage>
+    <ContainerBaseImage>mcr.microsoft.com/dotnet/runtime-deps:10.0-alpine</ContainerBaseImage>
     <ContainerRepository>microstack</ContainerRepository>
     <ContainerImageTags>$(MinVerVersion);latest</ContainerImageTags>
     <!-- Multi-arch: amd64 + arm64 -->
@@ -28,10 +27,43 @@
   <ItemGroup>
     <ContainerPort Include="4566" Type="tcp" />
     <ContainerEnvironmentVariable Include="ASPNETCORE_HTTP_PORTS" Value="4566" />
+    <ContainerEnvironmentVariable Include="DOTNET_SYSTEM_GLOBALIZATION_INVARIANT" Value="1" />
   </ItemGroup>
+
+  <Target Name="PublishAdminUiAssets" AfterTargets="Publish"
+          Condition="'$(PublishAdminUi)' != 'false'">
+    <PropertyGroup>
+      <_AdminUiStaging>$([MSBuild]::NormalizeDirectory('$(IntermediateOutputPath)', 'admin-ui-publish'))</_AdminUiStaging>
+    </PropertyGroup>
+    <MSBuild Projects="..\MicroStack.UI.Client\MicroStack.UI.Client.csproj"
+             Targets="Restore"
+             Properties="Configuration=$(Configuration);PublishAot=false"
+             RemoveProperties="PublishProfile;RuntimeIdentifier;ContainerRuntimeIdentifiers;ContainerArchiveOutputPath;SelfContained;OutputPath;IntermediateOutputPath"
+             UnloadProjectsOnCompletion="true" />
+    <MSBuild Projects="..\MicroStack.UI.Client\MicroStack.UI.Client.csproj"
+             Targets="Publish"
+             Properties="Configuration=$(Configuration);PublishDir=$(_AdminUiStaging);PublishAot=false"
+             RemoveProperties="PublishProfile;RuntimeIdentifier;ContainerRuntimeIdentifiers;ContainerArchiveOutputPath;SelfContained;OutputPath;IntermediateOutputPath"
+             UnloadProjectsOnCompletion="true" />
+    <ItemGroup>
+      <_AdminUiFiles Include="$(_AdminUiStaging)wwwroot\ui\**\*" />
+    </ItemGroup>
+    <MakeDir Directories="$(PublishDir)wwwroot\ui" />
+    <Copy SourceFiles="@(_AdminUiFiles)"
+          DestinationFolder="$(PublishDir)wwwroot\ui\%(_AdminUiFiles.RecursiveDir)" />
+    <Delete Files="$(PublishDir)wwwroot\index.html" />
+    <RemoveDir Directories="$(_AdminUiStaging)" />
+  </Target>
 
   <ItemGroup>
     <InternalsVisibleTo Include="MicroStack.Tests" />
+    <ProjectReference Include="..\MicroStack.Admin.Contracts\MicroStack.Admin.Contracts.csproj" />
+    <!-- Local builds need the static asset manifest; native publishes build the browser client separately. -->
+    <ProjectReference Include="..\MicroStack.UI.Client\MicroStack.UI.Client.csproj"
+                      ReferenceOutputAssembly="false"
+                      GlobalPropertiesToRemove="RuntimeIdentifier;RuntimeIdentifiers;SelfContained;PublishAot;ContainerRuntimeIdentifiers"
+                      Condition="'$(RuntimeIdentifier)' == ''" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.Server" Version="10.0.9" />
   </ItemGroup>
 
 </Project>

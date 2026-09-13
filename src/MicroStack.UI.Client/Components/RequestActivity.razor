@@ -1,0 +1,181 @@
+@implements IAsyncDisposable
+@inject AdminApiClient AdminApi
+@inject MicroStackApiService LegacyApi
+@inject LiveUpdateCoordinator Live
+<div class="toolbar">
+    @if (Global)
+    {
+        <button class="button danger" disabled="@_clearing" @onclick="() => _confirmClear = true">Clear global log</button>
+    }
+    @if (_captured is { } time)
+    {
+        <span class="snapshot-time">Last successful refresh · @ExplorerLocation.Utc(time)</span>
+    }
+</div>
+@if (!Global) { <p class="notice">Retained service/account activity, not a resource-specific delivery trace.</p> }
+@if (_confirmClear)
+{
+    <div class="notice warning" role="alert">
+        <p>Clear recorded requests for every account and service? Resource state will not change.</p>
+        <button class="button danger" disabled="@_clearing" @onclick="ClearAsync">Confirm clear global log</button>
+        <button class="button" disabled="@_clearing" @onclick="() => _confirmClear = false">Cancel</button>
+    </div>
+}
+@if (_error is not null) { <div class="notice error" role="alert"><p>@_error</p><p>Any rows below are the last successful snapshot.</p></div> }
+@if (_entries is null && _busy) { <LoadingState Label="Loading request metadata…" /> }
+else if (_entries is { Count: 0 }) { <p class="empty-list">No recorded requests in this scope.</p> }
+else if (_entries is not null)
+{
+    <div class="table-scroll" tabindex="0" role="region" aria-label="Request metadata">
+        <table>
+            <thead><tr><th>Timestamp (UTC)</th><th>Service</th><th>Action</th><th>Account</th><th>Status</th><th>Duration</th></tr></thead>
+            <tbody>
+                @foreach (var entry in _entries)
+                {
+                    <tr><td class="time">@ExplorerLocation.Utc(entry.Timestamp)</td><td>@entry.Service</td><td>@entry.Action</td>
+                        <td><code>@entry.AccountId</code></td><td><span class="tag @(entry.StatusCode < 400 ? "green" : "danger")">@entry.StatusCode</span></td><td>@entry.DurationMs ms</td></tr>
+                }
+            </tbody>
+        </table>
+    </div>
+    <p class="snapshot-time">@_entries.Count retained requests. The bounded log does not include older discarded requests.</p>
+}
+@code {
+    [Parameter] public bool Global { get; set; }
+    [Parameter] public string Service { get; set; } = "";
+    [Parameter] public string Account { get; set; } = "";
+    private readonly CancellationTokenSource _lifetime = new();
+    private IAsyncDisposable? _subscription;
+    private LiveUpdateCoordinator? _live;
+    private CancellationTokenSource? _read;
+    private long _generation, _scopeVersion;
+    private IReadOnlyList<AdminActivity>? _entries;
+    private string? _scope;
+    private string? _error;
+    private DateTimeOffset? _captured;
+    private bool _busy, _confirmClear, _clearing, _disposed;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_disposed) return;
+        var scope = $"{Global}:{Service}:{Account}";
+        if (_scope == scope) return;
+        _scope = scope;
+        var scopeVersion = ++_scopeVersion;
+        _read?.Cancel();
+        _generation++;
+        _entries = null; _error = null; _captured = null; _busy = false; _confirmClear = false;
+        var previous = _subscription;
+        _subscription = null;
+        if (previous is not null) await previous.DisposeAsync();
+        if (_disposed || scopeVersion != _scopeVersion) return;
+        _live = Live;
+        await LoadExplicitAsync();
+        if (_disposed || scopeVersion != _scopeVersion) return;
+        if (_live is not null)
+        {
+            var registration = await _live.RegisterAsync(token => InvokeAsync(async () =>
+            {
+                if (scopeVersion == _scopeVersion) await LoadAsync(token);
+            }), Global ? null : Account);
+            if (_disposed || scopeVersion != _scopeVersion)
+            {
+                await registration.DisposeAsync();
+                return;
+            }
+            _subscription = registration;
+        }
+    }
+    private async Task LoadExplicitAsync()
+    {
+        try { await LoadAsync(_lifetime.Token); }
+        catch (OperationCanceledException) { }
+        catch (Exception) { }
+    }
+    private async Task LoadAsync(CancellationToken cancellationToken)
+    {
+        if (_disposed) return;
+        cancellationToken.ThrowIfCancellationRequested();
+        _read?.Cancel();
+        _read?.Dispose();
+        using var read = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token, cancellationToken);
+        _read = read;
+        var token = read.Token;
+        var generation = ++_generation;
+        var global = Global; var service = Service; var account = Account;
+        _busy = true;
+        try
+        {
+            IReadOnlyList<AdminActivity> entries;
+            DateTimeOffset captured;
+            if (global)
+            {
+                entries = (await LegacyApi.GetRequestsAsync(cancellationToken: token))
+                    .Select(entry => new AdminActivity(entry.Service, entry.Action, entry.AccountId, entry.Timestamp, entry.StatusCode, entry.DurationMs)).ToArray();
+                captured = DateTimeOffset.UtcNow;
+            }
+            else
+            {
+                var page = await AdminApi.ActivityAsync(service, account, token);
+                entries = page.Items; captured = page.CapturedAt;
+            }
+            token.ThrowIfCancellationRequested();
+            if (generation != _generation) return;
+            if (_entries is null || !_entries.SequenceEqual(entries)) _entries = entries;
+            _captured = captured; _error = null;
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
+        catch (Exception)
+        {
+            if (!token.IsCancellationRequested && generation == _generation)
+                _error = "Request metadata could not be refreshed. Check the API connection and use Refresh to retry.";
+            throw;
+        }
+        finally
+        {
+            if (ReferenceEquals(_read, read)) _read = null;
+            if (generation == _generation)
+            {
+                _busy = false;
+                if (!_lifetime.IsCancellationRequested) StateHasChanged();
+            }
+        }
+    }
+    private async Task ClearAsync()
+    {
+        if (_clearing || !Global) return;
+        _read?.Cancel();
+        _generation++;
+        var scope = _scope;
+        var token = _lifetime.Token;
+        _clearing = true;
+        var cleared = false;
+        try
+        {
+            await LegacyApi.DeleteRequestsAsync(token);
+            if (token.IsCancellationRequested || scope != _scope) return;
+            _read?.Cancel();
+            _generation++;
+            _confirmClear = false; _entries = []; _captured = null; _error = null;
+            cleared = true;
+            StateHasChanged();
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested) { }
+        catch (Exception) { if (!token.IsCancellationRequested && scope == _scope) _error = "The global log could not be cleared. Retry when the API is available."; }
+        finally { _clearing = false; _busy = false; }
+        if (cleared && !token.IsCancellationRequested && scope == _scope)
+        {
+            if (_live is not null && !_live.Hidden) await _live.RefreshOnceAsync();
+            else await LoadExplicitAsync();
+        }
+    }
+    public async ValueTask DisposeAsync()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        _generation++;
+        _lifetime.Cancel(); _read?.Cancel();
+        if (_subscription is not null) await _subscription.DisposeAsync();
+        _lifetime.Dispose();
+    }
+}

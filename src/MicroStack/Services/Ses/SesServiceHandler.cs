@@ -50,6 +50,9 @@ internal sealed partial class SesServiceHandler : IServiceHandler
 
     public string ServiceName => "ses";
 
+    public IEnumerable<string> GetKnownAccountIds() =>
+        _identities.GetAccountIds().Concat(_templates.GetAccountIds()).Concat(_configurationSets.GetAccountIds());
+
     public Task<ServiceResponse> HandleAsync(ServiceRequest request)
     {
         // v2 REST/JSON API detected via path prefix /v2/email/
@@ -150,6 +153,7 @@ internal sealed partial class SesServiceHandler : IServiceHandler
         {
             _sentEmails.Add(new SesEmail
             {
+                AccountId = AccountContext.GetAccountId(),
                 MessageId = msgId,
                 Source = source,
                 To = toAddrs,
@@ -174,6 +178,7 @@ internal sealed partial class SesServiceHandler : IServiceHandler
         {
             _sentEmails.Add(new SesEmail
             {
+                AccountId = AccountContext.GetAccountId(),
                 MessageId = msgId,
                 Source = P(p, "Source"),
                 Timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
@@ -205,6 +210,7 @@ internal sealed partial class SesServiceHandler : IServiceHandler
         {
             _sentEmails.Add(new SesEmail
             {
+                AccountId = AccountContext.GetAccountId(),
                 MessageId = msgId,
                 Source = source,
                 To = toAddrs,
@@ -245,6 +251,7 @@ internal sealed partial class SesServiceHandler : IServiceHandler
             {
                 _sentEmails.Add(new SesEmail
                 {
+                    AccountId = AccountContext.GetAccountId(),
                     MessageId = msgId,
                     Source = source,
                     To = toAddrs,
@@ -724,6 +731,7 @@ internal sealed partial class SesServiceHandler : IServiceHandler
         {
             _sentEmails.Add(new SesEmail
             {
+                AccountId = AccountContext.GetAccountId(),
                 MessageId = msgId,
                 Source = fromAddr,
                 Timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
@@ -1108,6 +1116,7 @@ internal sealed partial class SesServiceHandler : IServiceHandler
 
     private sealed class SesEmail
     {
+        internal string AccountId { get; set; } = "";
         internal string MessageId { get; set; } = "";
         internal string Source { get; set; } = "";
         internal List<string> To { get; set; } = [];

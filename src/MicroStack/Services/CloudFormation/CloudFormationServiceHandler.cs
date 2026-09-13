@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Web;
 using MicroStack.Internal;
+using MicroStack.Internal.Admin;
 
 namespace MicroStack.Services.CloudFormation;
 
@@ -10,9 +11,12 @@ namespace MicroStack.Services.CloudFormation;
 /// CloudFormation service handler — Query/XML protocol.
 /// Orchestrates other MicroStack service handlers to provision resources from templates.
 /// </summary>
-internal sealed partial class CloudFormationServiceHandler : IServiceHandler
+internal sealed partial class CloudFormationServiceHandler : IServiceHandler, IAdminResourceSource
 {
     public string ServiceName => "cloudformation";
+
+    public IEnumerable<string> GetKnownAccountIds() =>
+        _stacks.GetAccountIds().Concat(_changeSets.GetAccountIds());
 
     private const string CfnNs = "http://cloudformation.amazonaws.com/doc/2010-05-15/";
 

@@ -32,7 +32,7 @@ public sealed class MultiTenancyTests(MicroStackFixture fixture) : IClassFixture
 
     private AmazonSecurityTokenServiceClient CreateStsClient(string accessKey)
     {
-        var innerHandler = fixture.Factory.Server.CreateHandler();
+        var innerHandler = fixture.CreateHandler();
         var httpClient = new HttpClient(new CanonicalizeUriHandler(innerHandler))
         {
             BaseAddress = new Uri("http://localhost/"),
@@ -51,7 +51,7 @@ public sealed class MultiTenancyTests(MicroStackFixture fixture) : IClassFixture
 
     private AmazonSQSClient CreateSqsClient(string accessKey)
     {
-        var innerHandler = fixture.Factory.Server.CreateHandler();
+        var innerHandler = fixture.CreateHandler();
         var httpClient = new HttpClient(new CanonicalizeUriHandler(innerHandler))
         {
             BaseAddress = new Uri("http://localhost/"),
@@ -69,7 +69,7 @@ public sealed class MultiTenancyTests(MicroStackFixture fixture) : IClassFixture
 
     private AmazonS3Client CreateS3Client(string accessKey)
     {
-        var innerHandler = fixture.Factory.Server.CreateHandler();
+        var innerHandler = fixture.CreateHandler();
         var httpClient = new HttpClient(new CanonicalizeUriHandler(innerHandler))
         {
             BaseAddress = new Uri("http://localhost/"),
@@ -88,7 +88,7 @@ public sealed class MultiTenancyTests(MicroStackFixture fixture) : IClassFixture
 
     private AmazonDynamoDBClient CreateDdbClient(string accessKey)
     {
-        var innerHandler = fixture.Factory.Server.CreateHandler();
+        var innerHandler = fixture.CreateHandler();
         var httpClient = new HttpClient(new CanonicalizeUriHandler(innerHandler))
         {
             BaseAddress = new Uri("http://localhost/"),

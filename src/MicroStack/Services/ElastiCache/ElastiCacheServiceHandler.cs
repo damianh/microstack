@@ -3,6 +3,8 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Web;
 using MicroStack.Internal;
+using MicroStack.Internal.Admin;
+using MicroStack.Admin.Contracts;
 
 namespace MicroStack.Services.ElastiCache;
 
@@ -25,9 +27,15 @@ namespace MicroStack.Services.ElastiCache;
 ///           CreateSnapshot, DeleteSnapshot, DescribeSnapshots,
 ///           DescribeEvents.
 /// </summary>
-internal sealed class ElastiCacheServiceHandler : IServiceHandler
+internal sealed class ElastiCacheServiceHandler : IServiceHandler, IAdminResourceSource
 {
     public string ServiceName => "elasticache";
+
+    public IEnumerable<string> GetKnownAccountIds() =>
+        _clusters.GetAccountIds().Concat(_replicationGroups.GetAccountIds())
+            .Concat(_subnetGroups.GetAccountIds()).Concat(_paramGroups.GetAccountIds())
+            .Concat(_snapshots.GetAccountIds()).Concat(_users.GetAccountIds())
+            .Concat(_userGroups.GetAccountIds());
 
     private const string ElastiCacheNs = "http://elasticache.amazonaws.com/doc/2015-02-02/";
 
@@ -82,6 +90,140 @@ internal sealed class ElastiCacheServiceHandler : IServiceHandler
     public JsonElement? GetState() => null;
 
     public void RestoreState(JsonElement state) { }
+
+    public IReadOnlyList<AdminResourceKind> GetAdminResourceKinds(string serviceId) =>
+    [
+        new("cache-clusters", "Cache clusters"),
+        new("replication-groups", "Replication groups"),
+        new("cache-subnet-groups", "Cache subnet groups"),
+        new("cache-parameter-groups", "Cache parameter groups"),
+        new("snapshots", "Snapshots"),
+        new("users", "Users"),
+        new("user-groups", "User groups"),
+    ];
+
+    public IEnumerable<AdminNode> GetAdminResources(string serviceId)
+    {
+        lock (_lock)
+        {
+            return
+            [
+                .. ElastiCacheNodes("cache-clusters", _clusters),
+                .. ElastiCacheNodes("replication-groups", _replicationGroups),
+                .. ElastiCacheNodes("cache-subnet-groups", _subnetGroups),
+                .. ElastiCacheNodes("cache-parameter-groups", _paramGroups),
+                .. ElastiCacheNodes("snapshots", _snapshots),
+                .. ElastiCacheNodes("users", _users),
+                .. ElastiCacheNodes("user-groups", _userGroups),
+            ];
+        }
+    }
+
+    private IEnumerable<AdminNode> ElastiCacheNodes(
+        string kind, AccountScopedDictionary<string, Dictionary<string, object?>> source) =>
+        source.Items.OrderBy(x => x.Key, StringComparer.Ordinal)
+            .Select(x => ElastiCacheNode(kind, x.Key, x.Value, source));
+
+    private AdminNode ElastiCacheNode(
+        string kind, string id, Dictionary<string, object?> value,
+        AccountScopedDictionary<string, Dictionary<string, object?>> source)
+    {
+        var arn = value.FirstOrDefault(x =>
+            x.Key.EndsWith("Arn", StringComparison.Ordinal) && x.Value is string).Value?.ToString();
+        var status = value.FirstOrDefault(x =>
+            x.Key.EndsWith("Status", StringComparison.Ordinal) && x.Value is string).Value?.ToString();
+        return AdminData.Node(kind, id, id, arn, status) with
+        {
+            ReadFields = () =>
+            {
+                lock (_lock)
+                    return source.TryGetValue(id, out var current) ? ElastiCacheFields(current) : [];
+            },
+            ChildKinds = kind == "cache-parameter-groups"
+                ? [
+                    new("parameters", "Parameters") { IsRoot = false },
+                    new("tags", "Tags") { IsRoot = false },
+                ]
+                : [new("tags", "Tags") { IsRoot = false }],
+            ReadChildren = () => ElastiCacheChildren(kind, id, arn),
+        };
+    }
+
+    private IReadOnlyList<AdminNode> ElastiCacheChildren(string kind, string id, string? arn)
+    {
+        lock (_lock)
+        {
+            var result = new List<AdminNode>();
+            if (kind == "cache-parameter-groups" &&
+                _paramGroupParams.TryGetValue(id, out var parameters))
+            {
+                result.AddRange(parameters.OrderBy(x => x.Key, StringComparer.Ordinal)
+                    .Select(x => AdminData.Node("parameters", x.Key, x.Key) with
+                    {
+                        ReadFields = () => x.Value.OrderBy(v => v.Key, StringComparer.Ordinal)
+                            .Select(v => AdminData.Field(v.Key, v.Value,
+                                ElastiCacheSensitiveName(v.Key))).ToArray(),
+                    }));
+            }
+            if (arn is not null && _tags.TryGetValue(arn, out var tags))
+            {
+                result.AddRange(tags.OrderBy(x => x.GetValueOrDefault("Key"), StringComparer.Ordinal)
+                    .Select(x =>
+                    {
+                        var key = x.GetValueOrDefault("Key") ?? "";
+                        var value = x.GetValueOrDefault("Value");
+                        return AdminData.Node("tags", key, key) with
+                        {
+                            ReadFields = () =>
+                            [
+                                AdminData.Field("Key", key),
+                                AdminData.Field("Value", value, ElastiCacheSensitiveName(key)),
+                            ],
+                        };
+                    }));
+            }
+            return result;
+        }
+    }
+
+    private static IReadOnlyList<AdminField> ElastiCacheFields(Dictionary<string, object?> value)
+    {
+        var fields = new List<AdminField>();
+        AddElastiCacheFields(fields, value, "");
+        return fields;
+    }
+
+    private static void AddElastiCacheFields(
+        List<AdminField> fields, Dictionary<string, object?> value, string prefix)
+    {
+        foreach (var (key, item) in value.OrderBy(x => x.Key, StringComparer.Ordinal))
+        {
+            var name = prefix + key;
+            switch (item)
+            {
+                case null or string or bool or byte or short or int or long or float or double or decimal:
+                    fields.Add(AdminData.Field(name, item?.ToString(), ElastiCacheSensitiveName(name)));
+                    break;
+                case Dictionary<string, object?> dictionary:
+                    AddElastiCacheFields(fields, dictionary, name + ".");
+                    break;
+                case List<string> strings:
+                    fields.Add(AdminData.Field(name, string.Join(", ", strings), ElastiCacheSensitiveName(name)));
+                    break;
+                case List<Dictionary<string, object?>> dictionaries:
+                    for (var i = 0; i < dictionaries.Count; i++)
+                        AddElastiCacheFields(fields, dictionaries[i], $"{name}[{i}].");
+                    break;
+            }
+        }
+    }
+
+    private static bool ElastiCacheSensitiveName(string name) =>
+        name.Contains("password", StringComparison.OrdinalIgnoreCase) ||
+        name.Contains("secret", StringComparison.OrdinalIgnoreCase) ||
+        name.Contains("token", StringComparison.OrdinalIgnoreCase) ||
+        name.Contains("credential", StringComparison.OrdinalIgnoreCase) ||
+        name.Contains("auth", StringComparison.OrdinalIgnoreCase);
 
     // ── Action dispatch ───────────────────────────────────────────────────────
 

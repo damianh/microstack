@@ -1,11 +1,14 @@
 <Solution>
   <Folder Name="/src/">
+    <Project Path="src/MicroStack.Admin.Contracts/MicroStack.Admin.Contracts.csproj" />
     <Project Path="src/MicroStack/MicroStack.csproj" />
     <Project Path="src/MicroStack.Aspire.Hosting/MicroStack.Aspire.Hosting.csproj" />
     <Project Path="src/MicroStack.LambdaBootstrap/MicroStack.LambdaBootstrap.csproj" />
+    <Project Path="src/MicroStack.UI.Client/MicroStack.UI.Client.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/MicroStack.Tests/MicroStack.Tests.csproj" />
+    <Project Path="tests/MicroStack.UI.Tests/MicroStack.UI.Tests.csproj" />
     <Project Path="tests/MicroStack.Aspire.Tests.AppHost/MicroStack.Aspire.Tests.AppHost.csproj" />
     <Project Path="tests/MicroStack.Aspire.Tests/MicroStack.Aspire.Tests.csproj" />
     <Project Path="tests/TestLambdaFunctions/SimpleHandler/SimpleHandler.csproj" />

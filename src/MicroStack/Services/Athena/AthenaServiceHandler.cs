@@ -1,5 +1,8 @@
+using System.Globalization;
 using System.Text.Json;
+using MicroStack.Admin.Contracts;
 using MicroStack.Internal;
+using MicroStack.Internal.Admin;
 
 namespace MicroStack.Services.Athena;
 
@@ -17,7 +20,7 @@ namespace MicroStack.Services.Athena;
 ///           ListTableMetadata, GetTableMetadata, ListDatabases, GetDatabase,
 ///           TagResource, UntagResource, ListTagsForResource.
 /// </summary>
-internal sealed class AthenaServiceHandler : IServiceHandler
+internal sealed class AthenaServiceHandler : IServiceHandler, IAdminResourceSource
 {
     private readonly Lock _lock = new();
 
@@ -69,6 +72,10 @@ internal sealed class AthenaServiceHandler : IServiceHandler
     // -- IServiceHandler -------------------------------------------------------
 
     public string ServiceName => "athena";
+
+    public IEnumerable<string> GetKnownAccountIds() =>
+        _executions.GetAccountIds().Concat(_namedQueries.GetAccountIds())
+            .Concat(_preparedStatements.GetAccountIds());
 
     public Task<ServiceResponse> HandleAsync(ServiceRequest request)
     {
@@ -159,6 +166,155 @@ internal sealed class AthenaServiceHandler : IServiceHandler
     public JsonElement? GetState() => null;
 
     public void RestoreState(JsonElement state) { }
+
+    public IReadOnlyList<AdminResourceKind> GetAdminResourceKinds(string serviceId) =>
+    [
+        new("query-execution", "Query executions"),
+        new("workgroup", "Workgroups"),
+        new("named-query", "Named queries"),
+        new("data-catalog", "Data catalogs"),
+        new("prepared-statement", "Prepared statements"),
+    ];
+
+    public IEnumerable<AdminNode> GetAdminResources(string serviceId)
+    {
+        lock (_lock)
+        {
+            var nodes = new List<AdminNode>();
+            nodes.AddRange(_executions.Items.OrderBy(x => x.Key, StringComparer.Ordinal)
+                .Select(x => ExecutionNode(x.Key, x.Value)));
+            nodes.AddRange(_workgroups.OrderBy(x => x.Key, StringComparer.Ordinal)
+                .Select(x => DictionaryNode("workgroup", x.Key, x.Value, "global")));
+            nodes.AddRange(_namedQueries.Items.OrderBy(x => x.Key, StringComparer.Ordinal)
+                .Select(x => DictionaryNode("named-query", x.Key, x.Value, "account")));
+            nodes.AddRange(_dataCatalogs.OrderBy(x => x.Key, StringComparer.Ordinal)
+                .Select(x => DictionaryNode("data-catalog", x.Key, x.Value, "global")));
+            nodes.AddRange(_preparedStatements.Items.OrderBy(x => x.Key, StringComparer.Ordinal)
+                .Select(x => DictionaryNode("prepared-statement", x.Key, x.Value, "account")));
+            return nodes;
+        }
+    }
+
+    private AdminNode ExecutionNode(string id, Dictionary<string, object?> execution)
+    {
+        var status = AnalyticsAdminData.Dict(execution, "Status");
+        var node = AdminData.Node("query-execution", id,
+            AnalyticsAdminData.String(execution, "Query") ?? id,
+            status: AnalyticsAdminData.String(status, "State"));
+        return node with
+        {
+            ReadFields = () =>
+            {
+                lock (_lock)
+                {
+                    var context = AnalyticsAdminData.Dict(execution, "QueryExecutionContext");
+                    var stats = AnalyticsAdminData.Dict(execution, "Statistics");
+                    return
+                    [
+                        AdminData.Field("id", id),
+                        AdminData.Field("query", AnalyticsAdminData.String(execution, "Query")),
+                        AdminData.Field("database", AnalyticsAdminData.String(context, "Database")),
+                        AdminData.Field("catalog", AnalyticsAdminData.String(context, "Catalog")),
+                        AdminData.Field("submittedAt", AnalyticsAdminData.Epoch(status.GetValueOrDefault("SubmissionDateTime")), format: "timestamp"),
+                        AdminData.Field("completedAt", AnalyticsAdminData.Epoch(status.GetValueOrDefault("CompletionDateTime")), format: "timestamp"),
+                        AdminData.Field("dataScannedBytes", AnalyticsAdminData.String(stats, "DataScannedInBytes")),
+                    ];
+                }
+            },
+            ChildKinds = [new("result-row", "Result rows") { IsRoot = false }],
+            ReadChildren = () =>
+            {
+                lock (_lock)
+                {
+                    var columns = execution.TryGetValue("_resultColumns", out var c) && c is List<string> names ? names : [];
+                    var rows = execution.TryGetValue("_resultRows", out var r) && r is List<object?> values ? values : [];
+                    return rows.Select((row, index) =>
+                    {
+                        var rowNode = AdminData.Node("result-row", index.ToString(CultureInfo.InvariantCulture),
+                            $"Row {index + 1}");
+                        return rowNode with
+                        {
+                            ReadContent = () =>
+                            {
+                                lock (_lock)
+                                {
+                                    var cells = row as List<object?> ?? [];
+                                    var result = new Dictionary<string, object?>(StringComparer.Ordinal);
+                                    for (var i = 0; i < cells.Count; i++)
+                                        result[i < columns.Count ? columns[i] : $"column{i + 1}"] = cells[i];
+                                    return AnalyticsAdminData.Json(result);
+                                }
+                            },
+                        };
+                    }).ToArray();
+                }
+            },
+            ReadConnections = () =>
+            {
+                lock (_lock)
+                {
+                    var config = AnalyticsAdminData.Dict(execution, "ResultConfiguration");
+                    var link = AnalyticsAdminData.S3Connection("Output location",
+                        AnalyticsAdminData.String(config, "OutputLocation"));
+                    return link is null ? [] : [link];
+                }
+            },
+        };
+    }
+
+    private AdminNode DictionaryNode(
+        string kind, string id, Dictionary<string, object?> value, string scope)
+    {
+        var name = AnalyticsAdminData.String(value, "Name") ??
+                   AnalyticsAdminData.String(value, "NamedQueryId") ?? id;
+        var status = AnalyticsAdminData.String(value, "State") ??
+                     AnalyticsAdminData.String(value, "Type");
+        return AdminData.Node(kind, id, name, status: status, scope: scope) with
+        {
+            ReadFields = () =>
+            {
+                lock (_lock)
+                {
+                    return value.OrderBy(x => x.Key, StringComparer.Ordinal)
+                        .Where(x => x.Value is null or string or bool or ValueType)
+                        .Select(x => AdminData.Field(x.Key,
+                            x.Key.Contains("Time", StringComparison.OrdinalIgnoreCase)
+                                ? AnalyticsAdminData.Epoch(x.Value) ?? AnalyticsAdminData.String(value, x.Key)
+                                : AnalyticsAdminData.String(value, x.Key),
+                            format: x.Key.Contains("Time", StringComparison.OrdinalIgnoreCase) ? "timestamp" : null))
+                        .ToArray();
+                }
+            },
+            ReadContent = () =>
+            {
+                lock (_lock)
+                {
+                    var selected = value.Where(x => x.Key is "Configuration" or "Parameters")
+                        .ToDictionary(x => x.Key, x => x.Value, StringComparer.Ordinal);
+                    return AnalyticsAdminData.Json(selected);
+                }
+            },
+            ReadConnections = () =>
+            {
+                lock (_lock)
+                {
+                    var connections = new List<AdminConnection>();
+                    var workgroup = AnalyticsAdminData.String(value, "WorkGroup") ??
+                                    AnalyticsAdminData.String(value, "WorkGroupName");
+                    if (!string.IsNullOrEmpty(workgroup))
+                        connections.Add(new("Workgroup", "configured-workgroup", "athena",
+                            [new AdminKey("workgroup", workgroup)]));
+                    var configuration = AnalyticsAdminData.Dict(value, "Configuration");
+                    var resultConfiguration = AnalyticsAdminData.Dict(configuration, "ResultConfiguration");
+                    var output = AnalyticsAdminData.S3Connection("Output location",
+                        AnalyticsAdminData.String(resultConfiguration, "OutputLocation"));
+                    if (output is not null)
+                        connections.Add(output);
+                    return connections;
+                }
+            },
+        };
+    }
 
     // -- JSON helpers ----------------------------------------------------------
 

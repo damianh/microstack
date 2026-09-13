@@ -13,7 +13,7 @@ namespace MicroStack.Services.Acm;
 ///           AddTagsToCertificate, RemoveTagsFromCertificate, ListTagsForCertificate,
 ///           UpdateCertificateOptions, RenewCertificate, ResendValidationEmail.
 /// </summary>
-internal sealed class AcmServiceHandler : IServiceHandler
+internal sealed partial class AcmServiceHandler : IServiceHandler, Internal.Admin.IAdminResourceSource
 {
     private readonly AccountScopedDictionary<string, AcmCertificate> _certificates = new(); // keyed by ARN
     private readonly Lock _lock = new();
@@ -23,6 +23,8 @@ internal sealed class AcmServiceHandler : IServiceHandler
     // -- IServiceHandler -------------------------------------------------------
 
     public string ServiceName => "acm";
+
+    public IEnumerable<string> GetKnownAccountIds() => _certificates.GetAccountIds();
 
     public Task<ServiceResponse> HandleAsync(ServiceRequest request)
     {

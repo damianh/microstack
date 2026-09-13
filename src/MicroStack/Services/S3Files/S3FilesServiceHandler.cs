@@ -1,6 +1,8 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using MicroStack.Internal;
+using MicroStack.Internal.Admin;
+using MicroStack.Admin.Contracts;
 
 namespace MicroStack.Services.S3Files;
 
@@ -19,7 +21,7 @@ namespace MicroStack.Services.S3Files;
 ///   Sync:            GetSynchronizationConfiguration, PutSynchronizationConfiguration
 ///   Tags:            TagResource, UntagResource, ListTagsForResource
 /// </summary>
-internal sealed partial class S3FilesServiceHandler : IServiceHandler
+internal sealed partial class S3FilesServiceHandler : IServiceHandler, IAdminResourceSource
 {
     private readonly Lock _lock = new();
 
@@ -55,6 +57,9 @@ internal sealed partial class S3FilesServiceHandler : IServiceHandler
     // -- IServiceHandler -------------------------------------------------------
 
     public string ServiceName => "s3files";
+
+    public IEnumerable<string> GetKnownAccountIds() =>
+        _fileSystems.GetAccountIds().Concat(_mountTargets.GetAccountIds()).Concat(_accessPoints.GetAccountIds());
 
     public Task<ServiceResponse> HandleAsync(ServiceRequest request)
     {
@@ -111,6 +116,195 @@ internal sealed partial class S3FilesServiceHandler : IServiceHandler
     public JsonElement? GetState() => null;
 
     public void RestoreState(JsonElement state) { }
+
+    public IReadOnlyList<AdminResourceKind> GetAdminResourceKinds(string serviceId) =>
+    [
+        new("file-systems", "File systems"),
+    ];
+
+    public IEnumerable<AdminNode> GetAdminResources(string serviceId)
+    {
+        lock (_lock)
+        {
+            return _fileSystems.Items.OrderBy(x => x.Key, StringComparer.Ordinal)
+                .Select(x => FileSystemAdminNode(x.Key)).ToArray();
+        }
+    }
+
+    private AdminNode FileSystemAdminNode(string fsId)
+    {
+        if (!_fileSystems.TryGetValue(fsId, out var fs))
+            return AdminData.Node("file-systems", fsId, fsId);
+        var name = fs.GetValueOrDefault("FileSystemId")?.ToString() ?? fsId;
+        var arn = fs.GetValueOrDefault("FileSystemArn")?.ToString();
+        return AdminData.Node("file-systems", fsId, name, arn,
+            fs.GetValueOrDefault("LifeCycleState")?.ToString()) with
+        {
+            ReadFields = () => ReadS3FilesFields(_fileSystems, fsId),
+            ChildKinds =
+            [
+                new("mount-targets", "Mount targets") { IsRoot = false },
+                new("access-points", "Access points") { IsRoot = false },
+                new("policies", "File system policies") { IsRoot = false },
+                new("synchronization-configurations", "Synchronization configurations") { IsRoot = false },
+                new("tags", "Tags") { IsRoot = false },
+            ],
+            ReadChildren = () => ReadS3FilesChildren(fsId),
+            ReadConnections = () =>
+            {
+                lock (_lock)
+                {
+                    if (!_fileSystems.TryGetValue(fsId, out var current) ||
+                        current.GetValueOrDefault("BucketName") is not string bucket || string.IsNullOrEmpty(bucket))
+                        return [];
+                    return
+                    [
+                        new AdminConnection("S3 bucket", "backed-by", "s3",
+                            [new AdminKey("buckets", bucket)]),
+                    ];
+                }
+            },
+        };
+    }
+
+    private IReadOnlyList<AdminNode> ReadS3FilesChildren(string fsId)
+    {
+        lock (_lock)
+        {
+            var children = new List<AdminNode>();
+            children.AddRange(_mountTargets.Items
+                .Where(x => Equals(x.Value.GetValueOrDefault("FileSystemId"), fsId))
+                .OrderBy(x => x.Key, StringComparer.Ordinal)
+                .Select(x => DictionaryAdminNode("mount-targets", x.Key, x.Value, _mountTargets)));
+            children.AddRange(_accessPoints.Items
+                .Where(x => Equals(x.Value.GetValueOrDefault("FileSystemId"), fsId))
+                .OrderBy(x => x.Key, StringComparer.Ordinal)
+                .Select(x => AccessPointAdminNode(x.Key, x.Value)));
+            if (_policies.ContainsKey(fsId))
+            {
+                children.Add(AdminData.Node("policies", fsId, "File system policy") with
+                {
+                    ReadContent = () =>
+                    {
+                        lock (_lock)
+                        {
+                            if (!_policies.TryGetValue(fsId, out var policy))
+                                return AdminData.Unavailable("Policy no longer exists.", "application/json");
+                            try { return AdminData.JsonText(policy); }
+                            catch (JsonException) { return AdminData.Text(policy); }
+                        }
+                    },
+                });
+            }
+            if (_syncConfigs.ContainsKey(fsId))
+            {
+                children.Add(AdminData.Node("synchronization-configurations", fsId, "Synchronization configuration") with
+                {
+                    ReadFields = () => ReadS3FilesFields(_syncConfigs, fsId),
+                });
+            }
+            if (_fileSystems.TryGetValue(fsId, out var fs) &&
+                fs.GetValueOrDefault("FileSystemArn") is string arn)
+                children.AddRange(TagAdminNodes(arn));
+            return children;
+        }
+    }
+
+    private AdminNode AccessPointAdminNode(string id, Dictionary<string, object?> value)
+    {
+        var node = DictionaryAdminNode("access-points", id, value, _accessPoints);
+        var arn = value.GetValueOrDefault("AccessPointArn")?.ToString();
+        return arn is null ? node : node with
+        {
+            ChildKinds = [new("tags", "Tags") { IsRoot = false }],
+            ReadChildren = () => TagAdminNodes(arn),
+        };
+    }
+
+    private IReadOnlyList<AdminNode> TagAdminNodes(string arn)
+    {
+        lock (_lock)
+        {
+            if (!_tags.TryGetValue(arn, out var tags))
+                return [];
+            return tags.Where(t => t.GetValueOrDefault("Key") is string)
+                .OrderBy(t => t["Key"]?.ToString(), StringComparer.Ordinal)
+                .Select(t =>
+                {
+                    var key = t["Key"]?.ToString() ?? "";
+                    var value = t.GetValueOrDefault("Value")?.ToString();
+                    var sensitive = IsSensitiveName(key);
+                    return AdminData.Node("tags", key, key) with
+                    {
+                        ReadFields = () =>
+                        [
+                            AdminData.Field("Key", key),
+                            AdminData.Field("Value", value, sensitive),
+                        ],
+                    };
+                }).ToArray();
+        }
+    }
+
+    private AdminNode DictionaryAdminNode(
+        string kind, string id, Dictionary<string, object?> value,
+        AccountScopedDictionary<string, Dictionary<string, object?>> source)
+    {
+        var name = value.GetValueOrDefault("Name")?.ToString() ?? id;
+        var arn = value.FirstOrDefault(x => x.Key.EndsWith("Arn", StringComparison.Ordinal)).Value?.ToString();
+        var status = value.GetValueOrDefault("LifeCycleState")?.ToString();
+        return AdminData.Node(kind, id, name, arn, status) with
+        {
+            ReadFields = () => ReadS3FilesFields(source, id),
+        };
+    }
+
+    private IReadOnlyList<AdminField> ReadS3FilesFields(
+        AccountScopedDictionary<string, Dictionary<string, object?>> source, string id)
+    {
+        lock (_lock)
+        {
+            return source.TryGetValue(id, out var value) ? ScalarFields(value) : [];
+        }
+    }
+
+    private static IReadOnlyList<AdminField> ScalarFields(Dictionary<string, object?> value)
+    {
+        var fields = new List<AdminField>();
+        AddScalarFields(fields, value, "");
+        return fields;
+    }
+
+    private static void AddScalarFields(
+        List<AdminField> fields, Dictionary<string, object?> value, string prefix)
+    {
+        foreach (var (key, item) in value.OrderBy(x => x.Key, StringComparer.Ordinal))
+        {
+            var name = prefix + key;
+            switch (item)
+            {
+                case null or string or bool or byte or short or int or long or float or double or decimal:
+                    fields.Add(AdminData.Field(name, item?.ToString(), IsSensitiveName(name)));
+                    break;
+                case Dictionary<string, object?> dictionary:
+                    AddScalarFields(fields, dictionary, name + ".");
+                    break;
+                case List<string> strings:
+                    fields.Add(AdminData.Field(name, string.Join(", ", strings), IsSensitiveName(name)));
+                    break;
+                case List<Dictionary<string, object?>> dictionaries:
+                    for (var i = 0; i < dictionaries.Count; i++)
+                        AddScalarFields(fields, dictionaries[i], $"{name}[{i}].");
+                    break;
+            }
+        }
+    }
+
+    private static bool IsSensitiveName(string name) =>
+        name.Contains("password", StringComparison.OrdinalIgnoreCase) ||
+        name.Contains("secret", StringComparison.OrdinalIgnoreCase) ||
+        name.Contains("token", StringComparison.OrdinalIgnoreCase) ||
+        name.Contains("credential", StringComparison.OrdinalIgnoreCase);
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Request router

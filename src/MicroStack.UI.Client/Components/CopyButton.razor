@@ -1,0 +1,57 @@
+@inject IJSRuntime JS
+@implements IDisposable
+<span class="copy-control">
+    <button type="button" class="button icon-button" @onclick="CopyAsync" disabled="@string.IsNullOrEmpty(Text)" aria-label="@Label" title="@Label">
+        <svg aria-hidden="true" viewBox="0 0 20 20"><rect x="7" y="7" width="10" height="11" rx="1.5" /><path d="M13 7V3a1 1 0 0 0-1-1H3a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h4" /></svg>
+    </button>
+    <span class="copy-status" role="status">@_status</span>
+</span>
+@code {
+    [Parameter] public string? Text { get; set; }
+    [Parameter] public string Label { get; set; } = "Copy";
+    private string? _status;
+    private string? _previousText;
+    private CancellationTokenSource? _copyCancellation;
+    private bool _disposed;
+    protected override void OnParametersSet()
+    {
+        if (_previousText == Text) return;
+        CancelCopy();
+        _previousText = Text;
+        _status = null;
+    }
+    private async Task CopyAsync()
+    {
+        CancelCopy();
+        if (_disposed) return;
+        using var cancellation = new CancellationTokenSource();
+        _copyCancellation = cancellation;
+        var token = cancellation.Token;
+        _status = null;
+        try
+        {
+            await JS.InvokeVoidAsync("microstack.copy", token, Text);
+            if (token.IsCancellationRequested) return;
+            _status = "Copied.";
+            StateHasChanged();
+            await Task.Delay(TimeSpan.FromSeconds(2), token);
+            _status = null;
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested) { }
+        catch (JSException)
+        {
+            if (!token.IsCancellationRequested)
+                _status = "Clipboard unavailable. Select the text and copy it manually.";
+        }
+        finally
+        {
+            if (ReferenceEquals(_copyCancellation, cancellation)) _copyCancellation = null;
+        }
+    }
+    private void CancelCopy()
+    {
+        _copyCancellation?.Cancel();
+        _copyCancellation = null;
+    }
+    public void Dispose() { _disposed = true; CancelCopy(); }
+}

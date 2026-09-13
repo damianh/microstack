@@ -45,7 +45,7 @@ public sealed class PersistenceTests(MicroStackFixture fixture) : IClassFixture<
 
     private static AmazonSQSClient CreateSqsClient(MicroStackFixture fixture)
     {
-        var innerHandler = fixture.Factory.Server.CreateHandler();
+        var innerHandler = fixture.CreateHandler();
         var httpClient = new HttpClient(new CanonicalizeUriHandler(innerHandler))
         {
             BaseAddress = new Uri("http://localhost/"),
@@ -63,7 +63,7 @@ public sealed class PersistenceTests(MicroStackFixture fixture) : IClassFixture<
 
     private static AmazonSimpleNotificationServiceClient CreateSnsClient(MicroStackFixture fixture)
     {
-        var innerHandler = fixture.Factory.Server.CreateHandler();
+        var innerHandler = fixture.CreateHandler();
         var httpClient = new HttpClient(new CanonicalizeUriHandler(innerHandler))
         {
             BaseAddress = new Uri("http://localhost/"),
@@ -82,7 +82,7 @@ public sealed class PersistenceTests(MicroStackFixture fixture) : IClassFixture<
 
     private static AmazonSimpleSystemsManagementClient CreateSsmClient(MicroStackFixture fixture)
     {
-        var innerHandler = fixture.Factory.Server.CreateHandler();
+        var innerHandler = fixture.CreateHandler();
         var httpClient = new HttpClient(new CanonicalizeUriHandler(innerHandler))
         {
             BaseAddress = new Uri("http://localhost/"),
@@ -101,7 +101,7 @@ public sealed class PersistenceTests(MicroStackFixture fixture) : IClassFixture<
 
     private static AmazonSecretsManagerClient CreateSmClient(MicroStackFixture fixture)
     {
-        var innerHandler = fixture.Factory.Server.CreateHandler();
+        var innerHandler = fixture.CreateHandler();
         var httpClient = new HttpClient(new CanonicalizeUriHandler(innerHandler))
         {
             BaseAddress = new Uri("http://localhost/"),

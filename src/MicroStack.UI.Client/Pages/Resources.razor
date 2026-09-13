@@ -1,0 +1,272 @@
+@page "/accounts/{AccountId}/services"
+@page "/accounts/{AccountId}/services/{ServiceId}"
+@implements IAsyncDisposable
+@using Microsoft.AspNetCore.Components.Sections
+@inject AdminApiClient Api
+@inject ExplorerAccountState AccountState
+@inject LiveUpdateCoordinator Live
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+
+<PageTitle>@(_service?.Label ?? "Services") · MicroStack</PageTitle>
+<SectionContent SectionName="explorer-account">
+    @if (_context is not null)
+    { <AccountScope Account="@_account" DefaultAccount="@_context.DefaultAccount" Accounts="@_accounts" AccountChanged="SwitchAccount" /> }
+</SectionContent>
+@if (ServiceId is not null)
+{
+    <div class="workspace-context">
+        <nav class="service-breadcrumb" aria-label="Service workspace">
+            <a href="@HomeUrl">All services</a><span aria-hidden="true">/</span>
+            <ServicePicker Services="@_services" Selected="@_service" SelectedChanged="SwitchService" />
+        </nav>
+        @if (_service is not null)
+        { <button class="button mobile-resources" @onclick="ToggleBrowse">@(_browsing ? "Return to detail" : "Browse resources")</button> }
+    </div>
+}
+@if (_error is not null)
+{
+    <div class="notice error" role="alert"><p>@_error</p>
+        @if (_detail is not null || _resources is not null) { <p>Previously loaded data may be stale until the snapshot refresh succeeds.</p> }
+        <button class="button" disabled="@_busy" @onclick="LoadAsync">Retry snapshot</button>
+        @if (_missing) { <button class="button" @onclick="ClearSelection">Return to resource list</button> }
+    </div>
+}
+@if (ServiceId is null)
+{
+    <section class="directory">
+        <header class="directory-heading">
+            <h1>Services</h1>
+            <p>Find a service, inspect its resources, and follow configured connections.</p>
+        </header>
+        <div class="directory-tools">
+            <div class="search"><input type="search" aria-label="Find services" placeholder="Find a service…" value="@Filter" @oninput="FilterServices" /></div>
+            <label><input type="checkbox" checked="@(Enabled == true)" @onchange="FilterEnabled" /> Enabled services only</label>
+            @if (_services.Count > 0)
+            { <p class="directory-result-count" role="status">@DirectoryServices.Count of @_services.Count services</p> }
+        </div>
+        @if (_busy && _showLoading) { <LoadingState Label="Loading service catalog…" /> }
+        else if (_services.Count > 0)
+        {
+            @if (DirectoryServices.Count == 0) { <p class="empty-list">No services match. Try a service name, identifier, or category.</p> }
+            <div class="directory-grid">
+                @foreach (var group in DirectoryServices.GroupBy(service => service.Category))
+                {
+                    <section class="directory-group"><h2>@group.Key <span class="count">@group.Count()</span></h2><ul>
+                        @foreach (var service in group.OrderBy(service => service.Label, StringComparer.OrdinalIgnoreCase))
+                        {
+                            <li><a class="directory-service" href="@ServiceUrl(service.Id)">
+                                <span class="directory-name"><img class="aws-service-icon" src="@($"icons/{service.Icon}.svg")" alt="" /><strong>@service.Label</strong></span>
+                                <span class="directory-detail">@AvailabilityLabel(service)</span><span aria-hidden="true">→</span>
+                            </a></li>
+                        }
+                    </ul></section>
+                }
+            </div>
+        }
+    </section>
+}
+else if (_service is not null)
+{
+    @if (ExplorerLocation.ResolveReturn(Navigation, ReturnTo) is { } returnTo) { <a class="return-link" href="@returnTo">← Return to previous inspection</a> }
+    <h1 class="sr-only">@_service.Label</h1>
+    @if (_service.Scope != "account") { <p class="scope-exception">@ScopeLabel(_service.Scope)@(IsGlobalScope(_service.Scope) ? " · shared across accounts" : "")</p> }
+    @if (!string.IsNullOrEmpty(_service.Notice)) { <p class="notice">@_service.Notice</p> }
+    @if (_service.Availability == "disabled")
+    { <section class="state-panel"><h2>Service disabled</h2><p>This service is declared in the catalog but its handler is not enabled on this instance.</p><a class="button" href="overview">View instance status</a></section> }
+    else
+    {
+        <div class="resource-workspace @(_browsing ? "browsing" : "")">
+            <section id="resource-index" class="resource-index" aria-label="Resources" aria-busy="@(_busy ? "true" : "false")" tabindex="-1">
+                <div class="index-heading">
+                    @if (RootKinds.Count > 1)
+                    {
+                        <label class="sr-only" for="resource-kind">Resource kind</label>
+                        <div class="kind-picker">
+                            <select id="resource-kind" class="kind-select" value="@_kind" @onchange="ChangeKind">
+                                @foreach (var kind in RootKinds) { <option value="@kind.Id">@kind.Label</option> }
+                            </select>
+                            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m6 9 6 6 6-6" /></svg>
+                        </div>
+                    }
+                    else
+                    { <span>@RootKindLabel</span> }
+                    <span class="count">@(_resources?.Items.Count ?? 0)</span>
+                </div>
+                <DebouncedFilter Value="@Filter" Scope="@FilterScope" Label="@RootFilterLabel" Placeholder="@($"{RootFilterLabel}…")" Changed="ApplyResourceFilter" />
+                @if (_showLoading && _resources is null) { <LoadingState Label="Loading resources…" /> }
+                @if (_resources is not null)
+                {
+                    <div class="resource-list">
+                        @foreach (var resource in _resources.Items)
+                        {
+                            <a @key="resource.Key" class="resource-button @(IsRootSelected(resource.Key) ? "selected" : "")"
+                               aria-current="@(IsRootSelected(resource.Key) ? "true" : null)" href="@RootUrl(resource.Key)">
+                                <strong>@resource.Name</strong>
+                                @if (resource.Type is not null) { <small>@resource.Type</small> }
+                            </a>
+                        }
+                    </div>
+                    @if (_resources.Items.Count == 0) { <p class="empty-list">No @RootKindLabel.ToLowerInvariant()@(string.IsNullOrEmpty(Filter) ? " in this scope." : " match this filter.")</p> }
+                }
+                <p class="index-note">Name / identifier search · pause for stable inspection.</p>
+            </section>
+            <section class="inspector" aria-label="Selected resource" aria-busy="@(_busy ? "true" : "false")">
+                @if (_showLoading && _detail is null) { <LoadingState /> }
+                @if (_detail is not null)
+                {
+                    <div class="resource-heading">
+                        @if (_path.Length > 1)
+                        {
+                            <nav class="return-link" aria-label="Resource hierarchy">
+                                @for (var index = 0; index < _path.Length - 1; index++)
+                                {
+                                    var ancestor = index;
+                                    <a href="@AncestorUrl(ancestor)">@_path[ancestor].Id</a><span aria-hidden="true">/</span>
+                                }
+                            </nav>
+                        }
+                        <div class="resource-top"><div><h2 id="resource-title" tabindex="-1">@_detail.Resource.Name</h2>
+                            <div class="resource-type"><span>@(_detail.Resource.Type ?? KindLabel(_detail.Resource.Key.Kind))</span>
+                                @if (InspectionProfile.DisplayStatus(_detail.Resource) is { } status) { <span class="tag">@status</span> }
+                                @if (_detail.Resource.Scope != "account") { <span>@ScopeLabel(_detail.Resource.Scope)</span> }
+                            </div>
+                        </div></div>
+                        <div class="arn-row"><code>@(_detail.Resource.Arn ?? _detail.Resource.Key.Id)</code><CopyButton Text="@(_detail.Resource.Arn ?? _detail.Resource.Key.Id)" Label="Copy identifier" /></div>
+                        <ResourceFacts Fields="@(_detail.Summary.Count > 0 ? _detail.Summary : _detail.Resource.Summary)" Copyable="true" />
+                    </div>
+                    <div class="tabs" role="tablist" aria-label="Resource inspection">
+                        @foreach (var tab in Tabs)
+                        {
+                            <button id="@($"tab-{tab.Id}")" role="tab" aria-selected="@(ActiveTab == tab.Id ? "true" : "false")" tabindex="@(ActiveTab == tab.Id ? 0 : -1)"
+                                    aria-controls="inspection-panel" @onclick="() => ChangeTab(tab.Id)">@tab.Label</button>
+                        }
+                    </div>
+                    <div id="inspection-panel" class="tab-body" role="tabpanel" aria-labelledby="@($"tab-{ActiveTab}")">
+                        @if (_showLoading) { <p class="snapshot-updating" role="status">Updating snapshot…</p> }
+                        @if (ActiveTab == "configuration")
+                        {
+                            <ResourceInspector @key="_loadedScope" Revision="@_revealRevision" Detail="@_detail" ShowContent="false" ShowSummary="false" SummaryShownExternally="true" Service="@ServiceId" Account="@_account" Path="@_path" />
+                        }
+                        else if (ActiveTab == "connections")
+                        {
+                            <p class="notice">Explicit configured relationships only. A configured connection does not establish successful delivery.</p>
+                            @if (_connections is { Items.Count: > 0 })
+                            {
+                                <ConnectionList Connections="@_connections.Items" Destination="ConnectionUrl" Source="ConnectionSourceUrl" />
+                            }
+                            else { <p class="empty-list">No configured connections are retained for this resource.</p> }
+                        }
+                        else if (ActiveTab == "activity")
+                        { <RequestActivity @key="@($"{ServiceId}:{_account}")" Service="@ServiceId" Account="@_account" /> }
+                        else
+                        {
+                            @if (ServiceId == "sqs") { <p class="notice">Read-only queue snapshot. Inspection does not receive messages, change visibility, or advance consumers.</p> }
+                            @if (ServiceId == "dynamodb") { <p class="notice">Items retain DynamoDB attribute types (S, N, M, L, and other modeled types). Browsing does not execute a query or alter items.</p> }
+                            @if (_detail.HasContent)
+                            {
+                                <ResourceInspector @key="_loadedScope" Revision="@_revealRevision" Detail="@_detail" ShowSummary="false" SummaryShownExternally="true" Content="@_content" Service="@ServiceId" Account="@_account" Path="@_path" />
+                            }
+                            @if (_detail.HasChildren)
+                            {
+                                @if (IsS3PrefixBrowser)
+                                {
+                                    <nav class="prefix-breadcrumb" aria-label="Object prefix">
+                                        <a href="@PrefixUrl("")">Bucket root</a>
+                                        @foreach (var ancestor in PrefixAncestors)
+                                        {
+                                            <span aria-hidden="true">/</span><a href="@PrefixUrl(ancestor.Prefix)">@ancestor.Name</a>
+                                        }
+                                    </nav>
+                                }
+                                <div class="content-tools">
+                                    <div class="toolbar collection-toolbar">
+                                        @if (ChildKinds.Count > 1)
+                                        {
+                                            <label for="child-kind">Collection</label><select id="child-kind" value="@ChildKind" @onchange="ChangeChildKind">
+                                                <option value="">All collections</option>
+                                                @foreach (var kind in ChildKinds) { <option value="@kind.Id">@kind.Label</option> }
+                                            </select>
+                                        }
+                                        <DebouncedFilter Value="@ChildFilter" Scope="@FilterScope" Label="@ChildFilterLabel" Placeholder="@($"{ChildFilterLabel}…")" Changed="ApplyChildFilter" />
+                                        @if (IsS3PrefixBrowser)
+                                        {
+                                            <form class="prefix-form" @onsubmit="ApplyPrefix" @onsubmit:preventDefault>
+                                                <label for="object-prefix">Prefix</label><input id="object-prefix" type="text" placeholder="Path prefix" @bind="_prefixFilter" />
+                                                <button class="button" type="submit">Go</button>
+                                            </form>
+                                        }
+                                    </div>
+                                </div>
+                                <div class="data-split">
+                                    <section class="records" aria-label="@ChildrenLabel">
+                                        <div class="list-heading"><span>@ChildrenLabel</span><span>@(_children?.Items.Count ?? 0)</span></div>
+                                        @if (_children is not null)
+                                        {
+                                            @foreach (var group in _children.Items.GroupBy(child => child.Key.Kind))
+                                            {
+                                                @if (ChildKinds.Count > 1) { <div class="list-heading">@KindLabel(group.Key)</div> }
+                                                @foreach (var child in group)
+                                                {
+                                                    <a @key="child.Key" class="record-button @(IsChildSelected(child.Key) ? "selected" : "")"
+                                                       aria-current="@(IsChildSelected(child.Key) ? "true" : null)" href="@ChildUrl(child.Key)">
+                                                        <div class="record-title">@ChildName(child)</div>
+                                                        <div class="record-meta"><span>@(child.Type ?? KindLabel(child.Key.Kind))</span>
+                                                            @if (InspectionProfile.DisplayStatus(child) is { } childStatus) { <span class="tag">@childStatus</span> }
+                                                            @if (ServiceId == "s3" && child.Key.Kind == "prefixes") { <span>Browse →</span> }
+                                                        </div>
+                                                        <ResourceFacts Fields="@child.Summary" Compact="true" />
+                                                    </a>
+                                                }
+                                            }
+                                            @if (_children.Items.Count == 0) { <p class="empty-list">@(string.IsNullOrEmpty(ChildFilter) ? $"No {ChildrenLabel.ToLowerInvariant()} are retained in this collection." : "No entries match this name or identifier. Try a different filter.")</p> }
+                                        }
+                                    </section>
+                                    <section class="payload" aria-label="Selected entry">
+                                        @if (_childError is not null) { <p class="notice error" role="alert">@_childError</p> }
+                                        @if (_selectedDetail is not null)
+                                        {
+                                            <div class="payload-head"><strong>@_selectedDetail.Resource.Name</strong>
+                                                <CopyButton Text="@(_selectedDetail.Resource.Arn ?? _selectedDetail.Resource.Key.Id)" Label="Copy entry identifier" />
+                                                @if (_selectedDetail.HasChildren) { <a class="button" href="@OpenChildUrl">Browse @SelectedBrowseLabel →</a> }
+                                            </div>
+                                            <ResourceInspector @key="_scopeKey" Revision="@_revealRevision" Detail="@_selectedDetail" Content="@_selectedContent" Service="@ServiceId" Account="@_account" Path="@SelectedPath">
+                                                @if (_selectedDetail.HasConnections)
+                                                {
+                                                    <section class="entry-connections" aria-label="Configured connections">
+                                                        <h3>Configured connections@(_selectedDetail.ConnectionCount is { } count ? $" ({count:N0})" : "")</h3>
+                                                        @if (_selectedConnectionError is not null) { <p class="notice error" role="alert">@_selectedConnectionError</p> }
+                                                        @if (_selectedConnections is { Items.Count: > 0 })
+                                                        {
+                                                            <ConnectionList Connections="@_selectedConnections.Items" Destination="ConnectionUrl" Source="ConnectionSourceUrl" />
+                                                        }
+                                                        else if (_selectedConnections is not null) { <p class="empty-list">No configured connections are retained for this entry.</p> }
+                                                    </section>
+                                                }
+                                            </ResourceInspector>
+                                        }
+                                        else if (_childError is null) { <p class="empty-list">Select an entry to inspect its content and metadata.</p> }
+                                    </section>
+                                </div>
+                            }
+                            @if (!_detail.HasChildren && !_detail.HasContent)
+                            { <p class="notice">This resource retains configuration, not a browsable content collection. Inspect the Configuration tab for its modeled fields.</p> }
+                        }
+                    </div>
+                }
+                else if (!_missing && !_busy)
+                {
+                    <div class="state-panel"><h2>@(_service.Kinds.Count == 0 ? "No retained resources" : "Choose a resource")</h2>
+                        <p>@(_service.Kinds.Count == 0 ? "This service does not retain a resource collection. Its scope and request activity remain available." : "Select a resource from the index, or refresh after creating one through its AWS API.")</p>
+                        <button class="button" @onclick="LoadAsync">Refresh snapshot</button>
+                    </div>
+                    @if (_service.Kinds.Count == 0) { <div class="tab-body"><RequestActivity Service="@ServiceId" Account="@_account" /></div> }
+                }
+            </section>
+        </div>
+    }
+    <footer class="workspace-footer"><span>Read-only inspection · content previews up to 1 MiB</span>
+        @if (_captured is { } captured) { <span>Snapshot · @ExplorerLocation.Utc(captured)</span> }
+    </footer>
+}
+else if (_busy && _showLoading) { <LoadingState /> }

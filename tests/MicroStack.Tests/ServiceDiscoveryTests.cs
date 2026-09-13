@@ -20,7 +20,7 @@ public sealed class ServiceDiscoveryTests(MicroStackFixture fixture) : IClassFix
 
     private static AmazonServiceDiscoveryClient CreateServiceDiscoveryClient(MicroStackFixture fixture)
     {
-        var innerHandler = fixture.Factory.Server.CreateHandler();
+        var innerHandler = fixture.CreateHandler();
         var httpClient = new HttpClient(new CanonicalizeUriHandler(innerHandler))
         {
             BaseAddress = new Uri("http://localhost/"),
@@ -39,7 +39,7 @@ public sealed class ServiceDiscoveryTests(MicroStackFixture fixture) : IClassFix
 
     private static AmazonRoute53Client CreateRoute53Client(MicroStackFixture fixture)
     {
-        var innerHandler = fixture.Factory.Server.CreateHandler();
+        var innerHandler = fixture.CreateHandler();
         var httpClient = new HttpClient(new CanonicalizeUriHandler(innerHandler))
         {
             BaseAddress = new Uri("http://localhost/"),

@@ -38,7 +38,7 @@ public sealed class CloudFormationTests(MicroStackFixture fixture) : IClassFixtu
         where TClient : AmazonServiceClient
         where TConfig : ClientConfig, new()
     {
-        var innerHandler = fixture.Factory.Server.CreateHandler();
+        var innerHandler = fixture.CreateHandler();
         var httpClient = new HttpClient(new CanonicalizeUriHandler(innerHandler))
         {
             BaseAddress = new Uri("http://localhost/"),

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using MicroStack.Internal;
+using MicroStack.Internal.Admin;
 
 namespace MicroStack.Services.AppSync;
 
@@ -18,7 +19,7 @@ namespace MicroStack.Services.AppSync;
 ///   Types:         CreateType, ListTypes, GetType
 ///   Tags:          TagResource, UntagResource, ListTagsForResource
 /// </summary>
-internal sealed partial class AppSyncServiceHandler : IServiceHandler
+internal sealed partial class AppSyncServiceHandler : IServiceHandler, IAdminResourceSource
 {
     private readonly Lock _lock = new();
 
@@ -40,6 +41,8 @@ internal sealed partial class AppSyncServiceHandler : IServiceHandler
     // ── IServiceHandler ──────────────────────────────────────────────────────
 
     public string ServiceName => "appsync";
+
+    public IEnumerable<string> GetKnownAccountIds() => _apis.GetAccountIds();
 
     public Task<ServiceResponse> HandleAsync(ServiceRequest request)
     {

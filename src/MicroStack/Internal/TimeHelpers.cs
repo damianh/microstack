@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace MicroStack.Internal;
 
 /// <summary>
@@ -8,17 +10,21 @@ internal static class TimeHelpers
 {
     /// <summary>Current UTC time in AWS ISO 8601 format: 2024-01-15T12:34:56.789Z</summary>
     internal static string NowIso() =>
-        DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fff") + "Z";
+        DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fff'Z'", CultureInfo.InvariantCulture);
 
     /// <summary>Current UTC time in RFC 7231 format for HTTP headers: Mon, 15 Jan 2024 12:34:56 GMT</summary>
     internal static string NowRfc7231() =>
-        DateTime.UtcNow.ToString("ddd, dd MMM yyyy HH:mm:ss") + " GMT";
+        DateTime.UtcNow.ToString("R", CultureInfo.InvariantCulture);
 
     /// <summary>Convert an ISO 8601 timestamp to RFC 7231 format.</summary>
     internal static string IsoToRfc7231(string isoStr)
     {
-        if (DateTimeOffset.TryParse(isoStr, out var dt))
-            return dt.UtcDateTime.ToString("ddd, dd MMM yyyy HH:mm:ss") + " GMT";
+        if (DateTimeOffset.TryParse(
+                isoStr,
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.AssumeUniversal,
+                out var dt))
+            return dt.UtcDateTime.ToString("R", CultureInfo.InvariantCulture);
         return isoStr;
     }
 

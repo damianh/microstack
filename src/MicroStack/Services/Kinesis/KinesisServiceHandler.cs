@@ -1,7 +1,9 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using MicroStack.Admin.Contracts;
 using MicroStack.Internal;
+using MicroStack.Internal.Admin;
 
 namespace MicroStack.Services.Kinesis;
 
@@ -19,7 +21,7 @@ namespace MicroStack.Services.Kinesis;
 ///           DescribeStreamConsumer, StartStreamEncryption, StopStreamEncryption,
 ///           EnableEnhancedMonitoring, DisableEnhancedMonitoring.
 /// </summary>
-internal sealed class KinesisServiceHandler : IServiceHandler
+internal sealed class KinesisServiceHandler : IServiceHandler, IAdminResourceSource
 {
     private readonly Lock _lock = new();
 
@@ -37,6 +39,9 @@ internal sealed class KinesisServiceHandler : IServiceHandler
     // -- IServiceHandler -------------------------------------------------------
 
     public string ServiceName => "kinesis";
+
+    public IEnumerable<string> GetKnownAccountIds() =>
+        _streams.GetAccountIds().Concat(_consumers.GetAccountIds());
 
     public Task<ServiceResponse> HandleAsync(ServiceRequest request)
     {
@@ -114,6 +119,125 @@ internal sealed class KinesisServiceHandler : IServiceHandler
     public JsonElement? GetState() => null;
 
     public void RestoreState(JsonElement state) { }
+
+    public IReadOnlyList<AdminResourceKind> GetAdminResourceKinds(string serviceId) =>
+    [
+        new("stream", "Streams"),
+    ];
+
+    public IEnumerable<AdminNode> GetAdminResources(string serviceId)
+    {
+        lock (_lock)
+            return _streams.Items.OrderBy(x => x.Key, StringComparer.Ordinal)
+                .Select(x => StreamNode(x.Value)).ToArray();
+    }
+
+    public string? GetAdminNotice(string serviceId) =>
+        "Records are read directly from retained storage without creating or advancing shard iterators.";
+
+    private AdminNode StreamNode(KinStream stream) =>
+        AdminData.Node("stream", stream.StreamName, stream.StreamName,
+            stream.StreamArn, stream.StreamStatus) with
+        {
+            ReadFields = () =>
+            {
+                lock (_lock)
+                {
+                    return
+                    [
+                        AdminData.Field("mode", stream.StreamMode),
+                        AdminData.Field("retentionPeriodHours", stream.RetentionPeriodHours.ToString()),
+                        AdminData.Field("shardCount", stream.Shards.Count.ToString()),
+                        AdminData.Field("createdAt", AnalyticsAdminData.Epoch(stream.CreationTimestamp), format: "timestamp"),
+                        AdminData.Field("encryptionType", stream.EncryptionType),
+                        AdminData.Field("keyId", stream.KeyId),
+                    ];
+                }
+            },
+            ChildKinds =
+            [
+                new("shard", "Shards") { IsRoot = false },
+                new("consumer", "Consumers") { IsRoot = false },
+            ],
+            ReadChildren = () =>
+            {
+                lock (_lock)
+                {
+                    var children = stream.Shards.OrderBy(x => x.Key, StringComparer.Ordinal)
+                        .Select(x => ShardNode(x.Key, x.Value)).ToList();
+                    children.AddRange(_consumers.Items
+                        .Where(x => string.Equals(x.Value.StreamArn, stream.StreamArn, StringComparison.Ordinal))
+                        .OrderBy(x => x.Key, StringComparer.Ordinal)
+                        .Select(x => ConsumerNode(x.Value)));
+                    return children;
+                }
+            },
+            ReadConnections = () =>
+            {
+                lock (_lock)
+                    return string.IsNullOrEmpty(stream.KeyId)
+                        ? []
+                        : [new AdminConnection("Encryption key", "configured-encryption-key", "kms",
+                            [new AdminKey("key", stream.KeyId.Split('/').Last())])];
+            },
+        };
+
+    private AdminNode ShardNode(string id, KinShard shard) =>
+        AdminData.Node("shard", id, id) with
+        {
+            ReadFields = () =>
+            {
+                lock (_lock)
+                {
+                    return
+                    [
+                        AdminData.Field("startingHashKey", shard.StartingHashKey),
+                        AdminData.Field("endingHashKey", shard.EndingHashKey),
+                        AdminData.Field("startingSequenceNumber", shard.StartingSequenceNumber),
+                        AdminData.Field("parentShardId", shard.ParentShardId),
+                        AdminData.Field("adjacentParentShardId", shard.AdjacentParentShardId),
+                        AdminData.Field("recordCount", shard.Records.Count.ToString()),
+                    ];
+                }
+            },
+            ChildKinds = [new("record", "Records") { IsRoot = false }],
+            ReadChildren = () =>
+            {
+                lock (_lock)
+                    return shard.Records.OrderBy(x => x.ApproximateArrivalTimestamp)
+                        .ThenBy(x => x.SequenceNumber, StringComparer.Ordinal)
+                        .Select(RecordNode).ToArray();
+            },
+        };
+
+    private AdminNode RecordNode(KinRecord record) =>
+        AdminData.Node("record", record.SequenceNumber, record.SequenceNumber) with
+        {
+            ReadFields = () =>
+            [
+                AdminData.Field("partitionKey", record.PartitionKey),
+                AdminData.Field("sequenceNumber", record.SequenceNumber),
+                AdminData.Field("approximateArrivalTimestamp",
+                    AnalyticsAdminData.Epoch(record.ApproximateArrivalTimestamp), format: "timestamp"),
+            ],
+            ReadContent = () =>
+            {
+                lock (_lock)
+                    return AnalyticsAdminData.DecodedBase64(record.Data);
+            },
+        };
+
+    private AdminNode ConsumerNode(KinConsumer consumer) =>
+        AdminData.Node("consumer", consumer.ConsumerArn, consumer.ConsumerName,
+            consumer.ConsumerArn, consumer.ConsumerStatus) with
+        {
+            ReadFields = () =>
+            [
+                AdminData.Field("createdAt",
+                    AnalyticsAdminData.Epoch(consumer.ConsumerCreationTimestamp), format: "timestamp"),
+                AdminData.Field("streamArn", consumer.StreamArn),
+            ],
+        };
 
     // -- JSON helpers ----------------------------------------------------------
 

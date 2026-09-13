@@ -1,0 +1,87 @@
+@implements IDisposable
+@inject LiveUpdateCoordinator Live
+<div class="live-controls" role="group" aria-label="Live updates">
+    <span class="live-state live-status @(Mode is "Live" or "Paused" ? "sr-only" : "")" data-state="@Mode.ToLowerInvariant()" role="status" aria-live="polite" aria-atomic="true">@Mode</span>
+    <span class="live-actions">
+        <button type="button" class="button icon-button live-toggle" disabled="@(_acting || _live is null)" @onclick="TogglePauseAsync"
+                aria-label="Live updates" aria-pressed="@(_live?.Paused == false ? "true" : "false")" title="@ToggleTitle">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                @if (_live?.Paused == true)
+                { <path d="m8 5 11 7-11 7Z" /> }
+                else
+                { <path d="M8 5v14M16 5v14" /> }
+            </svg>
+        </button>
+        <button type="button" class="button icon-button" disabled="@(_refreshing || _acting || _live is null)" @onclick="RefreshAsync"
+                aria-label="Refresh" aria-busy="@(_refreshing ? "true" : "false")" aria-describedby="live-refresh-time" title="@RefreshTitle">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M20 7v5h-5M20 12a8 8 0 1 0-2.3 5.7" /></svg>
+        </button>
+        @if (_live?.Error is not null || _live?.ConnectionError is not null || _actionError is not null)
+        {
+            <button type="button" class="button" disabled="@(_acting || _refreshing)" @onclick="RetryAsync">Retry</button>
+        }
+    </span>
+    <span id="live-refresh-time" class="sr-only">
+        @if (_live?.LastSuccess is { } time)
+        {
+            <span>Last successful refresh <time datetime="@time.ToString("O")">@ExplorerLocation.Utc(time)</time></span>
+        }
+        else { <span>No successful live refresh yet</span> }
+    </span>
+    @if (_live?.Hidden == true && _live.Paused == false)
+    {
+        <span class="live-hint">Updates suspended while this tab is hidden.</span>
+    }
+    @if (_live?.Error is not null || _live?.ConnectionError is not null || _actionError is not null)
+    {
+        <span class="live-error" role="alert">@(_actionError ?? _live?.Error ?? _live?.ConnectionError)</span>
+    }
+</div>
+@code {
+    private LiveUpdateCoordinator? _live;
+    private bool _acting, _refreshing, _disposed;
+    private string? _actionError;
+    private string Mode => _live?.Mode ?? "Connecting";
+    private string ToggleTitle => $"{Mode} — {(_live?.Paused == true ? "Resume" : "Pause")} live updates";
+    private string RefreshTitle => (_refreshing ? "Refreshing visible data." : "Refresh visible data once, including while paused.") +
+        "\n" + (_live?.LastSuccess is { } time ? $"Last successful refresh {ExplorerLocation.Utc(time)}" : "No successful live refresh yet");
+
+    protected override void OnInitialized()
+    {
+        _live = Live;
+        if (_live is not null) _live.Changed += OnChanged;
+    }
+
+    private void OnChanged()
+    {
+        if (!_disposed) _ = InvokeAsync(StateHasChanged);
+    }
+
+    private Task TogglePauseAsync() => ActAsync(() => _live!.Paused ? _live.ResumeAsync() : _live.PauseAsync());
+    private Task RetryAsync() => ActAsync(() => _live!.RetryAsync());
+    private async Task ActAsync(Func<Task> action)
+    {
+        if (_acting || _live is null) return;
+        _acting = true; _actionError = null;
+        try { await action(); }
+        catch (OperationCanceledException) { }
+        catch (Exception) { _actionError = "Live updates could not be changed. Use Retry when the connection is available."; }
+        finally { _acting = false; }
+    }
+
+    private async Task RefreshAsync()
+    {
+        if (_refreshing || _live is null) return;
+        _refreshing = true; _actionError = null;
+        try { await _live.RefreshOnceAsync(); }
+        catch (OperationCanceledException) { }
+        catch (Exception) { _actionError = "Visible data could not be refreshed. Use Retry when the connection is available."; }
+        finally { _refreshing = false; }
+    }
+
+    public void Dispose()
+    {
+        _disposed = true;
+        if (_live is not null) _live.Changed -= OnChanged;
+    }
+}

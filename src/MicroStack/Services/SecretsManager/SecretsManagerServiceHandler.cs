@@ -18,7 +18,7 @@ namespace MicroStack.Services.SecretsManager;
 ///           PutResourcePolicy, GetResourcePolicy, DeleteResourcePolicy,
 ///           ValidateResourcePolicy.
 /// </summary>
-internal sealed class SecretsManagerServiceHandler : IServiceHandler
+internal sealed partial class SecretsManagerServiceHandler : IServiceHandler, Internal.Admin.IAdminResourceSource
 {
     private readonly AccountScopedDictionary<string, SmSecret> _secrets = new(); // keyed by Name
     private readonly AccountScopedDictionary<string, string> _resourcePolicies = new(); // keyed by ARN
@@ -35,6 +35,8 @@ internal sealed class SecretsManagerServiceHandler : IServiceHandler
     // -- IServiceHandler -------------------------------------------------------
 
     public string ServiceName => "secretsmanager";
+
+    public IEnumerable<string> GetKnownAccountIds() => _secrets.GetAccountIds();
 
     public Task<ServiceResponse> HandleAsync(ServiceRequest request)
     {

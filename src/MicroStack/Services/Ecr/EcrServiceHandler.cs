@@ -2,6 +2,8 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using MicroStack.Internal;
+using MicroStack.Internal.Admin;
+using MicroStack.Admin.Contracts;
 
 namespace MicroStack.Services.Ecr;
 
@@ -21,9 +23,11 @@ namespace MicroStack.Services.Ecr;
 ///           BatchCheckLayerAvailability, InitiateLayerUpload,
 ///           UploadLayerPart, CompleteLayerUpload.
 /// </summary>
-internal sealed class EcrServiceHandler : IServiceHandler
+internal sealed class EcrServiceHandler : IServiceHandler, IAdminResourceSource
 {
     public string ServiceName => "ecr";
+
+    public IEnumerable<string> GetKnownAccountIds() => _repositories.GetAccountIds();
 
     private static string Region =>
         MicroStackOptions.Instance.Region;
@@ -52,6 +56,7 @@ internal sealed class EcrServiceHandler : IServiceHandler
                 using var doc = JsonDocument.Parse(request.Body);
                 data = doc.RootElement.Clone();
             }
+
             catch (JsonException)
             {
                 return Task.FromResult(
@@ -66,6 +71,88 @@ internal sealed class EcrServiceHandler : IServiceHandler
         ServiceResponse response;
         lock (_lock) { response = DispatchAction(action, data); }
         return Task.FromResult(response);
+    }
+
+    public IReadOnlyList<AdminResourceKind> GetAdminResourceKinds(string serviceId) =>
+        serviceId == ServiceName ?
+    [
+        new("repositories", "Repositories"),
+        new("images", "Images") { IsRoot = false },
+        new("lifecycle-policies", "Lifecycle policies") { IsRoot = false },
+        new("repository-policies", "Repository policies") { IsRoot = false },
+    ] : [];
+
+    public IEnumerable<AdminNode> GetAdminResources(string serviceId)
+    {
+        if (serviceId != ServiceName)
+            return [];
+        lock (_lock)
+        {
+            var nodes = new List<AdminNode>();
+            foreach (var (name, repository) in _repositories.Items.OrderBy(item => item.Key, StringComparer.Ordinal))
+            {
+                var snapshot = AdminProjection.Snapshot(repository);
+                var children = new List<AdminNode>();
+                if (_images.TryGetValue(name, out var images))
+                    children.AddRange(images.Select(image => ImageNode(name, image))
+                        .OrderBy(node => node.Resource.Key.Id, StringComparer.Ordinal));
+                if (_lifecyclePolicies.TryGetValue(name, out var lifecycle))
+                    children.Add(PolicyNode(name, "lifecycle-policies", "Lifecycle policy", lifecycle));
+                if (_repoPolicies.TryGetValue(name, out var policy))
+                    children.Add(PolicyNode(name, "repository-policies", "Repository policy", policy));
+                nodes.Add(AdminData.Node("repositories", name, name,
+                    AdminProjection.Scalar(snapshot.GetValueOrDefault("repositoryArn"))) with
+                {
+                    ReadFields = () => AdminProjection.Fields(snapshot,
+                        "repositoryUri", "createdAt", "imageTagMutability", "registryId"),
+                    ReadContent = () => AdminProjection.Content(snapshot),
+                    ChildKinds =
+                    [
+                        new("images", "Images") { IsRoot = false },
+                        new("lifecycle-policies", "Lifecycle policies") { IsRoot = false },
+                        new("repository-policies", "Repository policies") { IsRoot = false },
+                    ],
+                    ReadChildren = () => children,
+                });
+            }
+            return nodes;
+        }
+    }
+
+    private static AdminNode ImageNode(string repositoryName, Dictionary<string, object?> image)
+    {
+        var snapshot = AdminProjection.Snapshot(image, omit: key =>
+            key.Equals("layerData", StringComparison.OrdinalIgnoreCase));
+        var digest = AdminProjection.Scalar(snapshot.GetValueOrDefault("imageDigest"))
+            ?? (snapshot.GetValueOrDefault("imageId") as IReadOnlyDictionary<string, object?>)?
+                .GetValueOrDefault("imageDigest")?.ToString() ?? "unknown";
+        return AdminData.Node("images", digest, digest) with
+        {
+            ReadFields = () => AdminProjection.Fields(snapshot,
+                "imageDigest", "imageManifestMediaType", "imagePushedAt"),
+            ReadContent = () => AdminProjection.Content(snapshot),
+            ReadConnections = () =>
+                [new("Repository", "stored-in", "ecr", [new("repositories", repositoryName)])],
+        };
+    }
+
+    private static AdminNode PolicyNode(string repositoryName, string kind, string label, string json)
+    {
+        AdminContent content;
+        try
+        {
+            content = AdminData.JsonText(json);
+        }
+        catch (JsonException)
+        {
+            content = AdminData.Text(json, "application/json");
+        }
+        return AdminData.Node(kind, repositoryName, label) with
+        {
+            ReadContent = () => content,
+            ReadConnections = () =>
+                [new("Repository", "configures", "ecr", [new("repositories", repositoryName)])],
+        };
     }
 
     public void Reset()

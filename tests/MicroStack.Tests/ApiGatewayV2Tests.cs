@@ -23,7 +23,7 @@ public sealed class ApiGatewayV2Tests(MicroStackFixture fixture) : IClassFixture
 
     private static AmazonApiGatewayV2Client CreateApigwClient(MicroStackFixture fixture)
     {
-        var innerHandler = fixture.Factory.Server.CreateHandler();
+        var innerHandler = fixture.CreateHandler();
         var httpClient = new HttpClient(new CanonicalizeUriHandler(innerHandler))
         {
             BaseAddress = new Uri("http://localhost/"),
@@ -42,7 +42,7 @@ public sealed class ApiGatewayV2Tests(MicroStackFixture fixture) : IClassFixture
 
     private static AmazonLambdaClient CreateLambdaClient(MicroStackFixture fixture)
     {
-        var innerHandler = fixture.Factory.Server.CreateHandler();
+        var innerHandler = fixture.CreateHandler();
         var httpClient = new HttpClient(new CanonicalizeUriHandler(innerHandler))
         {
             BaseAddress = new Uri("http://localhost/"),

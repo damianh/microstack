@@ -1,0 +1,83 @@
+@implements IDisposable
+@inject AdminApiClient Api
+<dl class="metadata">
+    @foreach (var field in Fields)
+    {
+        <div @key="field.Name">
+            <dt>@field.Name</dt>
+            <dd>
+                @if (field.Sensitive)
+                {
+                    <code aria-label="Masked value">••••••••</code>
+                    @if (field.CanReveal)
+                    {
+                        @if (_revealed.ContainsKey(field.Name))
+                        {
+                            <button class="button" @onclick="() => Hide(field.Name)">Hide @field.Name</button>
+                            <ContentPreview Content="@_revealed[field.Name]" Title="@field.Name" Revealed="true" />
+                        }
+                        else { <button class="button" disabled="@_busy" @onclick="() => RevealAsync(field.Name)">Reveal @field.Name</button> }
+                    }
+                    else { <span class="copy-status"> Not revealable</span> }
+                }
+                else if (field.Format == "json")
+                {
+                    <div class="field-value"><pre tabindex="0">@field.Value</pre><CopyButton Text="@field.Value" Label="@($"Copy {field.Name}")" /></div>
+                }
+                else { <div class="field-value"><code>@InspectionProfile.FieldValue(field)</code><CopyButton Text="@field.Value" Label="@($"Copy {field.Name}")" /></div> }
+            </dd>
+        </div>
+    }
+</dl>
+@foreach (var name in ExtraRevealFields)
+{
+    <div class="toolbar">
+        @if (_revealed.TryGetValue(name, out var content))
+        {
+            <button class="button" @onclick="() => Hide(name)">Hide @name</button>
+            <ContentPreview Content="@content" Title="@name" Revealed="true" />
+        }
+        else { <button class="button" disabled="@_busy" @onclick="() => RevealAsync(name)">Reveal @name</button> }
+    </div>
+}
+@if (_busy) { <p role="status">Retrieving the selected sensitive value…</p> }
+@if (_error is not null) { <p class="notice error" role="alert">@_error</p> }
+@if (Fields.Any(field => field.CanReveal) || RevealableFields.Count > 0)
+{ <p class="index-note">Live refresh hides revealed values. Pause live updates before revealing a value to keep it open.</p> }
+@code {
+    [Parameter] public IReadOnlyList<AdminField> Fields { get; set; } = [];
+    [Parameter] public IReadOnlyList<string> RevealableFields { get; set; } = [];
+    [Parameter] public string Service { get; set; } = "";
+    [Parameter] public string Account { get; set; } = "";
+    [Parameter] public AdminKey[] Path { get; set; } = [];
+    [Parameter] public long Revision { get; set; }
+    private readonly Dictionary<string, AdminContent> _revealed = [];
+    private CancellationTokenSource _cts = new();
+    private string? _scope;
+    private string? _error;
+    private bool _busy;
+    private IEnumerable<string> ExtraRevealFields => RevealableFields.Where(name => Fields.All(item => item.Name != name));
+    protected override void OnParametersSet()
+    {
+        var scope = Service + Account + ExplorerLocation.EncodePath(Path) + ":" + Revision;
+        if (scope == _scope) return;
+        _cts.Cancel(); _cts.Dispose(); _cts = new();
+        _scope = scope; _revealed.Clear(); _error = null; _busy = false;
+    }
+    private async Task RevealAsync(string field)
+    {
+        if (_busy) return;
+        var token = _cts.Token;
+        _busy = true; _error = null;
+        try
+        {
+            var value = await Api.RevealAsync(Service, Account, Path, field, token);
+            if (!token.IsCancellationRequested) _revealed[field] = value;
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested) { }
+        catch (Exception) { if (!token.IsCancellationRequested) _error = "The value could not be revealed. Retry the explicit Reveal action."; }
+        finally { if (!token.IsCancellationRequested) _busy = false; }
+    }
+    private void Hide(string field) { _revealed.Remove(field); _error = null; }
+    public void Dispose() { _cts.Cancel(); _cts.Dispose(); _revealed.Clear(); }
+}

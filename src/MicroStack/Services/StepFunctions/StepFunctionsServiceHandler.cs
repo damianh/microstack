@@ -56,6 +56,9 @@ internal sealed partial class StepFunctionsServiceHandler : IServiceHandler
 
     public string ServiceName => "states";
 
+    public IEnumerable<string> GetKnownAccountIds() =>
+        _stateMachines.GetAccountIds().Concat(_executions.GetAccountIds()).Concat(_activities.GetAccountIds());
+
     public async Task<ServiceResponse> HandleAsync(ServiceRequest request)
     {
         var target = request.GetHeader("x-amz-target") ?? "";
@@ -213,22 +216,25 @@ internal sealed partial class StepFunctionsServiceHandler : IServiceHandler
 
     private static void AddEvent(Dictionary<string, object?> execution, string eventType, Dictionary<string, object?>? details = null)
     {
-        var events = GetList(execution, "events");
-        var evt = new Dictionary<string, object?>
+        lock (execution)
         {
-            ["id"] = events.Count + 1,
-            ["type"] = eventType,
-            ["timestamp"] = NowIso(),
-        };
-        if (details is not null)
-        {
-            foreach (var kv in details)
+            var events = GetList(execution, "events");
+            var evt = new Dictionary<string, object?>
             {
-                evt[kv.Key] = kv.Value;
+                ["id"] = events.Count + 1,
+                ["type"] = eventType,
+                ["timestamp"] = NowIso(),
+            };
+            if (details is not null)
+            {
+                foreach (var kv in details)
+                {
+                    evt[kv.Key] = kv.Value;
+                }
             }
-        }
 
-        events.Add(evt);
+            events.Add(evt);
+        }
     }
 
     private static string? NextOrEnd(Dictionary<string, object?> stateDef)
@@ -531,19 +537,22 @@ internal sealed partial class StepFunctionsServiceHandler : IServiceHandler
             return ErrorResponse("StateMachineDoesNotExist", $"State machine {arn} not found");
         }
 
-        if (data.ContainsKey("definition"))
+        lock (sm)
         {
-            sm["definition"] = GetString(data, "definition");
-        }
+            if (data.ContainsKey("definition"))
+            {
+                sm["definition"] = GetString(data, "definition");
+            }
 
-        if (data.ContainsKey("roleArn"))
-        {
-            sm["roleArn"] = GetString(data, "roleArn");
-        }
+            if (data.ContainsKey("roleArn"))
+            {
+                sm["roleArn"] = GetString(data, "roleArn");
+            }
 
-        if (data.TryGetValue("loggingConfiguration", out var lc2))
-        {
-            sm["loggingConfiguration"] = lc2;
+            if (data.TryGetValue("loggingConfiguration", out var lc2))
+            {
+                sm["loggingConfiguration"] = lc2;
+            }
         }
 
         return JsonResp(new Dictionary<string, object?> { ["updateDate"] = NowIso() });
@@ -658,8 +667,11 @@ internal sealed partial class StepFunctionsServiceHandler : IServiceHandler
         }
 
         var stopDate = NowIso();
-        execution["status"] = "ABORTED";
-        execution["stopDate"] = stopDate;
+        lock (execution)
+        {
+            execution["status"] = "ABORTED";
+            execution["stopDate"] = stopDate;
+        }
         AddEvent(execution, "ExecutionAborted", new Dictionary<string, object?>
         {
             ["executionAbortedEventDetails"] = new Dictionary<string, object?>
@@ -1273,9 +1285,12 @@ internal sealed partial class StepFunctionsServiceHandler : IServiceHandler
             if (string.Equals(GetString(execution, "status"), "RUNNING", StringComparison.Ordinal))
             {
                 var outputJson = SerializeOutput(currentInput);
-                execution["status"] = "SUCCEEDED";
-                execution["output"] = outputJson;
-                execution["stopDate"] = NowIso();
+                lock (execution)
+                {
+                    execution["status"] = "SUCCEEDED";
+                    execution["output"] = outputJson;
+                    execution["stopDate"] = NowIso();
+                }
                 AddEvent(execution, "ExecutionSucceeded", new Dictionary<string, object?>
                 {
                     ["executionSucceededEventDetails"] = new Dictionary<string, object?> { ["output"] = outputJson },
@@ -1294,9 +1309,12 @@ internal sealed partial class StepFunctionsServiceHandler : IServiceHandler
 
     private static void FailExecution(Dictionary<string, object?> execution, string error, string cause)
     {
-        execution["status"] = "FAILED";
-        execution["output"] = DictionaryObjectJsonConverter.SerializeValue(new Dictionary<string, object?> { ["Error"] = error, ["Cause"] = cause });
-        execution["stopDate"] = NowIso();
+        lock (execution)
+        {
+            execution["status"] = "FAILED";
+            execution["output"] = DictionaryObjectJsonConverter.SerializeValue(new Dictionary<string, object?> { ["Error"] = error, ["Cause"] = cause });
+            execution["stopDate"] = NowIso();
+        }
         AddEvent(execution, "ExecutionFailed", new Dictionary<string, object?>
         {
             ["executionFailedEventDetails"] = new Dictionary<string, object?> { ["error"] = error, ["cause"] = cause },

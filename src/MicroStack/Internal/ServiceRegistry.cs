@@ -72,6 +72,15 @@ internal sealed class ServiceRegistry
 
     internal IReadOnlyCollection<IServiceHandler> All => _handlers.Values;
 
+    internal string[] GetKnownAccountIds(string defaultAccountId) =>
+        _handlers.Values.OfType<IKnownAccountSource>()
+            .SelectMany(source => source.GetKnownAccountIds())
+            .Append(defaultAccountId)
+            .Where(account => account is { Length: 12 } && account.All(c => c is >= '0' and <= '9'))
+            .Distinct(StringComparer.Ordinal)
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+
     internal void ResetAll()
     {
         foreach (var handler in _handlers.Values)

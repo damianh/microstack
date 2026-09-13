@@ -17,7 +17,7 @@ namespace MicroStack.Services.ApiGateway;
 ///
 /// Port of ministack/services/apigateway_v1.py.
 /// </summary>
-internal sealed class ApiGatewayV1ServiceHandler
+internal sealed partial class ApiGatewayV1ServiceHandler
 {
     private readonly LambdaServiceHandler _lambdaHandler;
 
@@ -47,6 +47,10 @@ internal sealed class ApiGatewayV1ServiceHandler
 
     /// <summary>Returns true if this handler owns the given API ID (for execute-api dispatch).</summary>
     internal bool OwnsApiId(string apiId) => _restApis.ContainsKey(apiId);
+
+    internal IEnumerable<string> GetKnownAccountIds() =>
+        _restApis.GetAccountIds().Concat(_apiKeys.GetAccountIds())
+            .Concat(_usagePlans.GetAccountIds()).Concat(_domainNames.GetAccountIds());
 
     internal void Reset()
     {

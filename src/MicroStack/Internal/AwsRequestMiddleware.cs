@@ -1,4 +1,5 @@
 using System.Web;
+using MicroStack.Internal.Admin;
 
 namespace MicroStack.Internal;
 
@@ -19,6 +20,7 @@ internal sealed class AwsRequestMiddleware
     private readonly AwsServiceRouter _router;
     private readonly ServiceRegistry _registry;
     private readonly ILogger<AwsRequestMiddleware> _logger;
+    private readonly AdminChangeHub? _changes;
 
     private static readonly string _host =
         MicroStackOptions.Instance.Host;
@@ -43,12 +45,14 @@ internal sealed class AwsRequestMiddleware
         RequestDelegate next,
         AwsServiceRouter router,
         ServiceRegistry registry,
-        ILogger<AwsRequestMiddleware> logger)
+        ILogger<AwsRequestMiddleware> logger,
+        AdminChangeHub? changes = null)
     {
         _next    = next;
         _router  = router;
         _registry = registry;
         _logger  = logger;
+        _changes = changes;
     }
 
     // Must be public: ASP.NET Core UseMiddleware<T> convention requires a public Invoke/InvokeAsync method.
@@ -231,6 +235,7 @@ internal sealed class AwsRequestMiddleware
         }
         else
         {
+            var accountId = AccountContext.GetAccountId();
             try
             {
                 response = await handler.HandleAsync(request);
@@ -239,6 +244,10 @@ internal sealed class AwsRequestMiddleware
             {
                 _logger.LogError(ex, "Error handling request for service '{Service}'", serviceName);
                 response = ServiceResponse.Empty(500);
+            }
+            finally
+            {
+                _changes?.DispatchCompleted(handler.ServiceName, accountId);
             }
         }
 

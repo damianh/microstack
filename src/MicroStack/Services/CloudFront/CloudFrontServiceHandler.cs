@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using MicroStack.Internal;
+using MicroStack.Internal.Admin;
 
 namespace MicroStack.Services.CloudFront;
 
@@ -17,7 +18,7 @@ namespace MicroStack.Services.CloudFront;
 ///   Invalidations: CreateInvalidation, ListInvalidations, GetInvalidation
 ///   Tags:          TagResource, ListTagsForResource, UntagResource
 /// </summary>
-internal sealed partial class CloudFrontServiceHandler : IServiceHandler
+internal sealed partial class CloudFrontServiceHandler : IServiceHandler, IAdminResourceSource
 {
     private readonly Lock _lock = new();
 
@@ -55,6 +56,8 @@ internal sealed partial class CloudFrontServiceHandler : IServiceHandler
     // ── IServiceHandler ──────────────────────────────────────────────────────
 
     public string ServiceName => "cloudfront";
+
+    public IEnumerable<string> GetKnownAccountIds() => _distributions.GetAccountIds();
 
     public Task<ServiceResponse> HandleAsync(ServiceRequest request)
     {

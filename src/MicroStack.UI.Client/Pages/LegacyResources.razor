@@ -1,0 +1,56 @@
+@page "/"
+@page "/resources"
+@page "/services/{ServiceId}"
+@implements IDisposable
+@inject AdminApiClient Api
+@inject NavigationManager Navigation
+@inject ExplorerAccountState AccountState
+
+<PageTitle>Services · MicroStack</PageTitle>
+@if (_error is not null)
+{
+    <div class="notice error" role="alert">
+        <p>@_error</p>
+        <button class="button" @onclick="LoadAsync">Retry</button>
+    </div>
+}
+
+@code {
+    [Parameter] public string? ServiceId { get; set; }
+    [SupplyParameterFromQuery(Name = "account")] public string? Account { get; set; }
+    private readonly CancellationTokenSource _cts = new();
+    private string? _destination, _error;
+    protected override Task OnParametersSetAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _error = null;
+        var original = Navigation.Uri;
+        try
+        {
+            if (Account is null) await AccountState.RestoreAsync();
+            var account = Account ?? AccountState.Account ?? (await Api.ContextAsync(_cts.Token)).DefaultAccount;
+            if (_cts.IsCancellationRequested || Navigation.Uri != original) return;
+            if (!ExplorerLocation.ValidAccount(account))
+                throw new FormatException("Account ID must contain exactly 12 digits.");
+            var destination = ServiceId is null ? ExplorerLocation.DirectoryUrl(Navigation, account)
+                : ExplorerLocation.ServiceUrl(Navigation, ServiceId, account);
+            _destination = Navigation.GetUriWithQueryParameters(destination + new Uri(original).Query,
+                new Dictionary<string, object?> { ["account"] = null });
+        }
+        catch (OperationCanceledException) when (_cts.IsCancellationRequested) { }
+        catch (FormatException exception) { _error = exception.Message; }
+        catch (Exception) { _error = "The default account could not be loaded. Check the API connection and retry."; }
+    }
+
+    protected override Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_destination is { } destination)
+        {
+            _destination = null;
+            Navigation.NavigateTo(destination, replace: true);
+        }
+        return Task.CompletedTask;
+    }
+    public void Dispose() { _cts.Cancel(); _cts.Dispose(); }
+}

@@ -1,6 +1,8 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using MicroStack.Internal;
+using MicroStack.Internal.Admin;
+using MicroStack.Admin.Contracts;
 
 namespace MicroStack.Services.Efs;
 
@@ -20,7 +22,7 @@ namespace MicroStack.Services.Efs;
 ///   Account:        DescribeAccountPreferences, PutAccountPreferences
 ///   File System Policy: PutFileSystemPolicy, DescribeFileSystemPolicy
 /// </summary>
-internal sealed partial class EfsServiceHandler : IServiceHandler
+internal sealed partial class EfsServiceHandler : IServiceHandler, IAdminResourceSource
 {
     private readonly Lock _lock = new();
 
@@ -64,6 +66,9 @@ internal sealed partial class EfsServiceHandler : IServiceHandler
     // -- IServiceHandler -------------------------------------------------------
 
     public string ServiceName => "elasticfilesystem";
+
+    public IEnumerable<string> GetKnownAccountIds() =>
+        _fileSystems.GetAccountIds().Concat(_mountTargets.GetAccountIds()).Concat(_accessPoints.GetAccountIds());
 
     public Task<ServiceResponse> HandleAsync(ServiceRequest request)
     {
@@ -124,6 +129,180 @@ internal sealed partial class EfsServiceHandler : IServiceHandler
     public JsonElement? GetState() => null;
 
     public void RestoreState(JsonElement state) { }
+
+    public IReadOnlyList<AdminResourceKind> GetAdminResourceKinds(string serviceId) =>
+    [
+        new("file-systems", "File systems"),
+    ];
+
+    public IEnumerable<AdminNode> GetAdminResources(string serviceId)
+    {
+        lock (_lock)
+        {
+            return _fileSystems.Items.OrderBy(x => x.Key, StringComparer.Ordinal)
+                .Select(x => EfsFileSystemNode(x.Key, x.Value)).ToArray();
+        }
+    }
+
+    private AdminNode EfsFileSystemNode(string id, Dictionary<string, object?> fs)
+    {
+        var name = fs.GetValueOrDefault("Name")?.ToString();
+        if (string.IsNullOrEmpty(name))
+            name = id;
+        return AdminData.Node("file-systems", id, name,
+            fs.GetValueOrDefault("FileSystemArn")?.ToString(),
+            fs.GetValueOrDefault("LifeCycleState")?.ToString()) with
+        {
+            ReadFields = () => ReadEfsFields(_fileSystems, id),
+            ChildKinds =
+            [
+                new("mount-targets", "Mount targets") { IsRoot = false },
+                new("access-points", "Access points") { IsRoot = false },
+                new("lifecycle-configurations", "Lifecycle configurations") { IsRoot = false },
+                new("backup-policies", "Backup policies") { IsRoot = false },
+                new("policies", "File system policies") { IsRoot = false },
+                new("tags", "Tags") { IsRoot = false },
+            ],
+            ReadChildren = () => ReadEfsChildren(id),
+        };
+    }
+
+    private IReadOnlyList<AdminNode> ReadEfsChildren(string fsId)
+    {
+        lock (_lock)
+        {
+            var children = new List<AdminNode>();
+            children.AddRange(_mountTargets.Items
+                .Where(x => Equals(x.Value.GetValueOrDefault("FileSystemId"), fsId))
+                .OrderBy(x => x.Key, StringComparer.Ordinal)
+                .Select(x => EfsDictionaryNode("mount-targets", x.Key, x.Value, _mountTargets)));
+            children.AddRange(_accessPoints.Items
+                .Where(x => Equals(x.Value.GetValueOrDefault("FileSystemId"), fsId))
+                .OrderBy(x => x.Key, StringComparer.Ordinal)
+                .Select(x => EfsDictionaryNode("access-points", x.Key, x.Value, _accessPoints)));
+            if (_lifecycleConfigs.ContainsKey(fsId))
+                children.Add(AdminData.Node("lifecycle-configurations", fsId, "Lifecycle configuration") with
+                {
+                    ReadFields = () =>
+                    {
+                        lock (_lock)
+                        {
+                            if (!_lifecycleConfigs.TryGetValue(fsId, out var configs))
+                                return [];
+                            return
+                            [
+                                AdminData.Field("RuleCount", configs.Count.ToString()),
+                                .. configs.SelectMany((c, i) => EfsScalarFields(c, $"Rule[{i}].")),
+                            ];
+                        }
+                    },
+                });
+            if (_backupPolicies.ContainsKey(fsId))
+                children.Add(EfsDictionaryNode("backup-policies", fsId,
+                    _backupPolicies[fsId], _backupPolicies));
+            if (_fileSystemPolicies.ContainsKey(fsId))
+                children.Add(AdminData.Node("policies", fsId, "File system policy") with
+                {
+                    ReadContent = () =>
+                    {
+                        lock (_lock)
+                        {
+                            if (!_fileSystemPolicies.TryGetValue(fsId, out var policy))
+                                return AdminData.Unavailable("Policy no longer exists.", "application/json");
+                            try { return AdminData.JsonText(policy); }
+                            catch (JsonException) { return AdminData.Text(policy); }
+                        }
+                    },
+                });
+            if (_fileSystems.TryGetValue(fsId, out var fs) &&
+                fs.GetValueOrDefault("Tags") is List<Dictionary<string, object?>> tags)
+                children.AddRange(tags.Where(t => t.GetValueOrDefault("Key") is string)
+                    .OrderBy(t => t["Key"]?.ToString(), StringComparer.Ordinal)
+                    .Select(EfsTagNode));
+            return children;
+        }
+    }
+
+    private static AdminNode EfsTagNode(Dictionary<string, object?> tag)
+    {
+        var key = tag["Key"]?.ToString() ?? "";
+        var value = tag.GetValueOrDefault("Value")?.ToString();
+        return AdminData.Node("tags", key, key) with
+        {
+            ReadFields = () =>
+            [
+                AdminData.Field("Key", key),
+                AdminData.Field("Value", value, EfsSensitiveName(key)),
+            ],
+        };
+    }
+
+    private AdminNode EfsDictionaryNode(
+        string kind, string id, Dictionary<string, object?> value,
+        AccountScopedDictionary<string, Dictionary<string, object?>> source) =>
+        AdminData.Node(kind, id, value.GetValueOrDefault("Name")?.ToString() ?? id,
+            value.FirstOrDefault(x => x.Key.EndsWith("Arn", StringComparison.Ordinal)).Value?.ToString(),
+            value.GetValueOrDefault("LifeCycleState")?.ToString()) with
+        {
+            ReadFields = () => ReadEfsFields(source, id),
+            ChildKinds = [new("tags", "Tags") { IsRoot = false }],
+            ReadChildren = value.GetValueOrDefault("Tags") is List<Dictionary<string, object?>>
+                ? () =>
+                {
+                    lock (_lock)
+                    {
+                        if (!source.TryGetValue(id, out var current) ||
+                            current.GetValueOrDefault("Tags") is not List<Dictionary<string, object?>> tags)
+                            return [];
+                        return tags.Where(t => t.GetValueOrDefault("Key") is string)
+                            .OrderBy(t => t["Key"]?.ToString(), StringComparer.Ordinal)
+                            .Select(EfsTagNode).ToArray();
+                    }
+                }
+                : null,
+        };
+
+    private IReadOnlyList<AdminField> ReadEfsFields(
+        AccountScopedDictionary<string, Dictionary<string, object?>> source, string id)
+    {
+        lock (_lock)
+            return source.TryGetValue(id, out var value) ? EfsScalarFields(value) : [];
+    }
+
+    private static IReadOnlyList<AdminField> EfsScalarFields(
+        Dictionary<string, object?> value, string prefix = "")
+    {
+        var fields = new List<AdminField>();
+        AddEfsFields(fields, value, prefix);
+        return fields;
+    }
+
+    private static void AddEfsFields(
+        List<AdminField> fields, Dictionary<string, object?> value, string prefix)
+    {
+        foreach (var (key, item) in value.OrderBy(x => x.Key, StringComparer.Ordinal))
+        {
+            var name = prefix + key;
+            switch (item)
+            {
+                case null or string or bool or byte or short or int or long or float or double or decimal:
+                    fields.Add(AdminData.Field(name, item?.ToString(), EfsSensitiveName(name)));
+                    break;
+                case Dictionary<string, object?> dictionary:
+                    AddEfsFields(fields, dictionary, name + ".");
+                    break;
+                case List<string> strings:
+                    fields.Add(AdminData.Field(name, string.Join(", ", strings), EfsSensitiveName(name)));
+                    break;
+            }
+        }
+    }
+
+    private static bool EfsSensitiveName(string name) =>
+        name.Contains("password", StringComparison.OrdinalIgnoreCase) ||
+        name.Contains("secret", StringComparison.OrdinalIgnoreCase) ||
+        name.Contains("token", StringComparison.OrdinalIgnoreCase) ||
+        name.Contains("credential", StringComparison.OrdinalIgnoreCase);
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Request router

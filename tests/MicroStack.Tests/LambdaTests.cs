@@ -34,7 +34,7 @@ public sealed class LambdaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
 
     private static AmazonLambdaClient CreateClient(MicroStackFixture fixture)
     {
-        var innerHandler = fixture.Factory.Server.CreateHandler();
+        var innerHandler = fixture.CreateHandler();
         var httpClient = new HttpClient(new CanonicalizeUriHandler(innerHandler))
         {
             BaseAddress = new Uri("http://localhost/"),
@@ -1408,7 +1408,7 @@ public sealed class LambdaTests : IClassFixture<MicroStackFixture>, IAsyncLifeti
 
     private static AmazonSQSClient CreateSqsClient(MicroStackFixture fixture)
     {
-        var innerHandler = fixture.Factory.Server.CreateHandler();
+        var innerHandler = fixture.CreateHandler();
         var httpClient = new HttpClient(new CanonicalizeUriHandler(innerHandler))
         {
             BaseAddress = new Uri("http://localhost/"),

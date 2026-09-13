@@ -1,0 +1,48 @@
+@inherits LayoutComponentBase
+@implements IDisposable
+@using Microsoft.AspNetCore.Components.Sections
+@inject NavigationManager Navigation
+@inject ExplorerAccountState AccountState
+<a class="skip" href="#main">Skip to main content</a>
+<header class="app-header">
+    <a class="brand" href="@ServicesUrl" aria-label="MicroStack services"><img src="logo.png" alt="" width="32" height="30" /><strong>MicroStack</strong></a>
+    <span class="header-divider" aria-hidden="true"></span>
+    <div class="header-tools">
+        <div class="header-context">
+            @if (IsInstancePage)
+            { <span class="header-title">Instance-wide</span> }
+            else
+            { <SectionOutlet SectionName="explorer-account" /> }
+        </div>
+        <LiveControls />
+    </div>
+    <nav class="global-nav" aria-label="Main navigation">
+        <NavLink href="@ServicesUrl">Services</NavLink>
+        <NavLink href="overview">Overview</NavLink>
+        <NavLink href="requests">Request log</NavLink>
+    </nav>
+</header>
+<main id="main" tabindex="-1">
+    @if (AccountState.PersistenceError is { } error)
+    { <p class="notice warning" role="alert">@error</p> }
+    @Body
+</main>
+@code {
+    private bool IsInstancePage => Navigation.ToBaseRelativePath(Navigation.Uri).Split('?', '#')[0] is "overview" or "requests";
+    private string ServicesUrl => (ExplorerLocation.RouteAccount(Navigation) ?? AccountState.Account) is { } account
+        ? ExplorerLocation.DirectoryUrl(Navigation, account) : Navigation.BaseUri;
+    protected override async Task OnInitializedAsync()
+    {
+        Navigation.LocationChanged += LocationChanged;
+        AccountState.Changed += AccountChanged;
+        await AccountState.RestoreAsync();
+    }
+    private void AccountChanged() => _ = InvokeAsync(StateHasChanged);
+    private void LocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs args) =>
+        _ = InvokeAsync(StateHasChanged);
+    public void Dispose()
+    {
+        Navigation.LocationChanged -= LocationChanged;
+        AccountState.Changed -= AccountChanged;
+    }
+}

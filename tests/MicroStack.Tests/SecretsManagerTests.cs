@@ -17,7 +17,7 @@ public sealed class SecretsManagerTests(MicroStackFixture fixture) : IClassFixtu
 
     private static AmazonSecretsManagerClient CreateClient(MicroStackFixture fixture)
     {
-        var innerHandler = fixture.Factory.Server.CreateHandler();
+        var innerHandler = fixture.CreateHandler();
         var httpClient = new HttpClient(new CanonicalizeUriHandler(innerHandler))
         {
             BaseAddress = new Uri("http://localhost/"),

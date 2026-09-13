@@ -2,12 +2,32 @@ using System.Text.Json;
 using System.Text;
 using System.Web;
 using MicroStack.Internal;
+using MicroStack.Internal.Admin;
+using MicroStack.Admin.Contracts;
 
 namespace MicroStack.Services.Ec2;
 
-internal sealed class Ec2ServiceHandler : IServiceHandler
+internal sealed class Ec2ServiceHandler : IServiceHandler, IAdminResourceSource
 {
     public string ServiceName => "ec2";
+
+    public IEnumerable<string> GetKnownAccountIds() =>
+        _instances.GetAccountIds()
+            .Concat(_securityGroups.GetAccountIds(includeKey: key => key != DefaultSgId))
+            .Concat(_keyPairs.GetAccountIds())
+            .Concat(_vpcs.GetAccountIds(includeKey: key => key != DefaultVpcId))
+            .Concat(_subnets.GetAccountIds(includeKey: key =>
+                key is not (DefaultSubnetId or DefaultSubnetIdB or DefaultSubnetIdC)))
+            .Concat(_internetGateways.GetAccountIds(includeKey: key => key != DefaultIgwId))
+            .Concat(_addresses.GetAccountIds())
+            .Concat(_routeTables.GetAccountIds(includeKey: key => key != DefaultRtbId))
+            .Concat(_networkInterfaces.GetAccountIds()).Concat(_vpcEndpoints.GetAccountIds())
+            .Concat(_volumes.GetAccountIds()).Concat(_snapshots.GetAccountIds())
+            .Concat(_natGateways.GetAccountIds()).Concat(_networkAcls.GetAccountIds())
+            .Concat(_flowLogs.GetAccountIds()).Concat(_vpcPeering.GetAccountIds())
+            .Concat(_dhcpOptions.GetAccountIds()).Concat(_egressIgws.GetAccountIds())
+            .Concat(_prefixLists.GetAccountIds()).Concat(_vpnGateways.GetAccountIds())
+            .Concat(_customerGateways.GetAccountIds()).Concat(_launchTemplates.GetAccountIds());
 
     private const string Ec2Ns = "http://ec2.amazonaws.com/doc/2016-11-15/";
     private const string DefaultVpcId = "vpc-00000001";
@@ -165,6 +185,174 @@ internal sealed class Ec2ServiceHandler : IServiceHandler
             InitDefaults();
         }
     }
+
+    public IReadOnlyList<AdminResourceKind> GetAdminResourceKinds(string serviceId) =>
+            serviceId == ServiceName ?
+        [
+            new("instances", "Instances"),
+            new("security-groups", "Security groups"),
+            new("key-pairs", "Key pairs"),
+            new("vpcs", "VPCs"),
+            new("subnets", "Subnets"),
+            new("internet-gateways", "Internet gateways"),
+            new("elastic-ips", "Elastic IP addresses"),
+            new("route-tables", "Route tables"),
+            new("network-interfaces", "Network interfaces"),
+            new("vpc-endpoints", "VPC endpoints"),
+            new("volumes", "Volumes"),
+            new("snapshots", "Snapshots"),
+            new("nat-gateways", "NAT gateways"),
+            new("network-acls", "Network ACLs"),
+            new("flow-logs", "Flow logs"),
+            new("vpc-peerings", "VPC peerings"),
+            new("dhcp-options", "DHCP options"),
+            new("egress-internet-gateways", "Egress-only internet gateways"),
+            new("prefix-lists", "Prefix lists"),
+            new("vpn-gateways", "VPN gateways"),
+            new("customer-gateways", "Customer gateways"),
+            new("launch-templates", "Launch templates"),
+            new("launch-template-versions", "Launch template versions") { IsRoot = false },
+        ] : [];
+
+        public IEnumerable<AdminNode> GetAdminResources(string serviceId)
+        {
+            if (serviceId != ServiceName)
+                return [];
+            lock (_lock)
+            {
+                var nodes = new List<AdminNode>();
+                Add(nodes, _instances, "instances", "InstanceId", "InstanceId", "State");
+                Add(nodes, _securityGroups, "security-groups", "GroupId", "GroupName");
+                Add(nodes, _keyPairs, "key-pairs", "KeyPairId", "KeyName", omitPrivateMaterial: true);
+                Add(nodes, _vpcs, "vpcs", "VpcId", "VpcId", "State");
+                Add(nodes, _subnets, "subnets", "SubnetId", "SubnetId", "State");
+                Add(nodes, _internetGateways, "internet-gateways", "InternetGatewayId", "InternetGatewayId");
+                Add(nodes, _addresses, "elastic-ips", "AllocationId", "PublicIp");
+                Add(nodes, _routeTables, "route-tables", "RouteTableId", "RouteTableId");
+                Add(nodes, _networkInterfaces, "network-interfaces", "NetworkInterfaceId", "NetworkInterfaceId", "Status");
+                Add(nodes, _vpcEndpoints, "vpc-endpoints", "VpcEndpointId", "ServiceName", "State");
+                Add(nodes, _volumes, "volumes", "VolumeId", "VolumeId", "State");
+                Add(nodes, _snapshots, "snapshots", "SnapshotId", "SnapshotId", "State");
+                Add(nodes, _natGateways, "nat-gateways", "NatGatewayId", "NatGatewayId", "State");
+                Add(nodes, _networkAcls, "network-acls", "NetworkAclId", "NetworkAclId");
+                Add(nodes, _flowLogs, "flow-logs", "FlowLogId", "FlowLogId", "FlowLogStatus");
+                Add(nodes, _vpcPeering, "vpc-peerings", "VpcPeeringConnectionId", "VpcPeeringConnectionId", "Status");
+                Add(nodes, _dhcpOptions, "dhcp-options", "DhcpOptionsId", "DhcpOptionsId");
+                Add(nodes, _egressIgws, "egress-internet-gateways", "EgressOnlyInternetGatewayId",
+                    "EgressOnlyInternetGatewayId");
+                Add(nodes, _prefixLists, "prefix-lists", "PrefixListId", "PrefixListName", "State");
+                Add(nodes, _vpnGateways, "vpn-gateways", "VpnGatewayId", "VpnGatewayId", "State");
+                Add(nodes, _customerGateways, "customer-gateways", "CustomerGatewayId", "CustomerGatewayId", "State");
+                AddLaunchTemplates(nodes);
+                return nodes.OrderBy(node => node.Resource.Key.Kind, StringComparer.Ordinal)
+                    .ThenBy(node => node.Resource.Key.Id, StringComparer.Ordinal).ToArray();
+            }
+        }
+
+        private void Add(
+            List<AdminNode> nodes,
+            AccountScopedDictionary<string, Dictionary<string, object>> source,
+            string kind, string idField, string nameField, string? statusField = null,
+            bool omitPrivateMaterial = false)
+        {
+            foreach (var (storedKey, value) in source.Items)
+            {
+                var snapshot = AdminProjection.Snapshot(value, omit: key =>
+                    omitPrivateMaterial && IsPrivateKeyMaterial(key));
+                var id = AdminProjection.Scalar(snapshot.GetValueOrDefault(idField)) ?? storedKey;
+                if (_tags.TryGetValue(id, out var tags) && tags.Count > 0)
+                {
+                    var withTags = new Dictionary<string, object?>(snapshot, StringComparer.Ordinal)
+                    {
+                        ["Tags"] = AdminProjection.Snapshot(
+                            new Dictionary<string, object> { ["Items"] = tags }),
+                    };
+                    snapshot = withTags;
+                }
+                var name = AdminProjection.Scalar(snapshot.GetValueOrDefault(nameField)) ?? id;
+                var status = statusField is null ? null : State(snapshot.GetValueOrDefault(statusField));
+                nodes.Add(AdminData.Node(kind, id, name, status: status) with
+                {
+                    ReadFields = () => snapshot.Select(pair =>
+                            AdminData.Field(pair.Key, AdminProjection.Scalar(pair.Value)))
+                        .Where(field => field.Value is not null).Take(16).ToArray(),
+                    ReadContent = () => AdminProjection.Content(snapshot),
+                    ReadConnections = () => Ec2Connections(snapshot),
+                });
+            }
+        }
+
+        private void AddLaunchTemplates(List<AdminNode> nodes)
+        {
+            foreach (var (storedKey, value) in _launchTemplates.Items)
+            {
+                var snapshot = AdminProjection.Snapshot(value, omit: key => key == "Versions");
+                var id = AdminProjection.Scalar(snapshot.GetValueOrDefault("LaunchTemplateId")) ?? storedKey;
+                var name = AdminProjection.Scalar(snapshot.GetValueOrDefault("LaunchTemplateName")) ?? id;
+                var children = new List<AdminNode>();
+                if (value.GetValueOrDefault("Versions") is List<Dictionary<string, object>> versions)
+                {
+                    foreach (var version in versions)
+                    {
+                        var versionSnapshot = AdminProjection.Snapshot(version, omit: IsPrivateKeyMaterial);
+                        var number = AdminProjection.Scalar(versionSnapshot.GetValueOrDefault("VersionNumber"))
+                            ?? children.Count.ToString();
+                        children.Add(AdminData.Node("launch-template-versions", number, number) with
+                        {
+                            ReadFields = () => AdminProjection.Fields(versionSnapshot,
+                                "VersionNumber", "VersionDescription", "CreateTime", "DefaultVersion"),
+                            ReadContent = () => AdminProjection.Content(versionSnapshot),
+                            ReadConnections = () =>
+                                [new("Launch template", "version-of", "ec2", [new("launch-templates", id)])],
+                        });
+                    }
+                }
+                nodes.Add(AdminData.Node("launch-templates", id, name) with
+                {
+                    ReadFields = () => AdminProjection.Fields(snapshot,
+                        "LaunchTemplateId", "LaunchTemplateName", "CreateTime", "LatestVersionNumber",
+                        "DefaultVersionNumber"),
+                    ReadContent = () => AdminProjection.Content(snapshot),
+                    ChildKinds = [new("launch-template-versions", "Launch template versions") { IsRoot = false }],
+                    ReadChildren = () => children,
+                });
+            }
+        }
+
+        private static IReadOnlyList<AdminConnection> Ec2Connections(
+            IReadOnlyDictionary<string, object?> snapshot)
+        {
+            var links = new List<AdminConnection>();
+            Link("VPC", "belongs-to", "vpcs", "VpcId");
+            Link("Subnet", "placed-in", "subnets", "SubnetId");
+            Link("Instance", "attached-to", "instances", "InstanceId");
+            Link("Volume", "created-from", "volumes", "VolumeId");
+            Link("Snapshot", "created-from", "snapshots", "SnapshotId");
+            Link("Route table", "uses", "route-tables", "RouteTableId");
+            Link("Internet gateway", "uses", "internet-gateways", "InternetGatewayId");
+            Link("NAT gateway", "uses", "nat-gateways", "NatGatewayId");
+            return links;
+
+            void Link(string label, string relation, string kind, string field)
+            {
+                var id = AdminProjection.Scalar(snapshot.GetValueOrDefault(field));
+                if (!string.IsNullOrEmpty(id))
+                    links.Add(new(label, relation, "ec2", [new(kind, id)]));
+            }
+        }
+
+        private static bool IsPrivateKeyMaterial(string key) =>
+            key.Equals("KeyMaterial", StringComparison.OrdinalIgnoreCase)
+            || key.Equals("PrivateKey", StringComparison.OrdinalIgnoreCase)
+            || key.Equals("PrivateKeyMaterial", StringComparison.OrdinalIgnoreCase);
+
+        private static string? State(object? value) => value switch
+        {
+            IDictionary<string, object> state => state.TryGetValue("Name", out var name) ? name?.ToString() : null,
+            IReadOnlyDictionary<string, object?> state =>
+                AdminProjection.Scalar(state.GetValueOrDefault("Name")),
+            _ => AdminProjection.Scalar(value),
+        };
 
     public JsonElement? GetState() => null;
     public void RestoreState(JsonElement state) { }

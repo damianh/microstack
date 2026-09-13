@@ -7,7 +7,7 @@ section: Guides
 
 # Configuration
 
-MicroStack is configured via environment variables. All settings are consolidated into a strongly-typed `MicroStackOptions` class internally.
+MicroStack is configured via environment variables. Emulator settings are consolidated into a strongly-typed `MicroStackOptions` class internally.
 
 ## Environment Variables
 
@@ -75,3 +75,20 @@ docker run -e PERSIST_STATE=1 -v ./state:/tmp/microstack-state -p 4566:4566 ghcr
 ```
 
 State is saved as JSON files in `STATE_DIR` on shutdown and restored on startup.
+
+## UI Connection
+
+The UI is served by the gateway at `/ui/` and calls the admin API on the same
+origin. For a custom port, publish only the gateway port:
+
+```bash
+docker run \
+  -e GATEWAY_PORT=5000 \
+  -p 127.0.0.1:5000:5000 \
+  ghcr.io/damianh/microstack:latest
+```
+
+Open `http://localhost:5000/ui/`. `MICROSTACK_UI_PORT`,
+`MICROSTACK_API_URL`, and the UI host's `ApiBaseUrl` setting are obsolete and
+ignored. The admin endpoints do not grant cross-origin browser access. This is
+not authentication; keep these development endpoints on a trusted local network.

@@ -15,7 +15,7 @@ namespace MicroStack.Services.Waf;
 ///           TagResource, UntagResource, ListTagsForResource,
 ///           CheckCapacity, DescribeManagedRuleGroup.
 /// </summary>
-internal sealed class WafServiceHandler : IServiceHandler
+internal sealed partial class WafServiceHandler : IServiceHandler, Internal.Admin.IAdminResourceSource
 {
     private readonly Lock _lock = new();
 
@@ -31,6 +31,9 @@ internal sealed class WafServiceHandler : IServiceHandler
     // -- IServiceHandler -------------------------------------------------------
 
     public string ServiceName => "wafv2";
+
+    public IEnumerable<string> GetKnownAccountIds() =>
+        _webAcls.GetAccountIds().Concat(_ipSets.GetAccountIds()).Concat(_ruleGroups.GetAccountIds());
 
     public Task<ServiceResponse> HandleAsync(ServiceRequest request)
     {

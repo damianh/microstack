@@ -1,5 +1,7 @@
 using System.Text.Json;
 using MicroStack.Internal;
+using MicroStack.Internal.Admin;
+using MicroStack.Admin.Contracts;
 
 namespace MicroStack.Services.RdsData;
 
@@ -16,7 +18,7 @@ namespace MicroStack.Services.RdsData;
 /// implemented — the handler returns canned errors when a cluster
 /// ARN cannot be resolved.
 /// </summary>
-internal sealed class RdsDataServiceHandler : IServiceHandler
+internal sealed class RdsDataServiceHandler : IServiceHandler, IAdminResourceSource
 {
     public string ServiceName => "rds-data";
 
@@ -74,6 +76,13 @@ internal sealed class RdsDataServiceHandler : IServiceHandler
     public JsonElement? GetState() => null;
 
     public void RestoreState(JsonElement state) { }
+
+    public IReadOnlyList<AdminResourceKind> GetAdminResourceKinds(string serviceId) => [];
+
+    public IEnumerable<AdminNode> GetAdminResources(string serviceId) => [];
+
+    public string? GetAdminNotice(string serviceId) =>
+        "RDS Data API retains no database resources or SQL results. Database infrastructure is available under RDS.";
 
     // ── Execute Statement ─────────────────────────────────────────────────────
 

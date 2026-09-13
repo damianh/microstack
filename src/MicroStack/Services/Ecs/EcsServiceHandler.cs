@@ -1,5 +1,7 @@
 using System.Text.Json;
 using MicroStack.Internal;
+using MicroStack.Internal.Admin;
+using MicroStack.Admin.Contracts;
 
 namespace MicroStack.Services.Ecs;
 
@@ -28,7 +30,7 @@ namespace MicroStack.Services.Ecs;
 ///           SubmitTaskStateChange, SubmitContainerStateChange, SubmitAttachmentStateChanges,
 ///           DiscoverPollEndpoint.
 /// </summary>
-internal sealed class EcsServiceHandler : IServiceHandler
+internal sealed class EcsServiceHandler : IServiceHandler, IAdminResourceSource
 {
     // keyed by cluster name
     private readonly AccountScopedDictionary<string, Dictionary<string, object?>> _clusters = new();
@@ -64,6 +66,11 @@ internal sealed class EcsServiceHandler : IServiceHandler
     // -- IServiceHandler -------------------------------------------------------
 
     public string ServiceName => "ecs";
+
+    public IEnumerable<string> GetKnownAccountIds() =>
+        _clusters.GetAccountIds().Concat(_taskDefs.GetAccountIds())
+            .Concat(_services.GetAccountIds()).Concat(_tasks.GetAccountIds())
+            .Concat(_capacityProviders.GetAccountIds());
 
     public Task<ServiceResponse> HandleAsync(ServiceRequest request)
     {
@@ -178,6 +185,140 @@ internal sealed class EcsServiceHandler : IServiceHandler
             _attributes.Clear();
         }
     }
+
+    public IReadOnlyList<AdminResourceKind> GetAdminResourceKinds(string serviceId) =>
+            serviceId == ServiceName ?
+        [
+            new("clusters", "Clusters"),
+            new("services", "Services") { IsRoot = false },
+            new("tasks", "Tasks") { IsRoot = false },
+            new("task-definitions", "Task definitions"),
+        ] : [];
+
+        public IEnumerable<AdminNode> GetAdminResources(string serviceId)
+        {
+            if (serviceId != ServiceName)
+                return [];
+            lock (_lock)
+            {
+                var taskDefinitions = _taskDefs.Items
+                    .Select(item => TaskDefinitionNode(item.Key,
+                        WithTags(AdminProjection.Snapshot(Sanitize(item.Value)),
+                            item.Value.GetValueOrDefault("taskDefinitionArn")?.ToString())))
+                    .OrderBy(node => node.Resource.Key.Id, StringComparer.Ordinal).ToArray();
+                var nodes = new List<AdminNode>(taskDefinitions);
+                foreach (var (clusterName, cluster) in _clusters.Items.OrderBy(item => item.Key, StringComparer.Ordinal))
+                {
+                    var clusterSnapshot = WithTags(AdminProjection.Snapshot(Sanitize(cluster)),
+                        cluster.GetValueOrDefault("clusterArn")?.ToString());
+                    var children = new List<AdminNode>();
+                    children.AddRange(_services.Items
+                        .Where(item => item.Key.StartsWith(clusterName + "/", StringComparison.Ordinal))
+                        .Select(item => ServiceNode(clusterName, item.Key,
+                            WithTags(AdminProjection.Snapshot(Sanitize(item.Value)),
+                                item.Value.GetValueOrDefault("serviceArn")?.ToString()))));
+                    var clusterArn = AdminProjection.Scalar(clusterSnapshot.GetValueOrDefault("clusterArn"));
+                    children.AddRange(_tasks.Items.Where(item =>
+                            string.Equals(item.Value.GetValueOrDefault("clusterArn")?.ToString(), clusterArn,
+                                StringComparison.Ordinal))
+                        .Select(item => TaskNode(clusterName, item.Key,
+                            WithTags(AdminProjection.Snapshot(Sanitize(item.Value)), item.Key))));
+                    var frozenChildren = children.OrderBy(node => node.Resource.Key.Kind, StringComparer.Ordinal)
+                        .ThenBy(node => node.Resource.Key.Id, StringComparer.Ordinal).ToArray();
+                    nodes.Add(AdminData.Node("clusters", clusterName, clusterName, clusterArn,
+                        AdminProjection.Scalar(clusterSnapshot.GetValueOrDefault("status"))) with
+                    {
+                        ReadFields = () => AdminProjection.Fields(clusterSnapshot,
+                            "status", "registeredContainerInstancesCount", "runningTasksCount",
+                            "pendingTasksCount", "activeServicesCount"),
+                        ReadContent = () => AdminProjection.Content(clusterSnapshot),
+                        ChildKinds =
+                        [
+                            new("services", "Services") { IsRoot = false },
+                            new("tasks", "Tasks") { IsRoot = false },
+                        ],
+                        ReadChildren = () => frozenChildren,
+                    });
+                }
+                return nodes;
+            }
+        }
+
+        private IReadOnlyDictionary<string, object?> WithTags(
+            IReadOnlyDictionary<string, object?> snapshot, string? arn)
+        {
+            if (arn is null || !_tags.TryGetValue(arn, out var tags) || tags.Count == 0)
+                return snapshot;
+            var result = new Dictionary<string, object?>(snapshot, StringComparer.Ordinal)
+            {
+                ["tags"] = AdminProjection.Snapshot(
+                    new Dictionary<string, object> { ["items"] = tags }),
+            };
+            return result;
+        }
+
+        private static AdminNode ServiceNode(
+            string clusterName, string storedKey, IReadOnlyDictionary<string, object?> snapshot)
+        {
+            var name = AdminProjection.Scalar(snapshot.GetValueOrDefault("serviceName"))
+                ?? storedKey[(storedKey.LastIndexOf('/') + 1)..];
+            var arn = AdminProjection.Scalar(snapshot.GetValueOrDefault("serviceArn"));
+            return AdminData.Node("services", name, name, arn,
+                AdminProjection.Scalar(snapshot.GetValueOrDefault("status"))) with
+            {
+                ReadFields = () => AdminProjection.Fields(snapshot,
+                    "status", "desiredCount", "runningCount", "pendingCount", "launchType", "taskDefinition"),
+                ReadContent = () => AdminProjection.Content(snapshot),
+                ReadConnections = () => EcsConnections(clusterName, snapshot),
+            };
+        }
+
+        private static AdminNode TaskNode(
+            string clusterName, string arn, IReadOnlyDictionary<string, object?> snapshot)
+        {
+            var id = arn[(arn.LastIndexOf('/') + 1)..];
+            return AdminData.Node("tasks", id, id, arn,
+                AdminProjection.Scalar(snapshot.GetValueOrDefault("lastStatus"))) with
+            {
+                ReadFields = () => AdminProjection.Fields(snapshot,
+                    "lastStatus", "desiredStatus", "launchType", "taskDefinitionArn", "createdAt", "startedAt"),
+                ReadContent = () => AdminProjection.Content(snapshot),
+                ReadConnections = () => EcsConnections(clusterName, snapshot),
+            };
+        }
+
+        private static AdminNode TaskDefinitionNode(
+            string storedKey, IReadOnlyDictionary<string, object?> snapshot)
+        {
+            var arn = AdminProjection.Scalar(snapshot.GetValueOrDefault("taskDefinitionArn"));
+            var family = AdminProjection.Scalar(snapshot.GetValueOrDefault("family")) ?? storedKey;
+            var revision = AdminProjection.Scalar(snapshot.GetValueOrDefault("revision"));
+            var id = revision is null ? storedKey : $"{family}:{revision}";
+            return AdminData.Node("task-definitions", id, id, arn,
+                AdminProjection.Scalar(snapshot.GetValueOrDefault("status"))) with
+            {
+                ReadFields = () => AdminProjection.Fields(snapshot,
+                    "family", "revision", "status", "networkMode", "cpu", "memory", "registeredAt"),
+                ReadContent = () => AdminProjection.Content(snapshot),
+            };
+        }
+
+        private static IReadOnlyList<AdminConnection> EcsConnections(
+            string clusterName, IReadOnlyDictionary<string, object?> snapshot)
+        {
+            var links = new List<AdminConnection>
+            {
+                new("Cluster", "runs-in", "ecs", [new("clusters", clusterName)]),
+            };
+            var taskDefinition = AdminProjection.Scalar(snapshot.GetValueOrDefault("taskDefinition"))
+                ?? AdminProjection.Scalar(snapshot.GetValueOrDefault("taskDefinitionArn"));
+            if (taskDefinition is not null)
+            {
+                var id = taskDefinition.Contains('/') ? taskDefinition[(taskDefinition.LastIndexOf('/') + 1)..] : taskDefinition;
+                links.Add(new("Task definition", "uses", "ecs", [new("task-definitions", id)]));
+            }
+            return links;
+        }
 
     public JsonElement? GetState() => null;
 

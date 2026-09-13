@@ -2,12 +2,17 @@ using System.Text.Json;
 using System.Text;
 using System.Web;
 using MicroStack.Internal;
+using MicroStack.Internal.Admin;
 
 namespace MicroStack.Services.Alb;
 
-internal sealed class AlbServiceHandler : IServiceHandler
+internal sealed partial class AlbServiceHandler : IServiceHandler, IAdminResourceSource
 {
     public string ServiceName => "elasticloadbalancing";
+
+    public IEnumerable<string> GetKnownAccountIds() =>
+        _lbs.GetAccountIds().Concat(_tgs.GetAccountIds())
+            .Concat(_listeners.GetAccountIds()).Concat(_rules.GetAccountIds());
 
     private const string Ns = "http://elasticloadbalancing.amazonaws.com/doc/2015-12-01/";
 

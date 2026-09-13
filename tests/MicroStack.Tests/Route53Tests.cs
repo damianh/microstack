@@ -17,7 +17,7 @@ public sealed class Route53Tests(MicroStackFixture fixture) : IClassFixture<Micr
 
     private static AmazonRoute53Client CreateClient(MicroStackFixture fixture)
     {
-        var innerHandler = fixture.Factory.Server.CreateHandler();
+        var innerHandler = fixture.CreateHandler();
         var httpClient = new HttpClient(new CanonicalizeUriHandler(innerHandler))
         {
             BaseAddress = new Uri("http://localhost/"),

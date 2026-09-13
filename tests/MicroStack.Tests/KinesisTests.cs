@@ -18,7 +18,7 @@ public sealed class KinesisTests(MicroStackFixture fixture) : IClassFixture<Micr
 
     private static AmazonKinesisClient CreateKinesisClient(MicroStackFixture fixture)
     {
-        var innerHandler = fixture.Factory.Server.CreateHandler();
+        var innerHandler = fixture.CreateHandler();
         var httpClient = new HttpClient(new CanonicalizeUriHandler(innerHandler))
         {
             BaseAddress = new Uri("http://localhost/"),

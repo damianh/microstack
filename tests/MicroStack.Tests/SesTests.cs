@@ -21,7 +21,7 @@ public sealed class SesTests(MicroStackFixture fixture) : IClassFixture<MicroSta
 
     private static AmazonSimpleEmailServiceClient CreateSesClient(MicroStackFixture fixture)
     {
-        var innerHandler = fixture.Factory.Server.CreateHandler();
+        var innerHandler = fixture.CreateHandler();
         var httpClient = new HttpClient(new CanonicalizeUriHandler(innerHandler))
         {
             BaseAddress = new Uri("http://localhost/"),
@@ -40,7 +40,7 @@ public sealed class SesTests(MicroStackFixture fixture) : IClassFixture<MicroSta
 
     private static AmazonSimpleEmailServiceV2Client CreateSesV2Client(MicroStackFixture fixture)
     {
-        var innerHandler = fixture.Factory.Server.CreateHandler();
+        var innerHandler = fixture.CreateHandler();
         var httpClient = new HttpClient(new CanonicalizeUriHandler(innerHandler))
         {
             BaseAddress = new Uri("http://localhost/"),

@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Web;
 using MicroStack.Internal;
+using MicroStack.Internal.Admin;
 
 namespace MicroStack.Services.CloudWatch;
 
@@ -21,9 +22,17 @@ namespace MicroStack.Services.CloudWatch;
 ///           TagResource, UntagResource, ListTagsForResource,
 ///           PutDashboard, GetDashboard, DeleteDashboards, ListDashboards.
 /// </summary>
-internal sealed partial class CloudWatchServiceHandler : IServiceHandler
+internal sealed partial class CloudWatchServiceHandler : IServiceHandler, IAdminResourceSource
 {
     public string ServiceName => "monitoring";
+
+    public IEnumerable<string> GetKnownAccountIds()
+    {
+        lock (_lock)
+            return _metrics.GetAccountIds(points => points.Count > 0)
+                .Concat(_alarms.GetAccountIds()).Concat(_compositeAlarms.GetAccountIds())
+                .Concat(_dashboards.GetAccountIds()).ToArray();
+    }
 
     private static string Region =>
         MicroStackOptions.Instance.Region;

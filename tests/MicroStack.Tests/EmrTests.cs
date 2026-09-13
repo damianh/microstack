@@ -17,7 +17,7 @@ public sealed class EmrTests(MicroStackFixture fixture) : IClassFixture<MicroSta
 
     private static AmazonElasticMapReduceClient CreateEmrClient(MicroStackFixture fixture)
     {
-        var innerHandler = fixture.Factory.Server.CreateHandler();
+        var innerHandler = fixture.CreateHandler();
         var httpClient = new HttpClient(new CanonicalizeUriHandler(innerHandler))
         {
             BaseAddress = new Uri("http://localhost/"),

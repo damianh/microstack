@@ -2,6 +2,8 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using MicroStack.Internal;
+using MicroStack.Internal.Admin;
+using MicroStack.Admin.Contracts;
 
 namespace MicroStack.Services.DynamoDb;
 
@@ -10,7 +12,7 @@ namespace MicroStack.Services.DynamoDb;
 ///
 /// Port of ministack/services/dynamodb.py.
 /// </summary>
-internal sealed class DynamoDbServiceHandler : IServiceHandler
+internal sealed class DynamoDbServiceHandler : IServiceHandler, IResourceProvider, IAdminResourceSource
 {
     // ── State ────────────────────────────────────────────────────────────────────
 
@@ -28,6 +30,8 @@ internal sealed class DynamoDbServiceHandler : IServiceHandler
     // ── IServiceHandler ──────────────────────────────────────────────────────────
 
     public string ServiceName => "dynamodb";
+
+    public IEnumerable<string> GetKnownAccountIds() => _tables.GetAccountIds();
 
     public Task<ServiceResponse> HandleAsync(ServiceRequest request)
     {
@@ -105,6 +109,235 @@ internal sealed class DynamoDbServiceHandler : IServiceHandler
     public JsonElement? GetState() => null;   // persistence not implemented in Phase 1
 
     public void RestoreState(JsonElement state) { }  // persistence not implemented in Phase 1
+
+    public ResourceSummary GetResources()
+    {
+        lock (_lock)
+        {
+            var items = _tables.Items
+                .Select(kv => new ResourceItem(
+                    kv.Key,
+                    kv.Value.TableArn,
+                    new Dictionary<string, string>(StringComparer.Ordinal)
+                    {
+                        ["ItemCount"] = kv.Value.ItemCount.ToString(),
+                        ["TableStatus"] = kv.Value.TableStatus,
+                    }))
+                .OrderBy(item => item.Name, StringComparer.Ordinal)
+                .ToList();
+
+            return new ResourceSummary("dynamodb", items.Count, items);
+        }
+    }
+
+        public IReadOnlyList<AdminResourceKind> GetAdminResourceKinds(string serviceId) =>
+        [
+            new("tables", "Tables"),
+        ];
+
+        public IEnumerable<AdminNode> GetAdminResources(string serviceId)
+        {
+            lock (_lock)
+            {
+                return _tables.Items.OrderBy(x => x.Key, StringComparer.Ordinal)
+                    .Select(x => TableAdminNode(x.Key)).ToArray();
+            }
+        }
+
+        private AdminNode TableAdminNode(string tableName)
+        {
+            if (!_tables.TryGetValue(tableName, out var table))
+                return AdminData.Node("tables", tableName, tableName);
+            return AdminData.Node("tables", tableName, tableName, table.TableArn, table.TableStatus,
+                type: "Table", summary: DynamoTableSummary(table)) with
+            {
+                ChildKinds = [new("items", "Items") { IsRoot = false }],
+                ReadSummary = () =>
+                {
+                    lock (_lock)
+                        return _tables.TryGetValue(tableName, out var current) ? DynamoTableSummary(current) : [];
+                },
+                ReadFields = () =>
+                {
+                    lock (_lock)
+                    {
+                        if (!_tables.TryGetValue(tableName, out var current))
+                            return [];
+                        var ttl = _ttlSettings.TryGetValue(tableName, out var setting) ? setting : null;
+                        return
+                        [
+                            AdminData.Field("TableId", current.TableId),
+                            AdminData.Field("Status", current.TableStatus),
+                            AdminData.Field("ItemCount", RetainedDynamoItemCount(current).ToString()),
+                            AdminData.Field("TableSizeBytes", current.TableSizeBytes.ToString()),
+                            AdminData.Field("PartitionKey", current.PkName),
+                            AdminData.Field("SortKey", current.SkName),
+                            AdminData.Field("PartitionKeyType", DynamoKeyType(current, current.PkName)),
+                            AdminData.Field("SortKeyType", DynamoKeyType(current, current.SkName)),
+                            AdminData.Field("KeySchema", current.KeySchema.ToJsonString(), format: "json"),
+                            AdminData.Field("AttributeDefinitions", current.AttributeDefinitions.ToJsonString(), format: "json"),
+                            AdminData.Field("CreationDateTime",
+                                AdminData.IsoUtc(DateTimeOffset.UnixEpoch.AddSeconds(current.CreationDateTime)), format: "datetime"),
+                            AdminData.Field("BillingMode", current.BillingModeSummary?["BillingMode"]?.ToString()),
+                            AdminData.Field("ProvisionedThroughput", current.ProvisionedThroughput.ToJsonString(), format: "json"),
+                            AdminData.Field("StreamSpecification", current.StreamSpecification?.ToJsonString(), format: "json"),
+                            AdminData.Field("SSEDescription", current.SseDescription?.ToJsonString(), format: "json"),
+                            AdminData.Field("GlobalSecondaryIndexes", current.Gsis.ToJsonString(), format: "json"),
+                            AdminData.Field("LocalSecondaryIndexes", current.Lsis.ToJsonString(), format: "json"),
+                            AdminData.Field("TimeToLiveStatus", ttl?.Status),
+                            AdminData.Field("TimeToLiveAttribute", ttl?.AttributeName),
+                            AdminData.Field("PointInTimeRecoveryEnabled",
+                                (_pitrSettings.TryGetValue(tableName, out var enabled) && enabled).ToString()),
+                            AdminData.Field("AccountId", AccountContext.GetAccountId()),
+                            .. current.Attributes.OrderBy(x => x.Key, StringComparer.Ordinal)
+                                .Select(x => AdminData.Field($"Attributes.{x.Key}", x.Value, IsSensitiveDynamoName(x.Key))),
+                            .. (_tags.TryGetValue(current.TableArn, out var tags) ? tags : [])
+                                .OrderBy(x => x["Key"]?.ToString(), StringComparer.Ordinal)
+                                .Select(x => AdminData.Field($"Tags.{x["Key"]}", x["Value"]?.ToString(),
+                                    IsSensitiveDynamoName(x["Key"]?.ToString() ?? ""))),
+                        ];
+                    }
+                },
+                ReadChildren = () => ReadDynamoItems(tableName),
+            };
+        }
+
+        private static int RetainedDynamoItemCount(DdbTable table) =>
+            table.Items.Values.Sum(partition => partition.Count);
+
+        private static string? DynamoKeyType(DdbTable table, string? name) =>
+            name is null ? null : table.AttributeDefinitions.OfType<JsonObject>()
+                .FirstOrDefault(x => x["AttributeName"]?.ToString() == name)?["AttributeType"]?.ToString();
+
+        private static IReadOnlyList<AdminField> DynamoTableSummary(DdbTable table)
+        {
+            var fields = new List<AdminField>();
+            if (table.PkName is not null)
+                fields.Add(AdminData.Field("PartitionKey", DynamoKeyDescription(table, table.PkName)));
+            if (table.SkName is not null)
+                fields.Add(AdminData.Field("SortKey", DynamoKeyDescription(table, table.SkName)));
+            fields.Add(AdminData.Field("ItemCount", RetainedDynamoItemCount(table).ToString()));
+            return fields.Where(field => field.Value is not { Length: > 4096 }).ToArray();
+        }
+
+        private static string DynamoKeyDescription(DdbTable table, string name) =>
+            DynamoKeyType(table, name) is { } type ? $"{name} ({type})" : name;
+
+        private static IReadOnlyList<AdminField> DynamoItemSummary(DdbTable table, JsonObject item)
+        {
+            var fields = new List<AdminField>();
+            foreach (var name in new[] { table.PkName, table.SkName })
+            {
+                if (name is null)
+                    continue;
+                var value = item[name]?.ToJsonString();
+                if (value is { Length: <= 4096 })
+                    fields.Add(AdminData.Field(name, value, IsSensitiveDynamoName(name), format: "dynamodb-attribute"));
+            }
+            return fields;
+        }
+
+        private static bool IsSensitiveDynamoName(string name) =>
+            name.Contains("password", StringComparison.OrdinalIgnoreCase) ||
+            name.Contains("secret", StringComparison.OrdinalIgnoreCase) ||
+            name.Contains("token", StringComparison.OrdinalIgnoreCase) ||
+            name.Contains("credential", StringComparison.OrdinalIgnoreCase) ||
+            name.Contains("authorization", StringComparison.OrdinalIgnoreCase);
+
+        private IReadOnlyList<AdminNode> ReadDynamoItems(string tableName)
+        {
+            lock (_lock)
+            {
+                if (!_tables.TryGetValue(tableName, out var table))
+                    return [];
+                var nodes = new List<AdminNode>();
+                foreach (var partition in table.Items)
+                foreach (var itemEntry in partition.Value)
+                {
+                    var item = itemEntry.Value;
+                    if (table.PkName is null || item[table.PkName] is not JsonNode pk)
+                        continue;
+                    var sk = table.SkName is null ? null : item[table.SkName];
+                    var id = DynamoItemId(pk, sk);
+                    var name = DynamoItemName(table, pk, sk);
+                    nodes.Add(AdminData.Node("items", id, name, type: "Item", summary: DynamoItemSummary(table, item)) with
+                    {
+                        ReadSummary = () => ReadDynamoItemSummary(tableName, id),
+                        ReadFields = () => ReadDynamoItemFields(tableName, id),
+                        ReadContent = () => ReadDynamoItemContent(tableName, id),
+                    });
+                }
+                return nodes.OrderBy(x => x.Resource.Key.Id, StringComparer.Ordinal).ToArray();
+            }
+        }
+
+        private IReadOnlyList<AdminField> ReadDynamoItemSummary(string tableName, string itemId)
+        {
+            lock (_lock)
+            {
+                var found = FindDynamoItem(tableName, itemId);
+                return found is null ? [] : DynamoItemSummary(found.Value.Table, found.Value.Item);
+            }
+        }
+
+        private IReadOnlyList<AdminField> ReadDynamoItemFields(string tableName, string itemId)
+        {
+            lock (_lock)
+            {
+                var found = FindDynamoItem(tableName, itemId);
+                if (found is null)
+                    return [];
+                var (table, item) = found.Value;
+                var fields = new List<AdminField>();
+                if (table.PkName is not null)
+                    fields.Add(AdminData.Field(table.PkName, item[table.PkName]?.ToJsonString(),
+                        IsSensitiveDynamoName(table.PkName), format: "dynamodb-attribute"));
+                if (table.SkName is not null)
+                    fields.Add(AdminData.Field(table.SkName, item[table.SkName]?.ToJsonString(),
+                        IsSensitiveDynamoName(table.SkName), format: "dynamodb-attribute"));
+                fields.Add(AdminData.Field("AttributeCount", item.Count.ToString(), secondary: true));
+                return fields;
+            }
+        }
+
+        private AdminContent ReadDynamoItemContent(string tableName, string itemId)
+        {
+            lock (_lock)
+            {
+                var found = FindDynamoItem(tableName, itemId);
+                return found is null
+                    ? AdminData.Unavailable("Item no longer exists.", "application/json")
+                    : AdminData.JsonText(found.Value.Item.ToJsonString());
+            }
+        }
+
+        private (DdbTable Table, JsonObject Item)? FindDynamoItem(string tableName, string itemId)
+        {
+            if (!_tables.TryGetValue(tableName, out var table))
+                return null;
+            foreach (var partition in table.Items.Values)
+            foreach (var item in partition.Values)
+            {
+                if (table.PkName is null || item[table.PkName] is not JsonNode pk)
+                    continue;
+                var sk = table.SkName is null ? null : item[table.SkName];
+                if (DynamoItemId(pk, sk) == itemId)
+                    return (table, item);
+            }
+            return null;
+        }
+
+        private static string DynamoItemId(JsonNode pk, JsonNode? sk)
+        {
+            var key = new JsonArray(pk.DeepClone(), sk?.DeepClone()).ToJsonString();
+            return Convert.ToBase64String(Encoding.UTF8.GetBytes(key))
+                .TrimEnd('=').Replace('+', '-').Replace('/', '_');
+        }
+
+    private static string DynamoItemName(DdbTable table, JsonNode pk, JsonNode? sk) =>
+        table.SkName is null
+            ? $"{table.PkName}={pk.ToJsonString()}"
+            : $"{table.PkName}={pk.ToJsonString()}, {table.SkName}={sk?.ToJsonString()}";
 
     // ── Internal stream record access (used by Lambda ESM) ──────────────────────
 

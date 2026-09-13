@@ -2,6 +2,8 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using MicroStack.Internal;
+using MicroStack.Internal.Admin;
+using MicroStack.Admin.Contracts;
 using MicroStack.Services.DynamoDb;
 using MicroStack.Services.Sqs;
 
@@ -16,7 +18,7 @@ namespace MicroStack.Services.Lambda;
 ///           Concurrency, Function URLs, Event Source Mappings CRUD, Invoke stub,
 ///           Event Invoke Config, Provisioned Concurrency, Code Signing Config stub.
 /// </summary>
-internal sealed class LambdaServiceHandler : IServiceHandler
+internal sealed class LambdaServiceHandler : IServiceHandler, IAdminResourceSource, IAdminRelationshipSource
 {
     private readonly AccountScopedDictionary<string, FunctionRecord> _functions = new();
     private readonly AccountScopedDictionary<string, LayerRecord> _layers = new();
@@ -27,20 +29,31 @@ internal sealed class LambdaServiceHandler : IServiceHandler
     private readonly SqsServiceHandler? _sqsHandler;
     private readonly DynamoDbServiceHandler? _ddbHandler;
     private EventSourceMappingPoller? _poller;
+    private readonly AdminChangeHub? _changes;
 
     private static string Region => MicroStackOptions.Instance.Region;
 
     internal LambdaServiceHandler() { }
 
-    internal LambdaServiceHandler(SqsServiceHandler sqsHandler, DynamoDbServiceHandler ddbHandler)
+    internal LambdaServiceHandler(SqsServiceHandler sqsHandler, DynamoDbServiceHandler ddbHandler,
+        AdminChangeHub? changes = null)
     {
         _sqsHandler = sqsHandler;
         _ddbHandler = ddbHandler;
+        _changes = changes;
     }
 
     // -- IServiceHandler -------------------------------------------------------
 
     public string ServiceName => "lambda";
+
+    public IEnumerable<string> GetKnownAccountIds()
+    {
+        lock (_lock)
+            return _functions.GetAccountIds()
+                .Concat(_layers.GetAccountIds(layer => layer.Versions.Count > 0))
+                .Concat(_esms.GetAccountIds()).ToArray();
+    }
 
     public Task<ServiceResponse> HandleAsync(ServiceRequest request)
     {
@@ -78,6 +91,265 @@ internal sealed class LambdaServiceHandler : IServiceHandler
             _urlConfigs.Clear();
         }
     }
+
+    public IReadOnlyList<AdminResourceKind> GetAdminResourceKinds(string serviceId) =>
+            serviceId == ServiceName ?
+        [
+            new("functions", "Functions"),
+            new("versions", "Versions") { IsRoot = false },
+            new("aliases", "Aliases") { IsRoot = false },
+            new("layers", "Layers"),
+            new("layer-versions", "Layer versions") { IsRoot = false },
+            new("event-source-mappings", "Event source mappings"),
+        ] : [];
+
+    public AdminRelationshipSnapshot GetAdminRelationshipSnapshot()
+    {
+        lock (_lock)
+        {
+            var resources = _functions.Items.OrderBy(item => item.Key, StringComparer.Ordinal)
+                .Select(item => new AdminRelationshipResource(
+                    [new("functions", item.Key)], item.Key,
+                    item.Value.Config.GetValueOrDefault("State") as string,
+                    item.Value.Config.GetValueOrDefault("FunctionArn") as string))
+                .ToArray();
+            return new(resources, []);
+        }
+    }
+
+        public IEnumerable<AdminNode> GetAdminResources(string serviceId)
+        {
+            if (serviceId != ServiceName)
+                return [];
+            lock (_lock)
+            {
+                var nodes = new List<AdminNode>();
+                foreach (var (name, function) in _functions.Items.OrderBy(item => item.Key, StringComparer.Ordinal))
+                {
+                    var functionView = new Dictionary<string, object?>(function.Config, StringComparer.Ordinal)
+                    {
+                        ["Tags"] = new Dictionary<string, string>(function.Tags, StringComparer.Ordinal),
+                    };
+                    if (function.Policy is not null)
+                    {
+                        functionView["Policy"] = new Dictionary<string, object?>
+                        {
+                            ["Version"] = function.Policy.Version,
+                            ["Statements"] = function.Policy.Statements.ToArray(),
+                        };
+                    }
+                    if (function.Concurrency is not null)
+                        functionView["ReservedConcurrentExecutions"] = function.Concurrency;
+                    if (function.ProvisionedConcurrency.Count > 0)
+                    {
+                        functionView["ProvisionedConcurrency"] = function.ProvisionedConcurrency.ToDictionary(
+                            item => item.Key,
+                            item => (object?)new Dictionary<string, object?>
+                            {
+                                ["Requested"] = item.Value.RequestedProvisionedConcurrentExecutions,
+                                ["Available"] = item.Value.AvailableProvisionedConcurrentExecutions,
+                                ["Allocated"] = item.Value.AllocatedProvisionedConcurrentExecutions,
+                                ["Status"] = item.Value.Status,
+                                ["LastModified"] = item.Value.LastModified,
+                            }, StringComparer.Ordinal);
+                    }
+                    if (function.EventInvokeConfig is not null)
+                    {
+                        functionView["EventInvokeConfig"] = new Dictionary<string, object?>
+                        {
+                            ["MaximumRetryAttempts"] = function.EventInvokeConfig.MaximumRetryAttempts,
+                            ["MaximumEventAgeInSeconds"] = function.EventInvokeConfig.MaximumEventAgeInSeconds,
+                            ["FunctionArn"] = function.EventInvokeConfig.FunctionArn,
+                            ["LastModified"] = function.EventInvokeConfig.LastModified,
+                            ["DestinationConfig"] = function.EventInvokeConfig.DestinationConfig,
+                        };
+                    }
+                    var functionArn = function.Config.GetValueOrDefault("FunctionArn")?.ToString();
+                    var urlConfigs = _urlConfigs.Where(item =>
+                            item.Key.StartsWith(name + ":", StringComparison.Ordinal)
+                            && string.Equals(item.Value.GetValueOrDefault("FunctionArn")?.ToString(),
+                                functionArn, StringComparison.Ordinal))
+                        .ToDictionary(item => item.Key[(name.Length + 1)..],
+                            item => (object?)item.Value, StringComparer.Ordinal);
+                    if (urlConfigs.Count > 0)
+                        functionView["FunctionUrlConfigs"] = urlConfigs;
+                    var config = AdminProjection.Snapshot(functionView, IsEnvironmentCredential);
+                    var connections = FunctionConfiguredConnections(function.Config);
+                    var versions = function.Versions.OrderBy(item => item.Key, StringComparer.Ordinal)
+                        .Select(item => FunctionVersionNode(name, item.Key,
+                            AdminProjection.Snapshot(item.Value.Config, IsEnvironmentCredential))).ToArray();
+                    var aliases = function.Aliases.OrderBy(item => item.Key, StringComparer.Ordinal)
+                        .Select(item => AliasNode(name, item.Value)).ToArray();
+                    nodes.Add(AdminData.Node("functions", name, name,
+                        AdminProjection.Scalar(config.GetValueOrDefault("FunctionArn")),
+                        AdminProjection.Scalar(config.GetValueOrDefault("State"))) with
+                    {
+                        ReadFields = () => AdminProjection.Fields(config,
+                            "Runtime", "Handler", "Role", "PackageType", "MemorySize", "Timeout", "LastModified"),
+                        ReadContent = () => AdminProjection.Content(config),
+                        ChildKinds =
+                        [
+                            new("versions", "Versions") { IsRoot = false },
+                            new("aliases", "Aliases") { IsRoot = false },
+                        ],
+                        ReadChildren = () => versions.Concat(aliases),
+                        ReadConnections = connections.Count == 0 ? null : () => connections,
+                    });
+                }
+
+                foreach (var (name, layer) in _layers.Items.OrderBy(item => item.Key, StringComparer.Ordinal))
+                {
+                    var versions = layer.Versions.OrderBy(item => item.Key)
+                        .Select(item => LayerVersionNode(name, item.Value)).ToArray();
+                    nodes.Add(AdminData.Node("layers", name, name, layer.LayerArn) with
+                    {
+                        ReadFields = () =>
+                        [
+                            AdminData.Field("LayerArn", layer.LayerArn),
+                            AdminData.Field("VersionCount", versions.Length.ToString()),
+                        ],
+                        ChildKinds = [new("layer-versions", "Layer versions") { IsRoot = false }],
+                        ReadChildren = () => versions,
+                    });
+                }
+
+                foreach (var (id, mapping) in _esms.Items.OrderBy(item => item.Key, StringComparer.Ordinal))
+                {
+                    var snapshot = AdminProjection.Snapshot(mapping);
+                    var functionArn = AdminProjection.Scalar(snapshot.GetValueOrDefault("FunctionArn"));
+                    var eventSourceArn = AdminProjection.Scalar(snapshot.GetValueOrDefault("EventSourceArn"));
+                    nodes.Add(AdminData.Node("event-source-mappings", id, id, status:
+                        AdminProjection.Scalar(snapshot.GetValueOrDefault("State"))) with
+                    {
+                        ReadFields = () => AdminProjection.Fields(snapshot,
+                            "UUID", "State", "EventSourceArn", "FunctionArn", "BatchSize", "LastModified"),
+                        ReadContent = () => AdminProjection.Content(snapshot),
+                        ReadConnections = () =>
+                            FunctionConnection(functionArn).Concat(EventSourceConnection(eventSourceArn)).ToArray(),
+                    });
+                }
+                return nodes;
+            }
+        }
+
+        private static AdminNode FunctionVersionNode(
+            string functionName, string version, IReadOnlyDictionary<string, object?> config) =>
+            AdminData.Node("versions", version, version,
+                AdminProjection.Scalar(config.GetValueOrDefault("FunctionArn")),
+                AdminProjection.Scalar(config.GetValueOrDefault("State"))) with
+            {
+                ReadFields = () => AdminProjection.Fields(config,
+                    "Version", "Runtime", "Handler", "MemorySize", "Timeout", "LastModified"),
+                ReadContent = () => AdminProjection.Content(config),
+                ReadConnections = () => FunctionConnection(functionName),
+            };
+
+        private static AdminNode AliasNode(string functionName, AliasRecord alias)
+        {
+            var snapshot = new Dictionary<string, object?>(StringComparer.Ordinal)
+            {
+                ["AliasArn"] = alias.AliasArn,
+                ["Name"] = alias.Name,
+                ["FunctionVersion"] = alias.FunctionVersion,
+                ["Description"] = alias.Description,
+                ["RevisionId"] = alias.RevisionId,
+            };
+            return AdminData.Node("aliases", alias.Name, alias.Name, alias.AliasArn) with
+            {
+                ReadFields = () => AdminProjection.Fields(snapshot, "FunctionVersion", "Description", "RevisionId"),
+                ReadContent = () => AdminProjection.Content(snapshot),
+                ReadConnections = () =>
+                [
+                    new("Function", "alias-of", "lambda", [new("functions", functionName)]),
+                    new("Version", "targets", "lambda",
+                        [new("functions", functionName), new("versions", alias.FunctionVersion)]),
+                ],
+            };
+        }
+
+        private static AdminNode LayerVersionNode(string layerName, LayerVersionRecord version)
+        {
+            var snapshot = new Dictionary<string, object?>(StringComparer.Ordinal)
+            {
+                ["Version"] = version.VersionNumber,
+                ["Description"] = version.Description,
+                ["CodeSha256"] = version.CodeSha256,
+                ["CodeSize"] = version.CodeSize,
+                ["CompatibleRuntimes"] = version.CompatibleRuntimes.ToArray(),
+                ["LayerVersionArn"] = version.LayerVersionArn,
+                ["CreatedDate"] = version.CreatedDate,
+            };
+            return AdminData.Node("layer-versions", version.VersionNumber.ToString(),
+                version.VersionNumber.ToString(), version.LayerVersionArn) with
+            {
+                ReadFields = () => AdminProjection.Fields(snapshot,
+                    "Version", "Description", "CodeSha256", "CodeSize", "CreatedDate"),
+                ReadContent = () => AdminProjection.Content(snapshot),
+                ReadConnections = () =>
+                    [new("Layer", "version-of", "lambda", [new("layers", layerName)])],
+            };
+        }
+
+        private static IReadOnlyList<AdminConnection> FunctionConnection(string? reference)
+        {
+            var name = reference is null ? null : ExtractFunctionNameFromArn(reference);
+            return name is null ? [] :
+                [new("Function", "invokes", "lambda", [new("functions", name)])];
+        }
+
+        private static IReadOnlyList<AdminConnection> FunctionConfiguredConnections(
+            IReadOnlyDictionary<string, object?> config)
+        {
+            var links = new List<AdminConnection>();
+            if (config.GetValueOrDefault("Role") is string roleArn)
+            {
+                var roleName = roleArn[(roleArn.LastIndexOf('/') + 1)..];
+                links.Add(new("Execution role", "assumes", "iam", [new("role", roleName)]));
+            }
+            if (config.GetValueOrDefault("LoggingConfig") is Dictionary<string, object?> logging
+                && logging.GetValueOrDefault("LogGroup") is string logGroup)
+                links.Add(new("Log group", "writes-to", "logs", [new("log-group", logGroup)]));
+            if (config.GetValueOrDefault("Layers") is List<object?> layers)
+            {
+                foreach (var layer in layers.OfType<Dictionary<string, object?>>())
+                {
+                    if (layer.GetValueOrDefault("Arn") is not string arn)
+                        continue;
+                    var parts = arn.Split(':');
+                    if (parts.Length >= 7)
+                        links.Add(new("Layer", "uses", "lambda", [new("layers", parts[6])]));
+                }
+            }
+            return links;
+        }
+
+        private static IReadOnlyList<AdminConnection> EventSourceConnection(string? arn)
+        {
+            if (arn is null)
+                return [];
+            if (arn.Contains(":sqs:", StringComparison.Ordinal))
+                return [new("Event source", "reads-from", "sqs", [new("queues", arn[(arn.LastIndexOf(':') + 1)..])])];
+            if (arn.Contains(":dynamodb:", StringComparison.Ordinal))
+            {
+                const string marker = ":table/";
+                var start = arn.IndexOf(marker, StringComparison.Ordinal);
+                if (start >= 0)
+                {
+                    start += marker.Length;
+                    var end = arn.IndexOf('/', start);
+                    var table = end < 0 ? arn[start..] : arn[start..end];
+                    return [new("Event source", "reads-from", "dynamodb", [new("tables", table)])];
+                }
+            }
+            return [];
+        }
+
+        private static bool IsEnvironmentCredential(string key) =>
+            key.Contains("SECRET", StringComparison.OrdinalIgnoreCase)
+            || key.Contains("PASSWORD", StringComparison.OrdinalIgnoreCase)
+            || key.Contains("TOKEN", StringComparison.OrdinalIgnoreCase)
+            || key.Equals("AWS_ACCESS_KEY_ID", StringComparison.OrdinalIgnoreCase)
+            || key.Equals("AWS_SESSION_TOKEN", StringComparison.OrdinalIgnoreCase);
 
     public JsonElement? GetState() => null;
 
@@ -2183,7 +2455,7 @@ internal sealed class LambdaServiceHandler : IServiceHandler
             // Start the ESM background poller if SQS and DynamoDB handlers are available
             if (_sqsHandler is not null && _ddbHandler is not null)
             {
-                _poller ??= new EventSourceMappingPoller(this, _sqsHandler, _ddbHandler);
+                _poller ??= new EventSourceMappingPoller(this, _sqsHandler, _ddbHandler, _changes);
                 _poller.EnsureStarted();
             }
 

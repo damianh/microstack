@@ -37,8 +37,10 @@ using MicroStack.Services.ServiceDiscovery;
 using MicroStack.Services.CloudFormation;
 using MicroStack.Services.Cognito;
 using MicroStack.Services.S3Files;
+using MicroStack.Internal.Admin;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.WebHost.UseStaticWebAssets();
 
 // Configure JSON serialization for minimal API endpoints (required for native AOT)
 builder.Services.ConfigureHttpJsonOptions(jsonOptions =>
@@ -50,7 +52,12 @@ builder.Services.ConfigureHttpJsonOptions(jsonOptions =>
 var options = MicroStackOptions.BindFromEnvironment();
 builder.Services.AddSingleton(options);
 
-builder.WebHost.UseUrls($"http://0.0.0.0:{options.GatewayPort}");
+const string adminCorsPolicy = "MicroStackAdmin";
+builder.Services.AddCors(cors => cors.AddPolicy(adminCorsPolicy, policy =>
+    policy.SetIsOriginAllowed(_ => false).WithMethods("GET", "POST", "DELETE").AllowAnyHeader()));
+
+if (!builder.Environment.IsEnvironment("Testing"))
+    builder.WebHost.UseUrls($"http://0.0.0.0:{options.GatewayPort}");
 
 // Configure static services that can't use constructor injection
 AccountContext.Configure(options);
@@ -60,6 +67,8 @@ AccountContext.Configure(options);
 // so we use factory lambdas instead of letting DI locate a public constructor.
 builder.Services.AddSingleton<AwsServiceRouter>();
 builder.Services.AddSingleton<ServiceRegistry>(_ => new ServiceRegistry(options));
+builder.Services.AddSingleton<AdminChangeHub>(_ => new AdminChangeHub());
+builder.Services.AddSingleton<RequestLog>(sp => new RequestLog(changes: sp.GetRequiredService<AdminChangeHub>()));
 builder.Services.AddSingleton<StatePersistence>(sp => new StatePersistence(
     sp.GetRequiredService<ILogger<StatePersistence>>(),
     sp.GetRequiredService<ServiceRegistry>(),
@@ -67,9 +76,14 @@ builder.Services.AddSingleton<StatePersistence>(sp => new StatePersistence(
 
 var app = builder.Build();
 
-// Restore persisted state on startup
+var adminUiEnabled = AdminUiHosting.Map(app, options);
+foreach (var obsoleteSetting in new[] { "MICROSTACK_UI_PORT", "MICROSTACK_API_URL" })
+{
+    if (Environment.GetEnvironmentVariable(obsoleteSetting) is not null)
+        app.Logger.LogWarning("{Setting} is ignored because the UI is served from the gateway at /ui/.", obsoleteSetting);
+}
+
 var persistence = app.Services.GetRequiredService<StatePersistence>();
-persistence.RestoreAll();
 
 // Wire up admin endpoints before the main AWS middleware
 var registry = app.Services.GetRequiredService<ServiceRegistry>();
@@ -87,7 +101,8 @@ registry.Register(new StsServiceHandler(iamHandler));
 registry.Register(new SecretsManagerServiceHandler());
 registry.Register(new SsmServiceHandler());
 registry.Register(new KmsServiceHandler());
-var lambdaHandler = new LambdaServiceHandler(sqsHandler, ddbHandler);
+var lambdaHandler = new LambdaServiceHandler(sqsHandler, ddbHandler,
+    app.Services.GetRequiredService<AdminChangeHub>());
 registry.Register(lambdaHandler);
 registry.Register(new ApiGatewayV2ServiceHandler(lambdaHandler));
 var sfnHandler = new StepFunctionsServiceHandler(lambdaHandler, registry);
@@ -122,6 +137,11 @@ registry.Register(new CognitoIdentityServiceHandler(cognitoIdpHandler));
 registry.Register(new CloudFormationServiceHandler(registry));
 registry.Register(new S3FilesServiceHandler());
 
+// Restore only after registration so persisted resources are loaded into the live handlers.
+persistence.RestoreAll();
+
+app.MapAdminApi(registry, app.Services.GetRequiredService<RequestLog>(), options, adminCorsPolicy);
+
 // Health endpoint (multiple aliases for LocalStack compatibility)
 foreach (var healthPath in new[] { "/_microstack/health", "/health", "/_localstack/health" })
 {
@@ -129,16 +149,23 @@ foreach (var healthPath in new[] { "/_microstack/health", "/health", "/_localsta
     {
         var services = registry.GetServiceStatus();
         return Results.Ok(new HealthResponse(services, "light", "0.1.0"));
-    });
+    }).RequireCors(adminCorsPolicy);
 }
 
 // Reset endpoint
 app.MapPost("/_microstack/reset", () =>
 {
-    registry.ResetAll();
-    persistence.DeleteAll();
-    return Results.Ok(new ResetResponse("ok"));
-});
+    try
+    {
+        registry.ResetAll();
+        persistence.DeleteAll();
+        return Results.Ok(new ResetResponse("ok"));
+    }
+    finally
+    {
+        app.Services.GetRequiredService<AdminChangeHub>().Publish(AdminDirty.All);
+    }
+}).RequireCors(adminCorsPolicy);
 
 // Config endpoint (stub — populated when services implement it)
 app.MapPost("/_microstack/config", async (HttpContext ctx) =>
@@ -156,7 +183,15 @@ app.MapPost("/_microstack/config", async (HttpContext ctx) =>
                 && sfnEl.TryGetProperty("_sfn_mock_config", out var mockEl))
             {
                 var mockConfig = DictionaryObjectJsonConverter.DeserializeElementDeep(mockEl);
-                sfnHandler.SetMockConfig(mockConfig);
+                try
+                {
+                    sfnHandler.SetMockConfig(mockConfig);
+                }
+                finally
+                {
+                    app.Services.GetRequiredService<AdminChangeHub>()
+                        .Publish(AdminDirty.Resources | AdminDirty.Instance);
+                }
                 applied["stepfunctions._sfn_mock_config"] = "applied";
             }
         }
@@ -167,11 +202,66 @@ app.MapPost("/_microstack/config", async (HttpContext ctx) =>
     }
 
     return Results.Ok(new ConfigResponse(applied));
-});
+}).RequireCors(adminCorsPolicy);
+
+// Request log endpoint
+app.MapGet("/_microstack/requests", (HttpContext ctx) =>
+{
+    var limitText = ctx.Request.Query["limit"].ToString();
+    var limit = int.TryParse(limitText, out var parsed) ? parsed : 1000;
+    var requestLog = ctx.RequestServices.GetRequiredService<RequestLog>();
+    return Results.Ok(requestLog.GetEntries(limit));
+}).RequireCors(adminCorsPolicy);
+
+// Request log clear endpoint
+app.MapDelete("/_microstack/requests", (RequestLog requestLog) =>
+{
+    requestLog.Clear();
+    return Results.Ok(new RequestLogClearResponse(true));
+}).RequireCors(adminCorsPolicy);
+
+// Resource explorer endpoint
+app.MapGet("/_microstack/resources", (ServiceRegistry serviceRegistry) =>
+{
+    var resources = serviceRegistry.All
+        .OfType<IResourceProvider>()
+        .Select(provider => provider.GetResources())
+        .OrderBy(summary => summary.Service, StringComparer.Ordinal)
+        .ToList();
+    return Results.Ok(resources);
+}).RequireCors(adminCorsPolicy);
 
 // Enable routing so endpoint matching runs before our AWS middleware.
 // This ensures admin endpoints (health, reset, config) take priority.
 app.UseRouting();
+app.UseCors();
+
+// Keep failures from the inspection API machine-readable without hiding provider faults.
+app.Use(async (ctx, next) =>
+{
+    try
+    {
+        await next(ctx);
+    }
+    catch (OperationCanceledException) when (ctx.RequestAborted.IsCancellationRequested)
+    {
+        throw;
+    }
+    catch (Exception exception) when (ctx.Request.Path.StartsWithSegments("/_microstack/admin/v1"))
+    {
+        var logger = ctx.RequestServices.GetRequiredService<ILogger<Program>>();
+        logger.LogError(exception, "Admin API request failed for {Path}", ctx.Request.Path);
+        if (ctx.Response.HasStarted)
+            throw;
+        ctx.Response.Clear();
+        ctx.Response.StatusCode = StatusCodes.Status500InternalServerError;
+        await ctx.Response.WriteAsJsonAsync(
+            new MicroStack.Admin.Contracts.AdminError(
+                "internal_error", "The admin request failed. Refresh and try again."),
+            MicroStack.Admin.Contracts.AdminJsonContext.Default.AdminError,
+            cancellationToken: ctx.RequestAborted);
+    }
+});
 
 // Handle OPTIONS (CORS pre-flight) before the routing layer can emit a 405.
 // AWS SDKs send OPTIONS pre-flight; we must return CORS headers for all paths.
@@ -190,6 +280,7 @@ app.Use(async (ctx, next) =>
 });
 
 // Main AWS request middleware
+app.UseMiddleware<RequestLogMiddleware>();
 app.UseMiddleware<AwsRequestMiddleware>();
 
 // Activate the mapped endpoints (health, reset, config) registered above.
@@ -215,6 +306,8 @@ lifetime.ApplicationStarted.Register(() =>
 
     logger.LogInformation(banner);
     logger.LogInformation("Services enabled: {ServiceCount}", serviceCount);
+    if (adminUiEnabled)
+        logger.LogInformation("UI available at: http://{Host}:{GatewayPort}/ui/", options.Host, options.GatewayPort);
 });
 
 app.Run();
@@ -226,3 +319,4 @@ public partial class Program { }
 internal sealed record HealthResponse(Dictionary<string, string> Services, string Edition, string Version);
 internal sealed record ResetResponse(string Reset);
 internal sealed record ConfigResponse(Dictionary<string, string> Applied);
+internal sealed record RequestLogClearResponse(bool Cleared);

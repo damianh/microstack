@@ -1,0 +1,55 @@
+<section class="payload" aria-label="Content preview">
+    <div class="payload-head">
+        <span>@(Title ?? "Content preview")</span>
+        @if (_text is not null) { <CopyButton Text="@_text" Label="Copy content" /> }
+    </div>
+    @if (Content is null)
+    {
+        <LoadingState Label="Loading content preview…" />
+    }
+    else
+    {
+        <div class="payload-body">
+            <span class="tag">@Content.ContentType</span>
+            @if (Content.Length is { } length) { <span class="tag">@length.ToString("N0") bytes</span> }
+            @if (!string.IsNullOrEmpty(_notice)) { <p class="notice warning">@_notice</p> }
+        </div>
+        @if (_text is not null) { <pre tabindex="0" aria-label="Escaped content">@_text</pre> }
+    }
+</section>
+@code {
+    [Parameter] public AdminContent? Content { get; set; }
+    [Parameter] public string? Title { get; set; }
+    [Parameter] public bool Revealed { get; set; }
+    private string? _text;
+    private string? _notice;
+    private AdminContent? _formattedContent;
+    private bool _formattedReveal;
+    private bool _formatted;
+    protected override void OnParametersSet()
+    {
+        if (_formatted && _formattedContent == Content && _formattedReveal == Revealed) return;
+        _formatted = true; _formattedContent = Content; _formattedReveal = Revealed;
+        _text = null;
+        _notice = null;
+        if (Content is null) return;
+        if (Content.Sensitive && !Revealed) { _notice = "Sensitive content is masked. Use an explicit Reveal action to inspect an existing value."; return; }
+        if (Content.Kind is not ("text" or "json") || Content.Text is null)
+        { _notice = Content.Reason ?? "This entry is metadata-only; no text preview is available."; return; }
+        if (Content.Length > 1_048_576 || System.Text.Encoding.UTF8.GetByteCount(Content.Text) > 1_048_576)
+        { _notice = "Content exceeds the 1 MiB preview limit. Only metadata is shown."; return; }
+        _text = Content.Text;
+        if (Content.Kind == "json" || Content.ContentType.Contains("json", StringComparison.OrdinalIgnoreCase))
+        {
+            try
+            {
+                using var document = System.Text.Json.JsonDocument.Parse(_text);
+                using var buffer = new MemoryStream();
+                using (var writer = new System.Text.Json.Utf8JsonWriter(buffer, new() { Indented = true }))
+                    document.WriteTo(writer);
+                if (buffer.Length <= 1_048_576) _text = System.Text.Encoding.UTF8.GetString(buffer.ToArray());
+            }
+            catch (System.Text.Json.JsonException) { _notice = "This payload is not valid JSON. Its original text is shown unchanged."; }
+        }
+    }
+}

@@ -24,7 +24,7 @@ public sealed class AcmTests : IClassFixture<MicroStackFixture>, IAsyncLifetime
 
     private static AmazonCertificateManagerClient CreateAcmClient(MicroStackFixture fixture)
     {
-        var innerHandler = fixture.Factory.Server.CreateHandler();
+        var innerHandler = fixture.CreateHandler();
         var httpClient = new HttpClient(new CanonicalizeUriHandler(innerHandler))
         {
             BaseAddress = new Uri("http://localhost/"),

@@ -25,7 +25,18 @@ internal sealed class MicroStackOptions
 
     internal string Region { get; set; } = "us-east-1";
 
-    internal string DefaultAccountId { get; set; } = "000000000000";
+    private string _defaultAccountId = "000000000000";
+
+    internal string DefaultAccountId
+    {
+        get => _defaultAccountId;
+        set
+        {
+            if (value is null || value.Length != 12 || value.Any(c => c is < '0' or > '9'))
+                throw new ArgumentException("The default account ID must contain exactly 12 ASCII digits.", nameof(value));
+            _defaultAccountId = value;
+        }
+    }
 
     internal bool PersistState { get; set; }
 

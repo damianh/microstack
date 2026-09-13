@@ -50,7 +50,7 @@ public sealed class UnicodeTests(MicroStackFixture fixture) : IClassFixture<Micr
 
     private static AmazonS3Client CreateS3Client(MicroStackFixture fixture)
     {
-        var innerHandler = fixture.Factory.Server.CreateHandler();
+        var innerHandler = fixture.CreateHandler();
         var httpClient = new HttpClient(new CanonicalizeUriHandler(innerHandler))
         {
             BaseAddress = new Uri("http://localhost/"),
@@ -69,7 +69,7 @@ public sealed class UnicodeTests(MicroStackFixture fixture) : IClassFixture<Micr
 
     private static AmazonSQSClient CreateSqsClient(MicroStackFixture fixture)
     {
-        var innerHandler = fixture.Factory.Server.CreateHandler();
+        var innerHandler = fixture.CreateHandler();
         var httpClient = new HttpClient(new CanonicalizeUriHandler(innerHandler))
         {
             BaseAddress = new Uri("http://localhost/"),
@@ -87,7 +87,7 @@ public sealed class UnicodeTests(MicroStackFixture fixture) : IClassFixture<Micr
 
     private static AmazonDynamoDBClient CreateDdbClient(MicroStackFixture fixture)
     {
-        var innerHandler = fixture.Factory.Server.CreateHandler();
+        var innerHandler = fixture.CreateHandler();
         var httpClient = new HttpClient(new CanonicalizeUriHandler(innerHandler))
         {
             BaseAddress = new Uri("http://localhost/"),
@@ -105,7 +105,7 @@ public sealed class UnicodeTests(MicroStackFixture fixture) : IClassFixture<Micr
 
     private static AmazonSecretsManagerClient CreateSmClient(MicroStackFixture fixture)
     {
-        var innerHandler = fixture.Factory.Server.CreateHandler();
+        var innerHandler = fixture.CreateHandler();
         var httpClient = new HttpClient(new CanonicalizeUriHandler(innerHandler))
         {
             BaseAddress = new Uri("http://localhost/"),
@@ -123,7 +123,7 @@ public sealed class UnicodeTests(MicroStackFixture fixture) : IClassFixture<Micr
 
     private static AmazonSimpleSystemsManagementClient CreateSsmClient(MicroStackFixture fixture)
     {
-        var innerHandler = fixture.Factory.Server.CreateHandler();
+        var innerHandler = fixture.CreateHandler();
         var httpClient = new HttpClient(new CanonicalizeUriHandler(innerHandler))
         {
             BaseAddress = new Uri("http://localhost/"),
@@ -141,7 +141,7 @@ public sealed class UnicodeTests(MicroStackFixture fixture) : IClassFixture<Micr
 
     private static AmazonRoute53Client CreateR53Client(MicroStackFixture fixture)
     {
-        var innerHandler = fixture.Factory.Server.CreateHandler();
+        var innerHandler = fixture.CreateHandler();
         var httpClient = new HttpClient(new CanonicalizeUriHandler(innerHandler))
         {
             BaseAddress = new Uri("http://localhost/"),

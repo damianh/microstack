@@ -48,6 +48,31 @@ dotnet run --project src/MicroStack/MicroStack.csproj
 curl http://localhost:4566/_microstack/health
 ```
 
+## Admin UI
+
+MicroStack includes a web UI on the same gateway port:
+
+- **AWS/API endpoint:** `http://localhost:4566`
+- **UI endpoint:** `http://localhost:4566/ui/`
+
+An unsigned browser navigation to `http://localhost:4566/` redirects to `/ui/`.
+SDK, signed, presigned, and non-HTML root requests retain AWS behavior.
+
+Local builds include the browser client's static assets. Native publishing builds
+the client separately. The client keeps its `browser-wasm` runtime identifier
+even when restore is invoked with the server's native runtime identifier.
+
+The UI includes:
+
+- **Services** — a searchable directory of all supported services
+- **Resource Explorer** — read-only, account-aware inspection of retained
+  resources, configuration, content, and configured connections
+- **Overview** — service health, resource counts, and the global reset control
+- **Request Log** — recent AWS API calls (service, action, account, status, duration)
+
+For the separate, synthetic design reference (not the running Admin UI), see the
+[Resource Explorer prototype](design/resource-explorer/README.md).
+
 ## Usage
 
 Point any AWS SDK client at `http://localhost:4566`:
