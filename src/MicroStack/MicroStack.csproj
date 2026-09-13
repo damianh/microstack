@@ -58,6 +58,10 @@
   <ItemGroup>
     <InternalsVisibleTo Include="MicroStack.Tests" />
     <ProjectReference Include="..\MicroStack.Admin.Contracts\MicroStack.Admin.Contracts.csproj" />
+    <!-- Local builds need the static asset manifest; native publishes build the browser client separately. -->
+    <ProjectReference Include="..\MicroStack.UI.Client\MicroStack.UI.Client.csproj"
+                      ReferenceOutputAssembly="false"
+                      Condition="'$(RuntimeIdentifier)' == '' and '$(RuntimeIdentifiers)' == ''" />
     <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.Server" Version="10.0.9" />
   </ItemGroup>
 

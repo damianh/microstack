@@ -58,6 +58,9 @@ MicroStack includes a web UI on the same gateway port:
 An unsigned browser navigation to `http://localhost:4566/` redirects to `/ui/`.
 SDK, signed, presigned, and non-HTML root requests retain AWS behavior.
 
+Local builds include the browser client's static assets. Native publishing builds
+the client separately so the server's runtime identifier is not applied to WebAssembly.
+
 The UI includes:
 
 - **Services** — a searchable directory of all supported services
