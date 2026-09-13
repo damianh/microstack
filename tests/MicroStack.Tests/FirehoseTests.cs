@@ -18,7 +18,7 @@ public sealed class FirehoseTests(MicroStackFixture fixture) : IClassFixture<Mic
 
     private static AmazonKinesisFirehoseClient CreateClient(MicroStackFixture fixture)
     {
-        var innerHandler = fixture.Factory.Server.CreateHandler();
+        var innerHandler = fixture.CreateHandler();
         var httpClient = new HttpClient(new CanonicalizeUriHandler(innerHandler))
         {
             BaseAddress = new Uri("http://localhost/"),

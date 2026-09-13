@@ -37,8 +37,6 @@ internal sealed class MicroStackOptions
 
     internal SqsEndpointStrategy SqsEndpointStrategy { get; set; } = SqsEndpointStrategy.Request;
 
-    internal int UiPort { get; set; } = 4567;
-
     /// <summary>
     /// Binds configuration from environment variables.
     /// Called once at startup. Sets <see cref="Instance"/> for global access.
@@ -52,12 +50,6 @@ internal sealed class MicroStackOptions
         if (int.TryParse(portStr, out var port))
         {
             options.GatewayPort = port;
-        }
-
-        var uiPortStr = Environment.GetEnvironmentVariable("MICROSTACK_UI_PORT");
-        if (int.TryParse(uiPortStr, out var uiPort))
-        {
-            options.UiPort = uiPort;
         }
 
         options.Host = Environment.GetEnvironmentVariable("MICROSTACK_HOST") ?? options.Host;

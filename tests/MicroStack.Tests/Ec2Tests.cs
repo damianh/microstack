@@ -11,7 +11,7 @@ public sealed class Ec2Tests(MicroStackFixture fixture) : IClassFixture<MicroSta
 
     private static AmazonEC2Client CreateEc2Client(MicroStackFixture fixture)
     {
-        var innerHandler = fixture.Factory.Server.CreateHandler();
+        var innerHandler = fixture.CreateHandler();
         var httpClient = new HttpClient(new CanonicalizeUriHandler(innerHandler))
         {
             BaseAddress = new Uri("http://localhost/"),

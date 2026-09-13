@@ -57,7 +57,7 @@
 }
 else if (_service is not null)
 {
-    @if (ExplorerLocation.SafeReturn(ReturnTo) is { } returnTo) { <a class="return-link" href="@returnTo">← Return to previous inspection</a> }
+    @if (ExplorerLocation.ResolveReturn(Navigation, ReturnTo) is { } returnTo) { <a class="return-link" href="@returnTo">← Return to previous inspection</a> }
     <header class="service-heading">
         <div><div class="service-title-line"><img class="aws-service-icon" src="@($"icons/{_service.Icon}.svg")" alt="" /><h1>@_service.Label</h1></div>
             <p>@_service.Name · @ScopeLabel(_service.Scope)</p></div>
@@ -65,7 +65,7 @@ else if (_service is not null)
     </header>
     @if (!string.IsNullOrEmpty(_service.Notice)) { <p class="notice">@_service.Notice</p> }
     @if (_service.Availability == "disabled")
-    { <section class="state-panel"><h2>Service disabled</h2><p>This service is declared in the catalog but its handler is not enabled on this instance.</p><a class="button" href="/overview">View instance status</a></section> }
+    { <section class="state-panel"><h2>Service disabled</h2><p>This service is declared in the catalog but its handler is not enabled on this instance.</p><a class="button" href="overview">View instance status</a></section> }
     else
     {
         <div class="resource-workspace @(_browsing ? "browsing" : "")">

@@ -16,7 +16,6 @@
   </PropertyGroup>
 
   <!-- OCI container image publishing via 'dotnet publish /t:PublishContainer' -->
-  <!-- The image includes the native API and the self-contained Blazor host. -->
   <PropertyGroup>
     <ContainerBaseImage>mcr.microsoft.com/dotnet/runtime-deps:10.0-alpine</ContainerBaseImage>
     <ContainerRepository>microstack</ContainerRepository>
@@ -27,28 +26,39 @@
 
   <ItemGroup>
     <ContainerPort Include="4566" Type="tcp" />
-    <ContainerPort Include="4567" Type="tcp" />
     <ContainerEnvironmentVariable Include="ASPNETCORE_HTTP_PORTS" Value="4566" />
-    <ContainerEnvironmentVariable Include="MICROSTACK_UI_PORT" Value="4567" />
     <ContainerEnvironmentVariable Include="DOTNET_SYSTEM_GLOBALIZATION_INVARIANT" Value="1" />
-    <ContainerAppCommand Include="/bin/sh" Condition="'$(PublishAdminUi)' != 'false'" />
-    <ContainerAppCommandArgs Include="/app/entrypoint.sh" Condition="'$(PublishAdminUi)' != 'false'" />
   </ItemGroup>
 
-  <Target Name="PublishAdminUi" AfterTargets="Publish" Condition="'$(PublishAdminUi)' != 'false'">
+  <Target Name="PublishAdminUiAssets" AfterTargets="Publish"
+          Condition="'$(PublishAdminUi)' != 'false'">
     <PropertyGroup>
-      <_AdminUiPublishDirectory>$([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', '$(PublishDir)', 'ui'))</_AdminUiPublishDirectory>
+      <_AdminUiStaging>$([MSBuild]::NormalizeDirectory('$(IntermediateOutputPath)', 'admin-ui-publish'))</_AdminUiStaging>
     </PropertyGroup>
-    <MSBuild Projects="..\MicroStack.UI\MicroStack.UI.csproj"
-             Targets="Restore;Publish"
-             Properties="Configuration=$(Configuration);RuntimeIdentifier=$(RuntimeIdentifier);SelfContained=true;PublishAot=false;PublishDir=$(_AdminUiPublishDirectory)"
-             RemoveProperties="PublishProfile;ContainerRuntimeIdentifiers;ContainerArchiveOutputPath;OutputPath;IntermediateOutputPath" />
-    <Copy SourceFiles="..\..\entrypoint.sh" DestinationFolder="$(PublishDir)" />
+    <MSBuild Projects="..\MicroStack.UI.Client\MicroStack.UI.Client.csproj"
+             Targets="Restore"
+             Properties="Configuration=$(Configuration);PublishAot=false"
+             RemoveProperties="PublishProfile;RuntimeIdentifier;ContainerRuntimeIdentifiers;ContainerArchiveOutputPath;SelfContained;OutputPath;IntermediateOutputPath"
+             UnloadProjectsOnCompletion="true" />
+    <MSBuild Projects="..\MicroStack.UI.Client\MicroStack.UI.Client.csproj"
+             Targets="Publish"
+             Properties="Configuration=$(Configuration);PublishDir=$(_AdminUiStaging);PublishAot=false"
+             RemoveProperties="PublishProfile;RuntimeIdentifier;ContainerRuntimeIdentifiers;ContainerArchiveOutputPath;SelfContained;OutputPath;IntermediateOutputPath"
+             UnloadProjectsOnCompletion="true" />
+    <ItemGroup>
+      <_AdminUiFiles Include="$(_AdminUiStaging)wwwroot\ui\**\*" />
+    </ItemGroup>
+    <MakeDir Directories="$(PublishDir)wwwroot\ui" />
+    <Copy SourceFiles="@(_AdminUiFiles)"
+          DestinationFolder="$(PublishDir)wwwroot\ui\%(_AdminUiFiles.RecursiveDir)" />
+    <Delete Files="$(PublishDir)wwwroot\index.html" />
+    <RemoveDir Directories="$(_AdminUiStaging)" />
   </Target>
 
   <ItemGroup>
     <InternalsVisibleTo Include="MicroStack.Tests" />
     <ProjectReference Include="..\MicroStack.Admin.Contracts\MicroStack.Admin.Contracts.csproj" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.Server" Version="10.0.9" />
   </ItemGroup>
 
 </Project>

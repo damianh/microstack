@@ -11,17 +11,15 @@ MicroStack exposes internal endpoints for health checking, state management, and
 
 ## Browser Access
 
-Admin endpoints allow cross-origin browser requests from
-`http://<MICROSTACK_HOST>:<MICROSTACK_UI_PORT>` (default `http://localhost:4567`).
-The policy covers health checks and aliases, resources, request logs, reset, and
-configuration, including preflight requests for `GET`, `POST`, and `DELETE`.
-Set these environment variables on the API server to match the UI's browser origin;
-the UI host must use the same `MICROSTACK_UI_PORT`.
+The UI and admin API share the gateway origin, so admin endpoints do not grant
+cross-origin browser access. CORS is not authentication and does not prevent
+non-browser access or all cross-origin writes; keep the emulator on a trusted
+development network. AWS service endpoints retain their existing permissive CORS
+behavior for SDK clients.
 
-Other origins do not receive permission to read admin responses. CORS is not
-authentication and does not prevent non-browser access or all cross-origin writes;
-keep the emulator on a trusted development network. AWS service endpoints retain
-their existing permissive CORS behavior for SDK clients.
+The UI is reserved at `/ui/` on the gateway hostname. An unsigned, query-free
+browser navigation to `/` redirects there. Signed, presigned, SDK, non-HTML, and
+service-specific-host requests retain their AWS routing behavior.
 
 ## Resource Inspection
 

@@ -16,7 +16,7 @@ public sealed class ElastiCacheTests(MicroStackFixture fixture) : IClassFixture<
 
     private static AmazonElastiCacheClient CreateClient(MicroStackFixture fixture)
     {
-        var innerHandler = fixture.Factory.Server.CreateHandler();
+        var innerHandler = fixture.CreateHandler();
         var httpClient = new HttpClient(new CanonicalizeUriHandler(innerHandler))
         {
             BaseAddress = new Uri("http://localhost/"),

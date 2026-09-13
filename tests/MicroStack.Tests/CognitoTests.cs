@@ -25,7 +25,7 @@ public sealed class CognitoTests(MicroStackFixture fixture) : IClassFixture<Micr
 
     private static AmazonCognitoIdentityProviderClient CreateIdpClient(MicroStackFixture fixture)
     {
-        var innerHandler = fixture.Factory.Server.CreateHandler();
+        var innerHandler = fixture.CreateHandler();
         var httpClient = new HttpClient(new CanonicalizeUriHandler(innerHandler))
         {
             BaseAddress = new Uri("http://localhost/"),
@@ -42,7 +42,7 @@ public sealed class CognitoTests(MicroStackFixture fixture) : IClassFixture<Micr
 
     private static AmazonCognitoIdentityClient CreateIdentityClient(MicroStackFixture fixture)
     {
-        var innerHandler = fixture.Factory.Server.CreateHandler();
+        var innerHandler = fixture.CreateHandler();
         var httpClient = new HttpClient(new CanonicalizeUriHandler(innerHandler))
         {
             BaseAddress = new Uri("http://localhost/"),

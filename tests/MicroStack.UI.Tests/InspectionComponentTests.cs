@@ -2,6 +2,7 @@ using Bunit;
 using MicroStack.Admin.Contracts;
 using MicroStack.UI.Client.Components;
 using MicroStack.UI.Client.Services;
+using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
@@ -130,4 +131,21 @@ public sealed class InspectionComponentTests
     [InlineData("/\\evil.example/")]
     [InlineData("/requests")]
     public void Return_context_rejects_non_inspector_urls(string url) => Assert.Null(ExplorerLocation.SafeReturn(url));
+
+    [Fact]
+    public void Explorer_urls_stay_under_ui_base_path()
+    {
+        var navigation = new StubNavigationManager("https://localhost:8443/ui/");
+        var service = ExplorerLocation.ServiceUrl(navigation, "s3", "000000000000");
+
+        Assert.StartsWith("https://localhost:8443/ui/services/s3", service, StringComparison.Ordinal);
+        Assert.Equal(
+            "https://localhost:8443/ui/services/sqs?account=000000000000",
+            ExplorerLocation.ResolveReturn(navigation, "/services/sqs?account=000000000000"));
+    }
+
+    private sealed class StubNavigationManager : NavigationManager
+    {
+        internal StubNavigationManager(string baseUri) => Initialize(baseUri, baseUri);
+    }
 }

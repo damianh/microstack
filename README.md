@@ -50,10 +50,13 @@ curl http://localhost:4566/_microstack/health
 
 ## Admin UI
 
-MicroStack now includes a web UI dashboard on a separate port:
+MicroStack includes a web UI on the same gateway port:
 
-- **API endpoint:** `http://localhost:4566`
-- **UI endpoint:** `http://localhost:4567`
+- **AWS/API endpoint:** `http://localhost:4566`
+- **UI endpoint:** `http://localhost:4566/ui/`
+
+An unsigned browser navigation to `http://localhost:4566/` redirects to `/ui/`.
+SDK, signed, presigned, and non-HTML root requests retain AWS behavior.
 
 The UI includes:
 
@@ -172,7 +175,6 @@ services:
     image: ghcr.io/damianh/microstack:latest
     ports:
       - "4566:4566"
-      - "4567:4567"
     environment:
       - PERSIST_STATE=1
     volumes:

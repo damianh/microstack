@@ -21,7 +21,7 @@ public sealed class SnsTests(MicroStackFixture fixture) : IClassFixture<MicroSta
 
     private static AmazonSimpleNotificationServiceClient CreateSnsClient(MicroStackFixture fixture)
     {
-        var innerHandler = fixture.Factory.Server.CreateHandler();
+        var innerHandler = fixture.CreateHandler();
         var httpClient = new HttpClient(new CanonicalizeUriHandler(innerHandler))
         {
             BaseAddress = new Uri("http://localhost/"),
@@ -40,7 +40,7 @@ public sealed class SnsTests(MicroStackFixture fixture) : IClassFixture<MicroSta
 
     private static AmazonSQSClient CreateSqsClient(MicroStackFixture fixture)
     {
-        var innerHandler = fixture.Factory.Server.CreateHandler();
+        var innerHandler = fixture.CreateHandler();
         var httpClient = new HttpClient(new CanonicalizeUriHandler(innerHandler))
         {
             BaseAddress = new Uri("http://localhost/"),

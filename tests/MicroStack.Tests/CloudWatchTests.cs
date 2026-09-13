@@ -17,7 +17,7 @@ public sealed class CloudWatchTests(MicroStackFixture fixture) : IClassFixture<M
 
     private static AmazonCloudWatchClient CreateCloudWatchClient(MicroStackFixture fixture)
     {
-        var innerHandler = fixture.Factory.Server.CreateHandler();
+        var innerHandler = fixture.CreateHandler();
         var httpClient = new HttpClient(new CanonicalizeUriHandler(innerHandler))
         {
             BaseAddress = new Uri("http://localhost/"),

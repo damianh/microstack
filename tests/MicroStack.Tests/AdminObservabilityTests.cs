@@ -248,7 +248,7 @@ public sealed class AdminObservabilityTests(MicroStackFixture fixture) : IClassF
         where TClient : AmazonServiceClient
         where TConfig : ClientConfig, new()
     {
-        var httpClient = new HttpClient(new CanonicalizeUriHandler(fixture.Factory.Server.CreateHandler()))
+        var httpClient = new HttpClient(new CanonicalizeUriHandler(fixture.CreateHandler()))
         {
             BaseAddress = new Uri("http://localhost/"),
         };

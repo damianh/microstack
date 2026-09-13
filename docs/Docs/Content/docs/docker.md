@@ -8,21 +8,21 @@ section: Guides
 # Docker
 
 MicroStack supports both the repository Dockerfile and SDK OCI publishing.
-The container runs the native API and the separate self-contained UI host.
+The native process serves AWS APIs and the browser UI on one port.
 
 ## Pre-built Image
 
 ```bash
-docker run -p 127.0.0.1:4566:4566 -p 127.0.0.1:4567:4567 ghcr.io/damianh/microstack:latest
+docker run -p 127.0.0.1:4566:4566 ghcr.io/damianh/microstack:latest
 ```
 
-Open `http://localhost:4567` for the UI. AWS clients continue to use port `4566`.
+Open `http://localhost:4566/ui/` for the UI. AWS clients use the same origin.
 
 ## Building Locally
 
 ```bash
 docker build -t microstack:latest .
-docker run -p 127.0.0.1:4566:4566 -p 127.0.0.1:4567:4567 microstack:latest
+docker run -p 127.0.0.1:4566:4566 microstack:latest
 ```
 
 Alternatively, SDK publishing includes the UI under the API publish directory:
@@ -33,9 +33,8 @@ dotnet publish src/MicroStack/MicroStack.csproj /t:PublishContainer -c Release -
 
 Native AOT publishing requires a matching Linux toolchain; use the Dockerfile
 or a suitable Linux environment when building from Windows. Both image paths
-use the .NET runtime-dependencies Alpine image and include the self-contained
-UI host. The processes have separate content roots, and stopping the container
-stops both. If either process exits, the other is also stopped.
+use the .NET runtime-dependencies Alpine image and include the browser assets
+served directly by the native API process.
 
 For an API-only publish, pass `-p:PublishAdminUi=false`. The standalone design
 reference in `design/resource-explorer` is never included in production images.
@@ -48,7 +47,6 @@ services:
     image: ghcr.io/damianh/microstack:latest
     ports:
       - "127.0.0.1:4566:4566"
-      - "127.0.0.1:4567:4567"
     environment:
       - PERSIST_STATE=1
     volumes:

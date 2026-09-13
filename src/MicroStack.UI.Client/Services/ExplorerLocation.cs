@@ -37,4 +37,9 @@ public static class ExplorerLocation
         var route = value.Split('?')[0];
         return route is "/" or "/resources" || route.StartsWith("/services/", StringComparison.Ordinal) ? value : null;
     }
+
+    public static string? ResolveReturn(NavigationManager navigation, string? value) =>
+        SafeReturn(value) is { } safe
+            ? new Uri(new Uri(navigation.BaseUri), safe.TrimStart('/')).AbsoluteUri
+            : null;
 }

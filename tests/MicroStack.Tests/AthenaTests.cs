@@ -17,7 +17,7 @@ public sealed class AthenaTests(MicroStackFixture fixture) : IClassFixture<Micro
 
     private static AmazonAthenaClient CreateClient(MicroStackFixture fixture)
     {
-        var innerHandler = fixture.Factory.Server.CreateHandler();
+        var innerHandler = fixture.CreateHandler();
         var httpClient = new HttpClient(new CanonicalizeUriHandler(innerHandler))
         {
             BaseAddress = new Uri("http://localhost/"),

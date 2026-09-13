@@ -18,7 +18,7 @@ public sealed class AppSyncTests(MicroStackFixture fixture) : IClassFixture<Micr
 
     private static AmazonAppSyncClient CreateAppSyncClient(MicroStackFixture fixture)
     {
-        var innerHandler = fixture.Factory.Server.CreateHandler();
+        var innerHandler = fixture.CreateHandler();
         var httpClient = new HttpClient(new CanonicalizeUriHandler(innerHandler))
         {
             BaseAddress = new Uri("http://localhost/"),

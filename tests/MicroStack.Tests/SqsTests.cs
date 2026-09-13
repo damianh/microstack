@@ -22,12 +22,8 @@ public sealed class SqsTests(MicroStackFixture fixture) : IClassFixture<MicroSta
         MicroStackFixture fixture,
         string serviceUrl)
     {
-        // AWS SDK v4 builds request URIs with DangerousDisablePathAndQueryCanonicalization,
-        // which is incompatible with TestServer's ClientHandler (it calls GetComponents() on
-        // the URI which throws for such URIs). We work around this by injecting a delegating
-        // handler that rewrites the URI to a plain canonical form before forwarding to the
-        // test server handler — stripping the dangerous flag.
-        var innerHandler = fixture.Factory.Server.CreateHandler();
+        // Strip the AWS SDK's noncanonical URI flag before forwarding over loopback.
+        var innerHandler = fixture.CreateHandler();
         var httpClient   = new HttpClient(new CanonicalizeUriHandler(innerHandler))
         {
             BaseAddress = new Uri(serviceUrl),
@@ -472,7 +468,7 @@ public sealed class SqsTests(MicroStackFixture fixture) : IClassFixture<MicroSta
 /// <summary>
 /// Rewrites the request URI to a canonical form, stripping the
 /// <c>DangerousDisablePathAndQueryCanonicalization</c> flag that AWS SDK v4 sets.
-/// This is required for compatibility with ASP.NET Core's <see cref="Microsoft.AspNetCore.TestHost.TestServer"/>.
+/// This keeps AWS SDK v4 requests compatible with the standard HTTP transport.
 /// </summary>
 internal sealed class CanonicalizeUriHandler : DelegatingHandler
 {
@@ -491,7 +487,7 @@ internal sealed class CanonicalizeUriHandler : DelegatingHandler
 
 /// <summary>
 /// Provides a fixed <see cref="HttpClient"/> to the AWS SDK so it uses the
-/// in-process test server instead of making real network calls.
+/// ephemeral loopback server.
 /// </summary>
 internal sealed class FixedHttpClientFactory : Amazon.Runtime.HttpClientFactory
 {

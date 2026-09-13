@@ -17,7 +17,7 @@ public sealed class DynamoDbTests(MicroStackFixture fixture) : IClassFixture<Mic
 
     private static AmazonDynamoDBClient CreateDdbClient(MicroStackFixture fixture)
     {
-        var innerHandler = fixture.Factory.Server.CreateHandler();
+        var innerHandler = fixture.CreateHandler();
         var httpClient = new HttpClient(new CanonicalizeUriHandler(innerHandler))
         {
             BaseAddress = new Uri("http://localhost/"),

@@ -30,13 +30,13 @@ public sealed class ApiGatewayV1Tests : IClassFixture<MicroStackFixture>, IAsync
         _lambda = CreateLambdaClient(fixture);
 
         // Raw HTTP client for data plane (execute-api) requests
-        var innerHandler = fixture.Factory.Server.CreateHandler();
+        var innerHandler = fixture.CreateHandler();
         _rawHttp = new HttpClient(innerHandler) { BaseAddress = new Uri("http://localhost/") };
     }
 
     private static AmazonAPIGatewayClient CreateApigwClient(MicroStackFixture fixture)
     {
-        var innerHandler = fixture.Factory.Server.CreateHandler();
+        var innerHandler = fixture.CreateHandler();
         var httpClient = new HttpClient(new CanonicalizeUriHandler(innerHandler))
         {
             BaseAddress = new Uri("http://localhost/"),
@@ -55,7 +55,7 @@ public sealed class ApiGatewayV1Tests : IClassFixture<MicroStackFixture>, IAsync
 
     private static AmazonLambdaClient CreateLambdaClient(MicroStackFixture fixture)
     {
-        var innerHandler = fixture.Factory.Server.CreateHandler();
+        var innerHandler = fixture.CreateHandler();
         var httpClient = new HttpClient(new CanonicalizeUriHandler(innerHandler))
         {
             BaseAddress = new Uri("http://localhost/"),
