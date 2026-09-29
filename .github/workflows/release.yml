@@ -68,22 +68,21 @@ jobs:
           cache: pip
           cache-dependency-path: examples/testcontainers/python/requirements.lock
 
-      - name: Remove existing tag if present
+      - name: Ensure tag is not already released
         run: |
           TAG="v${{ inputs.version }}"
-          if git rev-parse "$TAG" >/dev/null 2>&1; then
-            echo "Tag $TAG exists, removing it"
-            git tag -d "$TAG"
-            git push origin ":refs/tags/$TAG" || true
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG already exists on origin. Refusing to re-release."
+            exit 1
           fi
 
-      - name: Create and push tag
+      # Tag locally so MinVer versions the build; the tag is pushed only after everything is published.
+      - name: Create local tag
         run: |
           TAG="v${{ inputs.version }}"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag -a "$TAG" -m "Release ${{ inputs.version }}"
-          git push origin "$TAG"
+          git tag -f -a "$TAG" -m "Release ${{ inputs.version }}"
 
       - name: Restore
         run: dotnet restore MicroStack.slnx
@@ -99,10 +98,6 @@ jobs:
 
       - name: Pack NuGet packages
         run: dotnet pack src/MicroStack.Aspire.Hosting/MicroStack.Aspire.Hosting.csproj -c Release --no-build --output ./packages
-
-      - name: Push to NuGet.org
-        if: ${{ inputs.push_to_nuget }}
-        run: dotnet nuget push "./packages/*.nupkg" --source https://api.nuget.org/v3/index.json --api-key ${{ secrets.NUGET_ORG_APIKEY }} --skip-duplicate
 
       - name: Upload NuGet packages
         uses: actions/upload-artifact@v5
@@ -170,11 +165,29 @@ jobs:
           docker push ghcr.io/${{ github.repository_owner }}/microstack:${{ inputs.version }}
           docker push ghcr.io/${{ github.repository_owner }}/microstack:latest
 
+      - name: Push to NuGet.org
+        if: ${{ inputs.push_to_nuget }}
+        run: dotnet nuget push "./packages/*.nupkg" --source https://api.nuget.org/v3/index.json --api-key ${{ secrets.NUGET_ORG_APIKEY }} --skip-duplicate
+
+      - name: Push tag
+        run: git push origin "v${{ inputs.version }}"
+
+      - name: Select release notes
+        id: notes
+        run: |
+          NOTES=".github/release-notes/v${{ inputs.version }}.md"
+          if [ ! -f "$NOTES" ]; then
+            echo "No curated release notes at $NOTES; using generated notes only."
+            NOTES=""
+          fi
+          echo "path=$NOTES" >> "$GITHUB_OUTPUT"
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ inputs.version }}
           name: MicroStack ${{ inputs.version }}
+          body_path: ${{ steps.notes.outputs.path }}
           draft: false
           prerelease: ${{ contains(inputs.version, '-') }}
           generate_release_notes: true
