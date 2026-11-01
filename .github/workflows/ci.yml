@@ -54,8 +54,22 @@ jobs:
           cache: pip
           cache-dependency-path: examples/testcontainers/python/requirements.lock
 
+      - name: Test calendar versioning
+        run: dotnet run --file scripts/calendar-version.cs -- --test
+
       - name: Restore
         run: dotnet restore MicroStack.slnx
+
+      - name: Test SDK container version tags
+        run: |
+          dotnet msbuild src/MicroStack/MicroStack.csproj \
+            -target:ComputeContainerConfig -p:MinVerVersionOverride=2026.1101.7 \
+            -getItem:ContainerImageTags -v:q |
+            jq -e '[.Items.ContainerImageTags[].Identity] == ["2026.1101.7", "latest"]'
+          dotnet msbuild src/MicroStack/MicroStack.csproj \
+            -target:ComputeContainerConfig -p:PublishImageTag=custom \
+            -getItem:ContainerImageTags -v:q |
+            jq -e '[.Items.ContainerImageTags[].Identity] == ["custom"]'
 
       - name: Build
         run: dotnet build MicroStack.slnx -c Release --no-restore
@@ -117,7 +131,9 @@ jobs:
           npm test
 
       - name: Smoke test container
-        run: sh scripts/smoke-container.sh microstack:ci
+        env:
+          MICROSTACK_EXPECTED_VERSION: 0.0.0-dev
+        run: dotnet run --file scripts/calendar-version.cs -- --smoke-container microstack:ci
 
       - name: Report container image size
         run: docker images microstack

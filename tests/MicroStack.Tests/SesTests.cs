@@ -3,6 +3,8 @@ using Amazon.SimpleEmail;
 using Amazon.SimpleEmailV2;
 using Amazon.SimpleEmailV2.Model;
 using Amazon.Runtime;
+using System.Net.Http.Json;
+using System.Text.Json;
 using SesV1 = Amazon.SimpleEmail;
 using SesV2 = Amazon.SimpleEmailV2;
 
@@ -494,6 +496,16 @@ public sealed class SesTests(MicroStackFixture fixture) : IClassFixture<MicroSta
 
         var list2 = await _sesV2.ListConfigurationSetsAsync(new SesV2.Model.ListConfigurationSetsRequest());
         list2.ConfigurationSets.ShouldNotContain("my-cfg-set");
+    }
+
+    [Fact]
+    public async Task V2ListRoutesRemainAvailableOverGet()
+    {
+        var identities = await fixture.HttpClient.GetFromJsonAsync<JsonElement>("/v2/email/identities");
+        identities.GetProperty("EmailIdentities").GetArrayLength().ShouldBe(0);
+
+        var configurationSets = await fixture.HttpClient.GetFromJsonAsync<JsonElement>("/v2/email/configuration-sets");
+        configurationSets.GetProperty("ConfigurationSets").GetArrayLength().ShouldBe(0);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

@@ -11,9 +11,14 @@ COPY src/MicroStack.Admin.Contracts/MicroStack.Admin.Contracts.csproj src/MicroS
 
 RUN dotnet restore src/MicroStack/MicroStack.csproj -r linux-musl-x64
 
+# The build context has no Git history, so the version is supplied explicitly.
+# Release builds pass the calendar version (YYYY.MMDD.N); other builds are marked as development builds.
+ARG MICROSTACK_VERSION=0.0.0-dev
+
 # Copy source and publish the API with its browser assets
 COPY src/ src/
-RUN dotnet publish src/MicroStack/MicroStack.csproj -c Release -r linux-musl-x64 -o /out/microstack
+RUN dotnet publish src/MicroStack/MicroStack.csproj -c Release -r linux-musl-x64 -o /out/microstack \
+    -p:MinVerVersionOverride="$MICROSTACK_VERSION"
 
 FROM mcr.microsoft.com/dotnet/runtime-deps:10.0-alpine
 WORKDIR /app

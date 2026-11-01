@@ -1,0 +1,1071 @@
+using System.Net;
+using System.Net.Http.Headers;
+using System.Diagnostics;
+using System.Globalization;
+using System.Numerics;
+using System.Runtime.InteropServices;
+using System.Text.RegularExpressions;
+using System.Text.Json;
+
+if (args is ["--test"])
+{
+    CalendarVersionTests.Run();
+    await CalendarVersionTests.ContainerSmokeTests.RunAsync();
+    return;
+}
+
+if (args.Length > 0 && args[0] == "--smoke-container")
+{
+    using var cancellation = new CancellationTokenSource();
+    var signalExitCode = 0;
+    void Interrupt(int exitCode)
+    {
+        Interlocked.CompareExchange(ref signalExitCode, exitCode, 0);
+        cancellation.Cancel();
+    }
+
+    using var interruptSignal = OperatingSystem.IsWindows()
+        ? null
+        : PosixSignalRegistration.Create(PosixSignal.SIGINT, context =>
+        {
+            context.Cancel = true;
+            Interrupt(130);
+        });
+    using var terminationSignal = OperatingSystem.IsWindows()
+        ? null
+        : PosixSignalRegistration.Create(PosixSignal.SIGTERM, context =>
+        {
+            context.Cancel = true;
+            Interrupt(143);
+        });
+    ConsoleCancelEventHandler? cancelHandler = null;
+    if (OperatingSystem.IsWindows())
+    {
+        cancelHandler = (_, context) =>
+        {
+            context.Cancel = true;
+            Interrupt(130);
+        };
+        Console.CancelKeyPress += cancelHandler;
+    }
+
+    try
+    {
+        var exitCode = await ContainerSmokeCli.RunAsync(args[1..], Console.Out, Console.Error, cancellation.Token);
+        var interrupted = Volatile.Read(ref signalExitCode);
+        Environment.ExitCode = interrupted != 0 ? interrupted : exitCode;
+    }
+    finally
+    {
+        if (cancelHandler is not null)
+        {
+            Console.CancelKeyPress -= cancelHandler;
+        }
+    }
+
+    return;
+}
+
+Environment.ExitCode = CalendarVersionCli.Run(args, Console.Out, Console.Error);
+
+internal static class CalendarVersionCli
+{
+    public static int Run(string[] args, TextWriter output, TextWriter error)
+    {
+        try
+        {
+            var options = CalendarVersionOptions.Parse(args);
+            var releaseDate = options.Date ?? DateOnly.FromDateTime(DateTime.UtcNow);
+            var tags = options.TagsFile is null
+                ? CalendarVersion.ReadRemoteTags()
+                : File.ReadAllText(options.TagsFile);
+            output.WriteLine(CalendarVersion.Next(releaseDate, tags));
+            return 0;
+        }
+        catch (Exception exception) when (exception is ArgumentException or IOException or InvalidOperationException or UnauthorizedAccessException)
+        {
+            error.WriteLine($"calendar-version: {exception.Message}");
+            return 1;
+        }
+    }
+}
+
+internal sealed record ContainerSmokeOptions(string Image, string? ExpectedVersion, int HostPort)
+{
+    public static ContainerSmokeOptions Parse(string[] args)
+    {
+        if (args.Length == 0 || string.IsNullOrWhiteSpace(args[0]) || args[0].StartsWith("--", StringComparison.Ordinal))
+        {
+            throw new ArgumentException("usage: --smoke-container IMAGE [--expected-version VERSION] [--port PORT]");
+        }
+
+        var image = args[0];
+        var expectedVersion = Environment.GetEnvironmentVariable("MICROSTACK_EXPECTED_VERSION");
+        if (string.IsNullOrEmpty(expectedVersion))
+        {
+            expectedVersion = null;
+        }
+
+        var configuredPort = Environment.GetEnvironmentVariable("MICROSTACK_SMOKE_API_PORT");
+        var port = 4566;
+        if (!string.IsNullOrEmpty(configuredPort) &&
+            (!int.TryParse(configuredPort, out port) || port is < 1 or > 65535))
+        {
+            throw new ArgumentException("MICROSTACK_SMOKE_API_PORT must be between 1 and 65535");
+        }
+
+        for (var index = 1; index < args.Length; index++)
+        {
+            switch (args[index])
+            {
+                case "--expected-version":
+                    if (++index >= args.Length || string.IsNullOrWhiteSpace(args[index]))
+                    {
+                        throw new ArgumentException("--expected-version requires a value");
+                    }
+
+                    expectedVersion = args[index];
+                    break;
+
+                case "--port":
+                    if (++index >= args.Length || !int.TryParse(args[index], out port) || port is < 1 or > 65535)
+                    {
+                        throw new ArgumentException("--port requires a number between 1 and 65535");
+                    }
+
+                    break;
+
+                default:
+                    throw new ArgumentException($"unknown smoke-container argument: {args[index]}");
+            }
+        }
+
+        if (port is < 1 or > 65535)
+        {
+            throw new ArgumentException("MICROSTACK_SMOKE_API_PORT must be between 1 and 65535");
+        }
+
+        return new ContainerSmokeOptions(image, expectedVersion, port);
+    }
+}
+
+internal static class ContainerSmokeCli
+{
+    public static async Task<int> RunAsync(
+        string[] args,
+        TextWriter output,
+        TextWriter error,
+        CancellationToken cancellationToken,
+        Func<string[], Task<string>>? runDocker = null,
+        Func<ContainerSmokeOptions, CancellationToken, Task>? runSmoke = null)
+    {
+        var docker = runDocker ?? Docker.RunAsync;
+        var smoke = runSmoke ?? ((options, token) => ContainerSmoke.RunAsync(options, token));
+        string? containerId = null;
+        string? containerName = null;
+        var exitCode = 1;
+        try
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var options = ContainerSmokeOptions.Parse(args);
+            containerName = $"microstack-smoke-{Guid.NewGuid():N}";
+            containerId = await docker(
+                ["run", "--rm", "-d", "--name", containerName, "-p", $"127.0.0.1:{options.HostPort}:4566", options.Image]);
+            cancellationToken.ThrowIfCancellationRequested();
+            await smoke(options, cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+            exitCode = 0;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            error.WriteLine("container-smoke: interrupted");
+        }
+        catch (Exception exception) when (exception is ArgumentException or IOException or InvalidOperationException or HttpRequestException or JsonException or TaskCanceledException)
+        {
+            error.WriteLine($"container-smoke: {exception.Message}");
+        }
+        finally
+        {
+            var cleanupTarget = containerId ?? (cancellationToken.IsCancellationRequested ? containerName : null);
+            if (cleanupTarget is not null)
+            {
+                if (exitCode != 0)
+                {
+                    try
+                    {
+                        error.WriteLine(await docker(["logs", cleanupTarget]));
+                    }
+                    catch (Exception exception) when (exception is IOException or InvalidOperationException)
+                    {
+                        error.WriteLine($"container-smoke: could not read container logs: {exception.Message}");
+                    }
+                }
+
+                try
+                {
+                    await docker(["rm", "-f", cleanupTarget]);
+                }
+                catch (Exception exception) when (exception is IOException or InvalidOperationException)
+                {
+                    error.WriteLine($"container-smoke: could not remove container: {exception.Message}");
+                    exitCode = 1;
+                }
+            }
+        }
+
+        if (exitCode == 0 && cancellationToken.IsCancellationRequested)
+        {
+            error.WriteLine("container-smoke: interrupted");
+            exitCode = 1;
+        }
+
+        if (exitCode == 0)
+        {
+            output.WriteLine("API, same-port UI, deep links, framework, icons, and browser redirect passed.");
+        }
+
+        return exitCode;
+    }
+}
+
+internal static class Docker
+{
+    public static async Task<string> RunAsync(string[] args)
+    {
+        using var process = new Process
+        {
+            StartInfo = new ProcessStartInfo("docker")
+            {
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+            },
+        };
+        foreach (var argument in args)
+        {
+            process.StartInfo.ArgumentList.Add(argument);
+        }
+
+        try
+        {
+            if (!process.Start())
+            {
+                throw new InvalidOperationException("failed to start docker");
+            }
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or System.ComponentModel.Win32Exception)
+        {
+            throw new InvalidOperationException("failed to run docker", exception);
+        }
+
+        var outputTask = process.StandardOutput.ReadToEndAsync();
+        var errorTask = process.StandardError.ReadToEndAsync();
+        await process.WaitForExitAsync();
+        var output = await outputTask;
+        var error = await errorTask;
+        if (process.ExitCode != 0)
+        {
+            throw new InvalidOperationException(
+                $"docker {string.Join(' ', args)} failed{(string.IsNullOrWhiteSpace(error) ? "" : $": {error.Trim()}")}");
+        }
+
+        return output.Trim();
+    }
+}
+
+internal static class ContainerSmoke
+{
+    private static readonly string[] HealthPaths = ["/_microstack/health", "/_localstack/health", "/health"];
+
+    public static async Task RunAsync(
+        ContainerSmokeOptions options,
+        CancellationToken cancellationToken,
+        HttpMessageHandler? handler = null)
+    {
+        using var client = new HttpClient(handler ?? new HttpClientHandler { AllowAutoRedirect = false })
+        {
+            Timeout = TimeSpan.FromSeconds(5),
+        };
+        var baseAddress = new Uri($"http://localhost:{options.HostPort}");
+
+        var health = await GetWithRetryAsync(client, new Uri(baseAddress, HealthPaths[0]), cancellationToken);
+        if (options.ExpectedVersion is not null)
+        {
+            ValidateHealthVersion(HealthPaths[0], health, options.ExpectedVersion);
+            foreach (var path in HealthPaths.Skip(1))
+            {
+                ValidateHealthVersion(
+                    path,
+                    await GetAsync(client, new Uri(baseAddress, path), cancellationToken),
+                    options.ExpectedVersion);
+            }
+        }
+
+        var ui = await GetAsync(client, new Uri(baseAddress, "/ui/"), cancellationToken);
+        _ = await GetAsync(client, new Uri(baseAddress, "/_microstack/admin/v1/services"), cancellationToken);
+
+        var deepLink = await GetAsync(client, new Uri(baseAddress, "/ui/services/s3"), cancellationToken);
+        if (!deepLink.Contains("<html", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException("deep link /ui/services/s3 did not return HTML");
+        }
+
+        var icon = await GetAsync(client, new Uri(baseAddress, "/ui/icons/s3.svg"), cancellationToken);
+        if (!icon.Contains("<svg", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("UI icon /ui/icons/s3.svg did not return SVG");
+        }
+
+        var frameworkMatch = Regex.Match(ui, "src=\"(?<path>_framework/[^\"]+)\"", RegexOptions.CultureInvariant);
+        if (!frameworkMatch.Success)
+        {
+            throw new InvalidOperationException("UI did not reference a framework script");
+        }
+
+        using (var frameworkResponse = await client.GetAsync(
+                   new Uri(baseAddress, $"/ui/{frameworkMatch.Groups["path"].Value}"),
+                   cancellationToken))
+        {
+            frameworkResponse.EnsureSuccessStatusCode();
+            var contentType = frameworkResponse.Content.Headers.ContentType?.MediaType ?? "";
+            if (!contentType.Contains("javascript", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException($"framework script returned {contentType}, not JavaScript");
+            }
+        }
+
+        using var redirectRequest = new HttpRequestMessage(HttpMethod.Get, baseAddress);
+        redirectRequest.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("text/html"));
+        using var redirectResponse = await client.SendAsync(redirectRequest, cancellationToken);
+        if (redirectResponse.StatusCode != HttpStatusCode.Found ||
+            redirectResponse.Headers.Location?.OriginalString != "/ui/")
+        {
+            throw new InvalidOperationException("browser request to / did not redirect to /ui/");
+        }
+    }
+
+    public static void ValidateHealthVersion(string path, string json, string expectedVersion)
+    {
+        using var document = JsonDocument.Parse(json);
+        var version = document.RootElement.ValueKind == JsonValueKind.Object &&
+                      document.RootElement.TryGetProperty("version", out var versionElement) &&
+                      versionElement.ValueKind == JsonValueKind.String
+            ? versionElement.GetString()
+            : null;
+        if (!string.Equals(version, expectedVersion, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"{path} reported an unexpected version (expected {expectedVersion}, got {version ?? "missing"}): {json}");
+        }
+    }
+
+    private static async Task<string> GetAsync(HttpClient client, Uri uri, CancellationToken cancellationToken)
+    {
+        using var response = await client.GetAsync(uri, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadAsStringAsync(cancellationToken);
+    }
+
+    private static async Task<string> GetWithRetryAsync(
+        HttpClient client,
+        Uri uri,
+        CancellationToken cancellationToken)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(30);
+        Exception? lastError = null;
+        while (DateTime.UtcNow < deadline)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            try
+            {
+                return await GetAsync(client, uri, cancellationToken);
+            }
+            catch (Exception exception) when (
+                !cancellationToken.IsCancellationRequested &&
+                (exception is HttpRequestException or TaskCanceledException))
+            {
+                lastError = exception;
+                await Task.Delay(TimeSpan.FromSeconds(1), cancellationToken);
+            }
+        }
+
+        throw new IOException($"container did not become ready at {uri.PathAndQuery}", lastError);
+    }
+}
+
+internal sealed record CalendarVersionOptions(DateOnly? Date, string? TagsFile)
+{
+    public static CalendarVersionOptions Parse(string[] args)
+    {
+        DateOnly? date = null;
+        string? tagsFile = null;
+
+        for (var index = 0; index < args.Length; index++)
+        {
+            switch (args[index])
+            {
+                case "--date":
+                    if (++index >= args.Length || string.IsNullOrWhiteSpace(args[index]))
+                    {
+                        throw new ArgumentException("--date requires a value");
+                    }
+
+                    if (!DateOnly.TryParseExact(args[index], "yyyy-MM-dd", CultureInfo.InvariantCulture,
+                            DateTimeStyles.None, out var parsedDate))
+                    {
+                        throw new ArgumentException(
+                            $"invalid date '{args[index]}'; expected a valid date in YYYY-MM-DD format");
+                    }
+
+                    if (parsedDate.Year < 1000)
+                    {
+                        throw new ArgumentException("release year must be a four-digit version component");
+                    }
+
+                    date = parsedDate;
+                    break;
+
+                case "--tags-file":
+                    if (++index >= args.Length || string.IsNullOrWhiteSpace(args[index]))
+                    {
+                        throw new ArgumentException("--tags-file requires a value");
+                    }
+
+                    tagsFile = args[index];
+                    break;
+
+                default:
+                    throw new ArgumentException($"unknown argument: {args[index]}");
+            }
+        }
+
+        return new CalendarVersionOptions(date, tagsFile);
+    }
+}
+
+internal static partial class CalendarVersion
+{
+    private const int MaximumComponent = 65534;
+
+    [GeneratedRegex(@"^v(?<year>[1-9][0-9]{3})\.(?<monthDay>[1-9][0-9]{2,3})\.(?<counter>[1-9][0-9]*)$",
+        RegexOptions.CultureInvariant)]
+    private static partial Regex CalendarTagPattern();
+
+    public static string Next(DateOnly releaseDate, string tags)
+    {
+        if (releaseDate.Year < 1000)
+        {
+            throw new ArgumentException("release year must be a four-digit version component");
+        }
+
+        var releases = ParseTags(tags);
+        var latest = releases
+            .OrderBy(release => release.Date)
+            .ThenBy(release => release.Counter)
+            .LastOrDefault();
+
+        if (latest is not null && releaseDate < latest.Date)
+        {
+            throw new InvalidOperationException(
+                $"release date {releaseDate:yyyy-MM-dd} is earlier than the latest release v{latest.Tag}");
+        }
+
+        var counter = BigInteger.One;
+        if (latest is not null && releaseDate == latest.Date)
+        {
+            if (latest.Counter >= MaximumComponent)
+            {
+                throw new InvalidOperationException(
+                    $"release counter for {releaseDate:yyyy-MM-dd} exceeds the .NET version component limit");
+            }
+
+            counter = latest.Counter + BigInteger.One;
+        }
+
+        var monthDay = releaseDate.Month * 100 + releaseDate.Day;
+        return string.Create(CultureInfo.InvariantCulture, $"{releaseDate.Year}.{monthDay}.{counter}");
+    }
+
+    public static string ReadRemoteTags(string remote = "origin")
+    {
+        using var process = new Process
+        {
+            StartInfo = new ProcessStartInfo("git", ["ls-remote", "--tags", "--refs", remote])
+            {
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+            },
+        };
+
+        try
+        {
+            if (!process.Start())
+            {
+                throw new InvalidOperationException($"failed to start git while listing tags from {remote}");
+            }
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or System.ComponentModel.Win32Exception)
+        {
+            throw new InvalidOperationException($"failed to list tags from {remote}", exception);
+        }
+
+        var outputTask = process.StandardOutput.ReadToEndAsync();
+        var errorTask = process.StandardError.ReadToEndAsync();
+        process.WaitForExit();
+        var output = outputTask.GetAwaiter().GetResult();
+        var error = errorTask.GetAwaiter().GetResult();
+        if (process.ExitCode != 0)
+        {
+            throw new InvalidOperationException(
+                $"failed to list tags from {remote}{(string.IsNullOrWhiteSpace(error) ? "" : $": {error.Trim()}")}");
+        }
+
+        return output;
+    }
+
+    private static List<ReleaseTag> ParseTags(string tags)
+    {
+        var releases = new List<ReleaseTag>();
+        foreach (var line in tags.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var tab = line.LastIndexOf('\t');
+            var tag = tab >= 0 ? line[(tab + 1)..].TrimEnd('\r') : line.TrimEnd('\r');
+            if (tag.StartsWith("refs/tags/", StringComparison.Ordinal))
+            {
+                tag = tag["refs/tags/".Length..];
+            }
+
+            if (tag.EndsWith("^{}", StringComparison.Ordinal))
+            {
+                tag = tag[..^3];
+            }
+
+            var match = CalendarTagPattern().Match(tag);
+            if (!match.Success ||
+                !int.TryParse(match.Groups["year"].Value, NumberStyles.None, CultureInfo.InvariantCulture,
+                    out var year) ||
+                !int.TryParse(match.Groups["monthDay"].Value, NumberStyles.None, CultureInfo.InvariantCulture,
+                    out var monthDay) ||
+                !BigInteger.TryParse(match.Groups["counter"].Value, NumberStyles.None, CultureInfo.InvariantCulture,
+                    out var counter))
+            {
+                continue;
+            }
+
+            var month = monthDay / 100;
+            var day = monthDay % 100;
+            if (year < 1000 || month is < 1 or > 12 || day < 1 ||
+                !DateOnly.TryParseExact(
+                    $"{year:D4}-{month:D2}-{day:D2}",
+                    "yyyy-MM-dd",
+                    CultureInfo.InvariantCulture,
+                    DateTimeStyles.None,
+                    out var releaseDate))
+            {
+                throw new InvalidOperationException($"invalid date in release tag {tag}");
+            }
+
+            releases.Add(new ReleaseTag(releaseDate, counter, tag));
+        }
+
+        return releases;
+    }
+
+    private sealed record ReleaseTag(DateOnly Date, BigInteger Counter, string Tag);
+}
+
+internal static class CalendarVersionTests
+{
+    private static int failures;
+
+    public static void Run()
+    {
+        Expect("first release with no tags", "2026-11-01", "", "2026.1101.1");
+        Expect("legacy tags are ignored", "2026-11-01", "v0.1.0\nv0.4.0\nv0.5.0-beta.1", "2026.1101.1");
+        Expect("second release on the same day", "2026-11-01", "v0.4.0\nv2026.1101.1", "2026.1101.2");
+        Expect("counter uses numeric ordering",
+            "2026-11-01",
+            "v2026.1101.1\nv2026.1101.2\nv2026.1101.10\nv2026.1101.9",
+            "2026.1101.11");
+        Expect("counter resets on a new day", "2026-11-02", "v2026.1101.3", "2026.1102.1");
+        Expect("year rollover with January date", "2027-01-05", "v2026.1231.2", "2027.105.1");
+        Expect("January after December of the previous year",
+            "2028-01-01",
+            "v2027.105.1\nv2027.1231.1",
+            "2028.101.1");
+        Expect("January counter", "2027-01-05", "v2027.105.4", "2027.105.5");
+        Expect("month-day uses numeric rather than lexical ordering",
+            "2027-10-01",
+            "v2027.105.3\nv2027.1001.1",
+            "2027.1001.2");
+        ExpectFailure("month-day ordering prevents backdating",
+            "2027-09-30",
+            "v2027.105.3\nv2027.1001.1",
+            "earlier than the latest release");
+        Expect("leap day", "2028-02-29", "", "2028.229.1");
+        Expect("leap-day release tag is recognized", "2028-02-29", "v2028.229.1", "2028.229.2");
+        Expect("git ls-remote output",
+            "2026-11-01",
+            "abc123\trefs/tags/v2026.1101.1\ndef456\trefs/tags/v2026.1101.1^{}\nfed789\trefs/tags/v0.4.0",
+            "2026.1101.2");
+        Expect("non-canonical and prerelease tags are ignored",
+            "2026-11-01",
+            "v2026.1101.1-beta.1\nv2026.01101.5\nv2026.1101.01\nv2026.99.1\nv0001.101.1",
+            "2026.1101.1");
+        Expect("nested refs do not masquerade as release tags",
+            "2026-11-01",
+            "abc123\trefs/tags/archive/refs/tags/v2026.1101.99",
+            "2026.1101.1");
+        Expect("bare refs are recognized", "2026-11-01", "refs/tags/v2026.1101.2", "2026.1101.3");
+        ExpectFailure("invalid tag dates are rejected", "2026-11-30", "v2026.1131.1", "invalid date in release tag");
+        ExpectFailure("non-leap-year tag dates are rejected", "2027-03-01", "v2027.229.1", "invalid date in release tag");
+        ExpectFailure("non-leap century tag dates are rejected", "2100-03-01", "v2100.229.1", "invalid date in release tag");
+        ExpectFailure("backdated release is rejected", "2026-11-01", "v2026.1102.1", "earlier than the latest release");
+        ExpectFailure("backdated release across years is rejected",
+            "2026-12-31",
+            "v2027.105.1",
+            "earlier than the latest release");
+        ExpectFailure("counter overflow is rejected",
+            "2026-11-01",
+            "v2026.1101.65534",
+            "exceeds the .NET version component limit");
+        Expect("largest supported counter", "2026-11-01", "v2026.1101.65533", "2026.1101.65534");
+        ExpectFailure("oversized counter cannot wrap around",
+            "2026-11-01",
+            "v2026.1101.65533\nv2026.1101.18446744073709551615",
+            "exceeds the .NET version component limit");
+        ExpectFailure("arbitrarily large counter is rejected",
+            "2026-11-01",
+            "v2026.1101.184467440737095516160000000000000000000",
+            "exceeds the .NET version component limit");
+        ExpectFailure("invalid date is rejected", "2027-02-29", "", "invalid date");
+        ExpectFailure("malformed date is rejected", "2026-1-1", "", "invalid date");
+        ExpectFailure("zero month is rejected explicitly", "2026-00-01", "", "invalid date");
+        ExpectFailure("zero day is rejected explicitly", "2026-11-00", "", "invalid date");
+        ExpectFailure("year must remain a four-digit component", "0001-01-01", "", "four-digit version component");
+        ExpectOptionFailure("empty date fails explicitly", ["--date", ""], "--date requires a value");
+        ExpectOptionFailure("empty tags file fails explicitly", ["--tags-file", ""], "--tags-file requires a value");
+        ExpectOptionFailure("invalid CLI date is rejected", ["--date", "2027-02-29"], "invalid date");
+        ExpectOptionFailure("CLI year must be a four-digit component",
+            ["--date", "0001-01-01"],
+            "four-digit version component");
+        var missingTags = Path.Combine(Path.GetTempPath(), $"microstack-missing-tags-{Guid.NewGuid():N}");
+        ExpectCliFailure("missing tag file fails cleanly", ["--tags-file", missingTags]);
+        ExpectCliFailure("directory tag file fails cleanly", ["--tags-file", Path.GetTempPath()]);
+        var missingRemote = Path.Combine(Path.GetTempPath(), $"microstack-missing-remote-{Guid.NewGuid():N}");
+        ExpectFailure("remote lookup failure is reported",
+            "2026-11-01",
+            "",
+            "failed to list tags from",
+            () => CalendarVersion.ReadRemoteTags(missingRemote));
+
+        if (failures != 0)
+        {
+            throw new InvalidOperationException($"{failures} calendar-version test(s) failed");
+        }
+
+        Console.WriteLine("All calendar-version tests passed.");
+    }
+
+    private static void Expect(string name, string date, string tags, string expected)
+    {
+        var actual = CalendarVersion.Next(ParseDate(date), tags);
+        if (actual != expected)
+        {
+            Fail($"{name}: expected '{expected}', got '{actual}'");
+            return;
+        }
+
+        Console.WriteLine($"ok   - {name}");
+    }
+
+    private static void ExpectFailure(
+        string name,
+        string date,
+        string tags,
+        string message,
+        Func<string>? tagSource = null)
+    {
+        try
+        {
+            var input = tagSource is null ? tags : tagSource();
+            CalendarVersion.Next(ParseDate(date), input);
+            Fail($"{name}: expected failure");
+        }
+        catch (Exception exception) when (exception.Message.Contains(message, StringComparison.Ordinal))
+        {
+            Console.WriteLine($"ok   - {name}");
+        }
+    }
+
+    internal static class ContainerSmokeTests
+    {
+        public static async Task RunAsync()
+        {
+            ExpectHealthVersion(
+                "matching health version passes",
+                "/_microstack/health",
+                """{"edition":"light","version":"2026.1101.7"}""",
+                "2026.1101.7",
+                shouldPass: true);
+            ExpectHealthVersion(
+                "nested or regex-like version cannot mask a mismatch",
+                "/_microstack/health",
+                """{"services":{"version":"2026.1101.7"},"version":"2026X1101X7"}""",
+                "2026.1101.7",
+                shouldPass: false);
+            ExpectHealthVersion(
+                "health alias version mismatch fails",
+                "/_localstack/health",
+                """{"version":"2026.1101.8"}""",
+                "2026.1101.7",
+                shouldPass: false);
+            ExpectHealthVersion(
+                "missing health version fails",
+                "/health",
+                """{"edition":"light"}""",
+                "2026.1101.7",
+                shouldPass: false);
+            ExpectOptionFailure("smoke command requires an image", [], "usage:");
+            ExpectOptionFailure("invalid smoke port is rejected", ["image", "--port", "0"], "--port requires");
+            ExpectOptionFailure("invalid smoke port text is rejected", ["image", "--port", "nope"], "--port requires");
+            var originalPort = Environment.GetEnvironmentVariable("MICROSTACK_SMOKE_API_PORT");
+            try
+            {
+                Environment.SetEnvironmentVariable("MICROSTACK_SMOKE_API_PORT", "nope");
+                ExpectOptionFailure("invalid smoke port environment is rejected",
+                    ["image"],
+                    "MICROSTACK_SMOKE_API_PORT");
+            }
+            finally
+            {
+                Environment.SetEnvironmentVariable("MICROSTACK_SMOKE_API_PORT", originalPort);
+            }
+
+            await ExpectSmokeRequestsAsync();
+            await ExpectInterruptedCleanupAsync();
+            await ExpectInterruptedStartupAfterIdAsync();
+            await ExpectInterruptedStartupCleanupAsync();
+            await ExpectCancelledHttpRequestAsync();
+            await ExpectCleanupFailureAsync();
+            Console.WriteLine("All container-smoke tests passed.");
+        }
+
+        private static async Task ExpectSmokeRequestsAsync()
+        {
+            var options = new ContainerSmokeOptions("image", "2026.1101.7", 4566);
+            var handler = new SmokeResponseHandler();
+            await ContainerSmoke.RunAsync(options, CancellationToken.None, handler);
+            string[] expectedPaths =
+            [
+                "/_microstack/health",
+                "/_localstack/health",
+                "/health",
+                "/ui/",
+                "/_microstack/admin/v1/services",
+                "/ui/services/s3",
+                "/ui/icons/s3.svg",
+                "/ui/_framework/blazor.web.js",
+                "/",
+            ];
+            if (!handler.Requests.SequenceEqual(expectedPaths))
+            {
+                throw new InvalidOperationException("smoke checks did not request every expected endpoint");
+            }
+
+            Console.WriteLine("ok   - smoke checks exercise health aliases, UI assets, and redirect");
+            foreach (var path in expectedPaths.Take(3))
+            {
+                try
+                {
+                    await ContainerSmoke.RunAsync(options, CancellationToken.None, new SmokeResponseHandler(path));
+                    throw new InvalidOperationException($"{path}: expected a health version failure");
+                }
+                catch (InvalidOperationException exception) when (
+                    exception.Message.Contains("reported an unexpected version", StringComparison.Ordinal) &&
+                    exception.Message.Contains(path, StringComparison.Ordinal))
+                {
+                    Console.WriteLine($"ok   - smoke check rejects a version mismatch at {path}");
+                }
+            }
+        }
+
+        private static async Task ExpectInterruptedCleanupAsync()
+        {
+            using var cancellation = new CancellationTokenSource();
+            using var output = new StringWriter(CultureInfo.InvariantCulture);
+            using var error = new StringWriter(CultureInfo.InvariantCulture);
+            var commands = new List<string[]>();
+
+            Task<string> RunDocker(string[] args)
+            {
+                commands.Add(args);
+                return Task.FromResult(args[0] == "run" ? "container-id" : "");
+            }
+
+            Task RunSmoke(ContainerSmokeOptions _, CancellationToken token)
+            {
+                cancellation.Cancel();
+                return Task.Delay(Timeout.InfiniteTimeSpan, token);
+            }
+
+            var result = await ContainerSmokeCli.RunAsync(
+                ["image"], output, error, cancellation.Token, RunDocker, RunSmoke);
+            if (result != 1 || output.ToString().Length != 0 ||
+                !error.ToString().Contains("interrupted", StringComparison.Ordinal) ||
+                commands.Count != 3 || commands[1][0] != "logs" ||
+                !commands[2].SequenceEqual(["rm", "-f", "container-id"]))
+            {
+                throw new InvalidOperationException("interrupted smoke check did not remove the container");
+            }
+
+            Console.WriteLine("ok   - interrupted smoke checks remove the container");
+        }
+
+        private static async Task ExpectInterruptedStartupAfterIdAsync()
+        {
+            using var cancellation = new CancellationTokenSource();
+            using var output = new StringWriter(CultureInfo.InvariantCulture);
+            using var error = new StringWriter(CultureInfo.InvariantCulture);
+            var commands = new List<string[]>();
+            var smokeStarted = false;
+
+            Task<string> RunDocker(string[] args)
+            {
+                commands.Add(args);
+                if (args[0] == "run")
+                {
+                    cancellation.Cancel();
+                    return Task.FromResult("container-id");
+                }
+
+                return Task.FromResult("");
+            }
+
+            Task RunSmoke(ContainerSmokeOptions _, CancellationToken token)
+            {
+                smokeStarted = true;
+                return Task.CompletedTask;
+            }
+
+            var result = await ContainerSmokeCli.RunAsync(
+                ["image"], output, error, cancellation.Token, RunDocker, RunSmoke);
+            if (result != 1 || smokeStarted || commands.Count != 3 ||
+                !commands[2].SequenceEqual(["rm", "-f", "container-id"]))
+            {
+                throw new InvalidOperationException("interrupted startup did not remove the returned container");
+            }
+
+            Console.WriteLine("ok   - interrupted startup removes the returned container before smoke checks");
+        }
+
+        private static async Task ExpectInterruptedStartupCleanupAsync()
+        {
+            using var cancellation = new CancellationTokenSource();
+            using var output = new StringWriter(CultureInfo.InvariantCulture);
+            using var error = new StringWriter(CultureInfo.InvariantCulture);
+            var commands = new List<string[]>();
+            string? containerName = null;
+
+            Task<string> RunDocker(string[] args)
+            {
+                commands.Add(args);
+                if (args[0] == "run")
+                {
+                    containerName = args[Array.IndexOf(args, "--name") + 1];
+                    cancellation.Cancel();
+                    throw new InvalidOperationException("container launch interrupted");
+                }
+
+                return Task.FromResult("");
+            }
+
+            var result = await ContainerSmokeCli.RunAsync(
+                ["image"], output, error, cancellation.Token, RunDocker, (_, _) => Task.CompletedTask);
+            if (result != 1 || containerName is null || commands.Count != 3 ||
+                !commands[2].SequenceEqual(["rm", "-f", containerName]))
+            {
+                throw new InvalidOperationException("interrupted launch did not remove the named container");
+            }
+
+            Console.WriteLine("ok   - interrupted container launch removes the named container");
+        }
+
+        private static async Task ExpectCancelledHttpRequestAsync()
+        {
+            using var cancellation = new CancellationTokenSource();
+            try
+            {
+                await ContainerSmoke.RunAsync(
+                    new ContainerSmokeOptions("image", null, 4566),
+                    cancellation.Token,
+                    new CancelledHealthHandler(cancellation));
+            }
+            catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+            {
+                Console.WriteLine("ok   - cancellation stops health retries");
+                return;
+            }
+
+            throw new InvalidOperationException("cancelled health request should have stopped the smoke checks");
+        }
+
+        private static async Task ExpectCleanupFailureAsync()
+        {
+            using var output = new StringWriter(CultureInfo.InvariantCulture);
+            using var error = new StringWriter(CultureInfo.InvariantCulture);
+            Task<string> RunDocker(string[] args) =>
+                args[0] == "rm"
+                    ? Task.FromException<string>(new InvalidOperationException("removal failed"))
+                    : Task.FromResult("container-id");
+
+            var result = await ContainerSmokeCli.RunAsync(
+                ["image"], output, error, CancellationToken.None, RunDocker, (_, _) => Task.CompletedTask);
+            if (result != 1 || output.ToString().Length != 0 ||
+                !error.ToString().Contains("could not remove container", StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException("container removal failure should fail the smoke check");
+            }
+
+            Console.WriteLine("ok   - container removal failures fail the smoke check");
+        }
+
+        private sealed class SmokeResponseHandler(string? mismatchedPath = null) : HttpMessageHandler
+        {
+            public List<string> Requests { get; } = [];
+
+            protected override Task<HttpResponseMessage> SendAsync(
+                HttpRequestMessage request,
+                CancellationToken cancellationToken)
+            {
+                var path = request.RequestUri?.AbsolutePath ?? throw new InvalidOperationException("missing request URI");
+                Requests.Add(path);
+                if (path == "/")
+                {
+                    if (!request.Headers.Accept.Any(value => value.MediaType == "text/html"))
+                    {
+                        throw new InvalidOperationException("browser redirect request must accept HTML");
+                    }
+
+                    var redirect = new HttpResponseMessage(HttpStatusCode.Found);
+                    redirect.Headers.Location = new Uri("/ui/", UriKind.Relative);
+                    return Task.FromResult(redirect);
+                }
+
+                var content = path switch
+                {
+                    "/_microstack/health" or "/_localstack/health" or "/health" =>
+                        $$"""{"version":"{{(path == mismatchedPath ? "2026.1101.8" : "2026.1101.7")}}"}""",
+                    "/ui/" => """<html><script src="_framework/blazor.web.js"></script></html>""",
+                    "/_microstack/admin/v1/services" => "{}",
+                    "/ui/services/s3" => "<html></html>",
+                    "/ui/icons/s3.svg" => "<svg></svg>",
+                    "/ui/_framework/blazor.web.js" => "javascript",
+                    _ => throw new InvalidOperationException($"unexpected smoke request: {path}"),
+                };
+                var response = new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(content) };
+                if (path == "/ui/_framework/blazor.web.js")
+                {
+                    response.Content.Headers.ContentType = new MediaTypeHeaderValue("text/javascript");
+                }
+
+                return Task.FromResult(response);
+            }
+        }
+
+        private sealed class CancelledHealthHandler(CancellationTokenSource cancellation) : HttpMessageHandler
+        {
+            protected override Task<HttpResponseMessage> SendAsync(
+                HttpRequestMessage request,
+                CancellationToken cancellationToken)
+            {
+                cancellation.Cancel();
+                return Task.FromCanceled<HttpResponseMessage>(cancellationToken);
+            }
+        }
+
+        private static void ExpectHealthVersion(
+            string name,
+            string path,
+            string json,
+            string expectedVersion,
+            bool shouldPass)
+        {
+            var failed = false;
+            try
+            {
+                ContainerSmoke.ValidateHealthVersion(path, json, expectedVersion);
+            }
+            catch (InvalidOperationException)
+            {
+                failed = true;
+            }
+
+            if (failed == shouldPass)
+            {
+                throw new InvalidOperationException($"{name}: unexpected validation result");
+            }
+
+            Console.WriteLine($"ok   - {name}");
+        }
+
+        private static void ExpectOptionFailure(string name, string[] args, string message)
+        {
+            try
+            {
+                ContainerSmokeOptions.Parse(args);
+                throw new InvalidOperationException($"{name}: expected failure");
+            }
+            catch (ArgumentException exception) when (exception.Message.Contains(message, StringComparison.Ordinal))
+            {
+                Console.WriteLine($"ok   - {name}");
+            }
+        }
+    }
+
+    private static void ExpectOptionFailure(string name, string[] args, string message)
+    {
+        try
+        {
+            CalendarVersionOptions.Parse(args);
+            Fail($"{name}: expected failure");
+        }
+        catch (ArgumentException exception) when (exception.Message.Contains(message, StringComparison.Ordinal))
+        {
+            Console.WriteLine($"ok   - {name}");
+        }
+    }
+
+    private static void ExpectCliFailure(string name, string[] args)
+    {
+        using var output = new StringWriter(CultureInfo.InvariantCulture);
+        using var error = new StringWriter(CultureInfo.InvariantCulture);
+        var exitCode = CalendarVersionCli.Run(args, output, error);
+        if (exitCode != 1 || output.ToString().Length != 0 ||
+            !error.ToString().StartsWith("calendar-version: ", StringComparison.Ordinal))
+        {
+            Fail($"{name}: unexpected exit code or output");
+            return;
+        }
+
+        Console.WriteLine($"ok   - {name}");
+    }
+
+    private static DateOnly ParseDate(string date)
+    {
+        if (!DateOnly.TryParseExact(date, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None,
+                out var parsed))
+        {
+            throw new ArgumentException("invalid date");
+        }
+
+        return parsed;
+    }
+
+    private static void Fail(string message)
+    {
+        failures++;
+        Console.Error.WriteLine($"FAIL - {message}");
+    }
+}

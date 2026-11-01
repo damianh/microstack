@@ -19,10 +19,17 @@
   <PropertyGroup>
     <ContainerBaseImage>mcr.microsoft.com/dotnet/runtime-deps:10.0-alpine</ContainerBaseImage>
     <ContainerRepository>microstack</ContainerRepository>
-    <ContainerImageTags>$(MinVerVersion);latest</ContainerImageTags>
     <!-- Multi-arch: amd64 + arm64 -->
     <ContainerRuntimeIdentifiers>linux-musl-x64;linux-musl-arm64</ContainerRuntimeIdentifiers>
   </PropertyGroup>
+
+  <Target Name="SetMicroStackContainerImageTags" BeforeTargets="ComputeContainerConfig"
+          DependsOnTargets="MinVer"
+          Condition="'$(ContainerImageTags)' == '' and '$(ContainerImageTag)' == '' and '$(PublishImageTag)' == '' and '$(AutoGenerateImageTag)' != 'true'">
+    <PropertyGroup>
+      <ContainerImageTags>$(MinVerVersion);latest</ContainerImageTags>
+    </PropertyGroup>
+  </Target>
 
   <ItemGroup>
     <ContainerPort Include="4566" Type="tcp" />
@@ -63,7 +70,7 @@
                       ReferenceOutputAssembly="false"
                       GlobalPropertiesToRemove="RuntimeIdentifier;RuntimeIdentifiers;SelfContained;PublishAot;ContainerRuntimeIdentifiers"
                       Condition="'$(RuntimeIdentifier)' == ''" />
-    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.Server" Version="10.0.9" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.Server" Version="10.0.14" />
   </ItemGroup>
 
 </Project>

@@ -148,7 +148,7 @@ foreach (var healthPath in new[] { "/_microstack/health", "/health", "/_localsta
     app.MapGet(healthPath, () =>
     {
         var services = registry.GetServiceStatus();
-        return Results.Ok(new HealthResponse(services, "light", "0.1.0"));
+        return Results.Ok(new HealthResponse(services, "light", MicroStackVersion.Current));
     }).RequireCors(adminCorsPolicy);
 }
 
