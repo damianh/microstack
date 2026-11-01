@@ -55,7 +55,7 @@ jobs:
           cache-dependency-path: examples/testcontainers/python/requirements.lock
 
       - name: Test calendar versioning
-        run: sh scripts/calendar-version.test.sh
+        run: dotnet run --file scripts/calendar-version.cs -- --test
 
       - name: Test health version smoke check
         run: sh scripts/smoke-container.test.sh

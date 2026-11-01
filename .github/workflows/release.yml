@@ -29,20 +29,20 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Resolve calendar version
-        id: version
-        run: |
-          VERSION="$(sh scripts/calendar-version.sh)"
-          echo "Release version: $VERSION"
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          # MSBuild reads environment variables as properties, so every build, pack, and publish uses this exact version.
-          echo "MinVerVersionOverride=$VERSION" >> "$GITHUB_ENV"
-
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v5
         with:
           dotnet-version: '10.0.x'
           dotnet-quality: 'preview'
+
+      - name: Resolve calendar version
+        id: version
+        run: |
+          VERSION="$(dotnet run --file scripts/calendar-version.cs)"
+          echo "Release version: $VERSION"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          # MSBuild reads environment variables as properties, so every build, pack, and publish uses this exact version.
+          echo "MinVerVersionOverride=$VERSION" >> "$GITHUB_ENV"
 
       - name: Setup Java 17
         uses: actions/setup-java@v5
