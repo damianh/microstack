@@ -57,9 +57,6 @@ jobs:
       - name: Test calendar versioning
         run: dotnet run --file scripts/calendar-version.cs -- --test
 
-      - name: Test health version smoke check
-        run: sh scripts/smoke-container.test.sh
-
       - name: Restore
         run: dotnet restore MicroStack.slnx
 
@@ -136,7 +133,7 @@ jobs:
       - name: Smoke test container
         env:
           MICROSTACK_EXPECTED_VERSION: 0.0.0-dev
-        run: sh scripts/smoke-container.sh microstack:ci
+        run: dotnet run --file scripts/calendar-version.cs -- --smoke-container microstack:ci
 
       - name: Report container image size
         run: docker images microstack

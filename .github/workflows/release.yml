@@ -169,7 +169,7 @@ jobs:
       - name: Smoke test container
         env:
           MICROSTACK_EXPECTED_VERSION: ${{ steps.version.outputs.version }}
-        run: sh scripts/smoke-container.sh ghcr.io/${{ github.repository_owner }}/microstack:${{ steps.version.outputs.version }}
+        run: dotnet run --file scripts/calendar-version.cs -- --smoke-container ghcr.io/${{ github.repository_owner }}/microstack:${{ steps.version.outputs.version }}
 
       - name: Push container image to GHCR
         run: |

@@ -1,11 +1,21 @@
+using System.Net;
+using System.Net.Http.Headers;
 using System.Diagnostics;
 using System.Globalization;
 using System.Numerics;
 using System.Text.RegularExpressions;
+using System.Text.Json;
 
 if (args is ["--test"])
 {
     CalendarVersionTests.Run();
+    CalendarVersionTests.ContainerSmokeTests.Run();
+    return;
+}
+
+if (args.Length > 0 && args[0] == "--smoke-container")
+{
+    Environment.ExitCode = await ContainerSmokeCli.RunAsync(args[1..], Console.Out, Console.Error);
     return;
 }
 
@@ -30,6 +40,265 @@ internal static class CalendarVersionCli
             error.WriteLine($"calendar-version: {exception.Message}");
             return 1;
         }
+    }
+}
+
+internal sealed record ContainerSmokeOptions(string Image, string? ExpectedVersion, int HostPort)
+{
+    public static ContainerSmokeOptions Parse(string[] args)
+    {
+        if (args.Length == 0 || string.IsNullOrWhiteSpace(args[0]) || args[0].StartsWith("--", StringComparison.Ordinal))
+        {
+            throw new ArgumentException("usage: --smoke-container IMAGE [--expected-version VERSION] [--port PORT]");
+        }
+
+        var image = args[0];
+        var expectedVersion = Environment.GetEnvironmentVariable("MICROSTACK_EXPECTED_VERSION");
+        if (string.IsNullOrEmpty(expectedVersion))
+        {
+            expectedVersion = null;
+        }
+
+        var configuredPort = Environment.GetEnvironmentVariable("MICROSTACK_SMOKE_API_PORT");
+        var port = 4566;
+        if (!string.IsNullOrEmpty(configuredPort) &&
+            (!int.TryParse(configuredPort, out port) || port is < 1 or > 65535))
+        {
+            throw new ArgumentException("MICROSTACK_SMOKE_API_PORT must be between 1 and 65535");
+        }
+
+        for (var index = 1; index < args.Length; index++)
+        {
+            switch (args[index])
+            {
+                case "--expected-version":
+                    if (++index >= args.Length || string.IsNullOrWhiteSpace(args[index]))
+                    {
+                        throw new ArgumentException("--expected-version requires a value");
+                    }
+
+                    expectedVersion = args[index];
+                    break;
+
+                case "--port":
+                    if (++index >= args.Length || !int.TryParse(args[index], out port) || port is < 1 or > 65535)
+                    {
+                        throw new ArgumentException("--port requires a number between 1 and 65535");
+                    }
+
+                    break;
+
+                default:
+                    throw new ArgumentException($"unknown smoke-container argument: {args[index]}");
+            }
+        }
+
+        if (port is < 1 or > 65535)
+        {
+            throw new ArgumentException("MICROSTACK_SMOKE_API_PORT must be between 1 and 65535");
+        }
+
+        return new ContainerSmokeOptions(image, expectedVersion, port);
+    }
+}
+
+internal static class ContainerSmokeCli
+{
+    public static async Task<int> RunAsync(string[] args, TextWriter output, TextWriter error)
+    {
+        string? containerId = null;
+        var passed = false;
+        try
+        {
+            var options = ContainerSmokeOptions.Parse(args);
+            containerId = await Docker.RunAsync(
+                ["run", "--rm", "-d", "-p", $"127.0.0.1:{options.HostPort}:4566", options.Image]);
+            await ContainerSmoke.RunAsync(options);
+            output.WriteLine("API, same-port UI, deep links, framework, icons, and browser redirect passed.");
+            passed = true;
+            return 0;
+        }
+        catch (Exception exception) when (exception is ArgumentException or IOException or InvalidOperationException or HttpRequestException or JsonException or TaskCanceledException)
+        {
+            error.WriteLine($"container-smoke: {exception.Message}");
+            return 1;
+        }
+        finally
+        {
+            if (containerId is not null)
+            {
+                if (!passed)
+                {
+                    try
+                    {
+                        error.WriteLine(await Docker.RunAsync(["logs", containerId]));
+                    }
+                    catch (Exception exception) when (exception is IOException or InvalidOperationException)
+                    {
+                        error.WriteLine($"container-smoke: could not read container logs: {exception.Message}");
+                    }
+                }
+
+                try
+                {
+                    await Docker.RunAsync(["rm", "-f", containerId]);
+                }
+                catch (Exception exception) when (exception is IOException or InvalidOperationException)
+                {
+                    error.WriteLine($"container-smoke: could not remove container: {exception.Message}");
+                }
+            }
+        }
+    }
+}
+
+internal static class Docker
+{
+    public static async Task<string> RunAsync(string[] args)
+    {
+        using var process = new Process
+        {
+            StartInfo = new ProcessStartInfo("docker")
+            {
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+            },
+        };
+        foreach (var argument in args)
+        {
+            process.StartInfo.ArgumentList.Add(argument);
+        }
+
+        try
+        {
+            if (!process.Start())
+            {
+                throw new InvalidOperationException("failed to start docker");
+            }
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or System.ComponentModel.Win32Exception)
+        {
+            throw new InvalidOperationException("failed to run docker", exception);
+        }
+
+        var outputTask = process.StandardOutput.ReadToEndAsync();
+        var errorTask = process.StandardError.ReadToEndAsync();
+        await process.WaitForExitAsync();
+        var output = await outputTask;
+        var error = await errorTask;
+        if (process.ExitCode != 0)
+        {
+            throw new InvalidOperationException(
+                $"docker {string.Join(' ', args)} failed{(string.IsNullOrWhiteSpace(error) ? "" : $": {error.Trim()}")}");
+        }
+
+        return output.Trim();
+    }
+}
+
+internal static class ContainerSmoke
+{
+    private static readonly string[] HealthPaths = ["/_microstack/health", "/_localstack/health", "/health"];
+
+    public static async Task RunAsync(ContainerSmokeOptions options)
+    {
+        using var handler = new HttpClientHandler { AllowAutoRedirect = false };
+        using var client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(5) };
+        var baseAddress = new Uri($"http://localhost:{options.HostPort}");
+
+        var health = await GetWithRetryAsync(client, new Uri(baseAddress, HealthPaths[0]));
+        if (options.ExpectedVersion is not null)
+        {
+            ValidateHealthVersion(HealthPaths[0], health, options.ExpectedVersion);
+            foreach (var path in HealthPaths.Skip(1))
+            {
+                ValidateHealthVersion(path, await GetAsync(client, new Uri(baseAddress, path)), options.ExpectedVersion);
+            }
+        }
+
+        var ui = await GetAsync(client, new Uri(baseAddress, "/ui/"));
+        _ = await GetAsync(client, new Uri(baseAddress, "/_microstack/admin/v1/services"));
+
+        var deepLink = await GetAsync(client, new Uri(baseAddress, "/ui/services/s3"));
+        if (!deepLink.Contains("<html", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException("deep link /ui/services/s3 did not return HTML");
+        }
+
+        var icon = await GetAsync(client, new Uri(baseAddress, "/ui/icons/s3.svg"));
+        if (!icon.Contains("<svg", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("UI icon /ui/icons/s3.svg did not return SVG");
+        }
+
+        var frameworkMatch = Regex.Match(ui, "src=\"(?<path>_framework/[^\"]+)\"", RegexOptions.CultureInvariant);
+        if (!frameworkMatch.Success)
+        {
+            throw new InvalidOperationException("UI did not reference a framework script");
+        }
+
+        using (var frameworkResponse = await client.GetAsync(
+                   new Uri(baseAddress, $"/ui/{frameworkMatch.Groups["path"].Value}")))
+        {
+            frameworkResponse.EnsureSuccessStatusCode();
+            var contentType = frameworkResponse.Content.Headers.ContentType?.MediaType ?? "";
+            if (!contentType.Contains("javascript", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException($"framework script returned {contentType}, not JavaScript");
+            }
+        }
+
+        using var redirectRequest = new HttpRequestMessage(HttpMethod.Get, baseAddress);
+        redirectRequest.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("text/html"));
+        using var redirectResponse = await client.SendAsync(redirectRequest);
+        if (redirectResponse.StatusCode != HttpStatusCode.Found ||
+            redirectResponse.Headers.Location?.OriginalString != "/ui/")
+        {
+            throw new InvalidOperationException("browser request to / did not redirect to /ui/");
+        }
+    }
+
+    public static void ValidateHealthVersion(string path, string json, string expectedVersion)
+    {
+        using var document = JsonDocument.Parse(json);
+        var version = document.RootElement.ValueKind == JsonValueKind.Object &&
+                      document.RootElement.TryGetProperty("version", out var versionElement) &&
+                      versionElement.ValueKind == JsonValueKind.String
+            ? versionElement.GetString()
+            : null;
+        if (!string.Equals(version, expectedVersion, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"{path} reported an unexpected version (expected {expectedVersion}, got {version ?? "missing"}): {json}");
+        }
+    }
+
+    private static async Task<string> GetAsync(HttpClient client, Uri uri)
+    {
+        using var response = await client.GetAsync(uri);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadAsStringAsync();
+    }
+
+    private static async Task<string> GetWithRetryAsync(HttpClient client, Uri uri)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(30);
+        Exception? lastError = null;
+        while (DateTime.UtcNow < deadline)
+        {
+            try
+            {
+                return await GetAsync(client, uri);
+            }
+            catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException)
+            {
+                lastError = exception;
+                await Task.Delay(TimeSpan.FromSeconds(1));
+            }
+        }
+
+        throw new IOException($"container did not become ready at {uri.PathAndQuery}", lastError);
     }
 }
 
@@ -336,6 +605,91 @@ internal static class CalendarVersionTests
         catch (Exception exception) when (exception.Message.Contains(message, StringComparison.Ordinal))
         {
             Console.WriteLine($"ok   - {name}");
+        }
+    }
+
+    internal static class ContainerSmokeTests
+    {
+        public static void Run()
+        {
+            ExpectHealthVersion(
+                "matching health version passes",
+                "/_microstack/health",
+                """{"edition":"light","version":"2026.1101.7"}""",
+                "2026.1101.7",
+                shouldPass: true);
+            ExpectHealthVersion(
+                "nested or regex-like version cannot mask a mismatch",
+                "/_microstack/health",
+                """{"services":{"version":"2026.1101.7"},"version":"2026X1101X7"}""",
+                "2026.1101.7",
+                shouldPass: false);
+            ExpectHealthVersion(
+                "health alias version mismatch fails",
+                "/_localstack/health",
+                """{"version":"2026.1101.8"}""",
+                "2026.1101.7",
+                shouldPass: false);
+            ExpectHealthVersion(
+                "missing health version fails",
+                "/health",
+                """{"edition":"light"}""",
+                "2026.1101.7",
+                shouldPass: false);
+            ExpectOptionFailure("smoke command requires an image", [], "usage:");
+            ExpectOptionFailure("invalid smoke port is rejected", ["image", "--port", "0"], "--port requires");
+            ExpectOptionFailure("invalid smoke port text is rejected", ["image", "--port", "nope"], "--port requires");
+            var originalPort = Environment.GetEnvironmentVariable("MICROSTACK_SMOKE_API_PORT");
+            try
+            {
+                Environment.SetEnvironmentVariable("MICROSTACK_SMOKE_API_PORT", "nope");
+                ExpectOptionFailure("invalid smoke port environment is rejected",
+                    ["image"],
+                    "MICROSTACK_SMOKE_API_PORT");
+            }
+            finally
+            {
+                Environment.SetEnvironmentVariable("MICROSTACK_SMOKE_API_PORT", originalPort);
+            }
+            Console.WriteLine("All container-smoke tests passed.");
+        }
+
+        private static void ExpectHealthVersion(
+            string name,
+            string path,
+            string json,
+            string expectedVersion,
+            bool shouldPass)
+        {
+            var failed = false;
+            try
+            {
+                ContainerSmoke.ValidateHealthVersion(path, json, expectedVersion);
+            }
+            catch (InvalidOperationException)
+            {
+                failed = true;
+            }
+
+            if (failed == shouldPass)
+            {
+                throw new InvalidOperationException($"{name}: unexpected validation result");
+            }
+
+            Console.WriteLine($"ok   - {name}");
+        }
+
+        private static void ExpectOptionFailure(string name, string[] args, string message)
+        {
+            try
+            {
+                ContainerSmokeOptions.Parse(args);
+                throw new InvalidOperationException($"{name}: expected failure");
+            }
+            catch (ArgumentException exception) when (exception.Message.Contains(message, StringComparison.Ordinal))
+            {
+                Console.WriteLine($"ok   - {name}");
+            }
         }
     }
 
