@@ -9,19 +9,28 @@ if (args is ["--test"])
     return;
 }
 
-try
+Environment.ExitCode = CalendarVersionCli.Run(args, Console.Out, Console.Error);
+
+internal static class CalendarVersionCli
 {
-    var options = CalendarVersionOptions.Parse(args);
-    var releaseDate = options.Date ?? DateOnly.FromDateTime(DateTime.UtcNow);
-    var tags = options.TagsFile is null
-        ? CalendarVersion.ReadRemoteTags()
-        : File.ReadAllText(options.TagsFile);
-    Console.WriteLine(CalendarVersion.Next(releaseDate, tags));
-}
-catch (Exception exception) when (exception is ArgumentException or IOException or InvalidOperationException)
-{
-    Console.Error.WriteLine($"calendar-version: {exception.Message}");
-    Environment.ExitCode = 1;
+    public static int Run(string[] args, TextWriter output, TextWriter error)
+    {
+        try
+        {
+            var options = CalendarVersionOptions.Parse(args);
+            var releaseDate = options.Date ?? DateOnly.FromDateTime(DateTime.UtcNow);
+            var tags = options.TagsFile is null
+                ? CalendarVersion.ReadRemoteTags()
+                : File.ReadAllText(options.TagsFile);
+            output.WriteLine(CalendarVersion.Next(releaseDate, tags));
+            return 0;
+        }
+        catch (Exception exception) when (exception is ArgumentException or IOException or InvalidOperationException or UnauthorizedAccessException)
+        {
+            error.WriteLine($"calendar-version: {exception.Message}");
+            return 1;
+        }
+    }
 }
 
 internal sealed record CalendarVersionOptions(DateOnly? Date, string? TagsFile)
@@ -42,11 +51,15 @@ internal sealed record CalendarVersionOptions(DateOnly? Date, string? TagsFile)
                     }
 
                     if (!DateOnly.TryParseExact(args[index], "yyyy-MM-dd", CultureInfo.InvariantCulture,
-                            DateTimeStyles.None, out var parsedDate) ||
-                        parsedDate.Year < 1000)
+                            DateTimeStyles.None, out var parsedDate))
                     {
                         throw new ArgumentException(
                             $"invalid date '{args[index]}'; expected a valid date in YYYY-MM-DD format");
+                    }
+
+                    if (parsedDate.Year < 1000)
+                    {
+                        throw new ArgumentException("release year must be a four-digit version component");
                     }
 
                     date = parsedDate;
@@ -74,7 +87,7 @@ internal static partial class CalendarVersion
 {
     private const int MaximumComponent = 65534;
 
-    [GeneratedRegex(@"^v(?<year>[0-9]{4})\.(?<monthDay>[1-9][0-9]{1,3})\.(?<counter>[1-9][0-9]*)$",
+    [GeneratedRegex(@"^v(?<year>[1-9][0-9]{3})\.(?<monthDay>[1-9][0-9]{2,3})\.(?<counter>[1-9][0-9]*)$",
         RegexOptions.CultureInvariant)]
     private static partial Regex CalendarTagPattern();
 
@@ -113,11 +126,11 @@ internal static partial class CalendarVersion
         return string.Create(CultureInfo.InvariantCulture, $"{releaseDate.Year}.{monthDay}.{counter}");
     }
 
-    public static string ReadRemoteTags()
+    public static string ReadRemoteTags(string remote = "origin")
     {
         using var process = new Process
         {
-            StartInfo = new ProcessStartInfo("git", ["ls-remote", "--tags", "--refs", "origin"])
+            StartInfo = new ProcessStartInfo("git", ["ls-remote", "--tags", "--refs", remote])
             {
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
@@ -129,12 +142,12 @@ internal static partial class CalendarVersion
         {
             if (!process.Start())
             {
-                throw new InvalidOperationException("failed to start git while listing tags from origin");
+                throw new InvalidOperationException($"failed to start git while listing tags from {remote}");
             }
         }
         catch (Exception exception) when (exception is InvalidOperationException or System.ComponentModel.Win32Exception)
         {
-            throw new InvalidOperationException("failed to list tags from origin", exception);
+            throw new InvalidOperationException($"failed to list tags from {remote}", exception);
         }
 
         var outputTask = process.StandardOutput.ReadToEndAsync();
@@ -145,7 +158,7 @@ internal static partial class CalendarVersion
         if (process.ExitCode != 0)
         {
             throw new InvalidOperationException(
-                $"failed to list tags from origin{(string.IsNullOrWhiteSpace(error) ? "" : $": {error.Trim()}")}");
+                $"failed to list tags from {remote}{(string.IsNullOrWhiteSpace(error) ? "" : $": {error.Trim()}")}");
         }
 
         return output;
@@ -238,7 +251,7 @@ internal static class CalendarVersionTests
             "2026.1101.2");
         Expect("non-canonical and prerelease tags are ignored",
             "2026-11-01",
-            "v2026.1101.1-beta.1\nv2026.01101.5\nv2026.1101.01",
+            "v2026.1101.1-beta.1\nv2026.01101.5\nv2026.1101.01\nv2026.99.1\nv0001.101.1",
             "2026.1101.1");
         Expect("nested refs do not masquerade as release tags",
             "2026-11-01",
@@ -271,11 +284,21 @@ internal static class CalendarVersionTests
         ExpectFailure("zero month is rejected explicitly", "2026-00-01", "", "invalid date");
         ExpectFailure("zero day is rejected explicitly", "2026-11-00", "", "invalid date");
         ExpectFailure("year must remain a four-digit component", "0001-01-01", "", "four-digit version component");
+        ExpectOptionFailure("empty date fails explicitly", ["--date", ""], "--date requires a value");
+        ExpectOptionFailure("empty tags file fails explicitly", ["--tags-file", ""], "--tags-file requires a value");
+        ExpectOptionFailure("invalid CLI date is rejected", ["--date", "2027-02-29"], "invalid date");
+        ExpectOptionFailure("CLI year must be a four-digit component",
+            ["--date", "0001-01-01"],
+            "four-digit version component");
+        var missingTags = Path.Combine(Path.GetTempPath(), $"microstack-missing-tags-{Guid.NewGuid():N}");
+        ExpectCliFailure("missing tag file fails cleanly", ["--tags-file", missingTags]);
+        ExpectCliFailure("directory tag file fails cleanly", ["--tags-file", Path.GetTempPath()]);
+        var missingRemote = Path.Combine(Path.GetTempPath(), $"microstack-missing-remote-{Guid.NewGuid():N}");
         ExpectFailure("remote lookup failure is reported",
             "2026-11-01",
             "",
-            "failed to list tags from origin",
-            () => throw new InvalidOperationException("failed to list tags from origin"));
+            "failed to list tags from",
+            () => CalendarVersion.ReadRemoteTags(missingRemote));
 
         if (failures != 0)
         {
@@ -314,6 +337,34 @@ internal static class CalendarVersionTests
         {
             Console.WriteLine($"ok   - {name}");
         }
+    }
+
+    private static void ExpectOptionFailure(string name, string[] args, string message)
+    {
+        try
+        {
+            CalendarVersionOptions.Parse(args);
+            Fail($"{name}: expected failure");
+        }
+        catch (ArgumentException exception) when (exception.Message.Contains(message, StringComparison.Ordinal))
+        {
+            Console.WriteLine($"ok   - {name}");
+        }
+    }
+
+    private static void ExpectCliFailure(string name, string[] args)
+    {
+        using var output = new StringWriter(CultureInfo.InvariantCulture);
+        using var error = new StringWriter(CultureInfo.InvariantCulture);
+        var exitCode = CalendarVersionCli.Run(args, output, error);
+        if (exitCode != 1 || output.ToString().Length != 0 ||
+            !error.ToString().StartsWith("calendar-version: ", StringComparison.Ordinal))
+        {
+            Fail($"{name}: unexpected exit code or output");
+            return;
+        }
+
+        Console.WriteLine($"ok   - {name}");
     }
 
     private static DateOnly ParseDate(string date)
