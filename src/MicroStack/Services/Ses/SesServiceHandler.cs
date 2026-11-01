@@ -657,13 +657,15 @@ internal sealed partial class SesServiceHandler : IServiceHandler
         // Identities
         if (route == "/identities" && method == "POST")
             return V2CreateIdentity(data);
-        if (route == "/identities" && method == "GET")
+        if ((route == "/identities" && method == "GET")
+            || (route == "/list-identities" && method == "POST"))
             return V2ListIdentities();
 
         // Configuration sets
         if (route == "/configuration-sets" && method == "POST")
             return V2CreateConfigurationSet(data);
-        if (route == "/configuration-sets" && method == "GET")
+        if ((route == "/configuration-sets" && method == "GET")
+            || (route == "/list-configuration-sets" && method == "POST"))
             return V2ListConfigurationSets();
 
         // Templates
