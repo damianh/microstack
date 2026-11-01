@@ -57,8 +57,22 @@ jobs:
       - name: Test calendar versioning
         run: sh scripts/calendar-version.test.sh
 
+      - name: Test health version smoke check
+        run: sh scripts/smoke-container.test.sh
+
       - name: Restore
         run: dotnet restore MicroStack.slnx
+
+      - name: Test SDK container version tags
+        run: |
+          dotnet msbuild src/MicroStack/MicroStack.csproj \
+            -target:ComputeContainerConfig -p:MinVerVersionOverride=2026.1101.7 \
+            -getItem:ContainerImageTags -v:q |
+            jq -e '[.Items.ContainerImageTags[].Identity] == ["2026.1101.7", "latest"]'
+          dotnet msbuild src/MicroStack/MicroStack.csproj \
+            -target:ComputeContainerConfig -p:PublishImageTag=custom \
+            -getItem:ContainerImageTags -v:q |
+            jq -e '[.Items.ContainerImageTags[].Identity] == ["custom"]'
 
       - name: Build
         run: dotnet build MicroStack.slnx -c Release --no-restore
@@ -120,6 +134,8 @@ jobs:
           npm test
 
       - name: Smoke test container
+        env:
+          MICROSTACK_EXPECTED_VERSION: 0.0.0-dev
         run: sh scripts/smoke-container.sh microstack:ci
 
       - name: Report container image size

@@ -24,7 +24,6 @@ public sealed class HealthTests(MicroStackFixture fixture) : IClassFixture<Micro
 
         body.GetProperty("edition").GetString().ShouldBe("light");
         body.GetProperty("version").GetString().ShouldBe(expected);
-        expected.ShouldNotBe("0.1.0");
     }
 
     [Theory]

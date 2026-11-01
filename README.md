@@ -205,13 +205,17 @@ MicroStack uses calendar versions of the form `YYYY.MMDD.N`, based on the UTC re
   (`2026.1101.2`, ...).
 
 Versions compare numerically field by field, so newer releases always sort higher in NuGet and other
-version-aware tools — including above the earlier `0.x` releases. The fields carry no compatibility
-meaning: breaking changes are called out in the release notes instead.
+version-aware tools — including above the earlier `0.x` releases. Plain string sorting does not guarantee
+release order. The fields carry no compatibility meaning: breaking changes are called out in the release
+notes instead.
 
 The NuGet package, the `ghcr.io/damianh/microstack:<version>` container tag, and the `version` field of
 the health endpoint all report the same number. Releases are created by the `Release` workflow, which
-calculates the next version automatically from existing `vYYYY.MMDD.N` tags. Images built locally from
-source report `0.0.0-dev`.
+calculates the next version automatically from existing `vYYYY.MMDD.N` tags. Only stable calendar
+versions are published. Dockerfile builds without a supplied version report `0.0.0-dev`; other untagged
+source builds use MinVer development suffixes, which need not reflect the build date. A failed publication
+can leave artifacts without a Git tag, so check GHCR and NuGet before retrying; existing NuGet versions
+are not silently reused.
 
 ## Using with AWS CLI
 

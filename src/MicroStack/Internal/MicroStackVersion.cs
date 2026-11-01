@@ -15,7 +15,7 @@ internal static class MicroStackVersion
             .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
         if (string.IsNullOrEmpty(informational))
         {
-            return "0.0.0";
+            throw new InvalidOperationException("The MicroStack assembly has no informational version.");
         }
 
         // Drop build metadata such as the source revision ("+<commit>").

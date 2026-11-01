@@ -3,6 +3,10 @@ set -eu
 
 image="${1:?Usage: smoke-container.sh IMAGE}"
 api_port="${MICROSTACK_SMOKE_API_PORT:-4566}"
+if [ -n "${MICROSTACK_EXPECTED_VERSION:-}" ] && ! command -v jq >/dev/null 2>&1; then
+  echo "jq is required to verify MICROSTACK_EXPECTED_VERSION" >&2
+  exit 1
+fi
 container_id="$(docker run --rm -d \
   -p "127.0.0.1:$api_port:4566" \
   "$image")"
@@ -23,10 +27,15 @@ api="http://localhost:$api_port"
 # Docker can accept and reset connections before the application starts listening.
 health="$(curl --fail --silent --show-error --retry 20 --retry-all-errors --retry-delay 1 --retry-max-time 30 --max-time 5 "$api/_microstack/health")"
 if [ -n "${MICROSTACK_EXPECTED_VERSION:-}" ]; then
-  printf '%s' "$health" | grep -q "\"version\":\"$MICROSTACK_EXPECTED_VERSION\"" || {
-    echo "Health reported unexpected version (expected $MICROSTACK_EXPECTED_VERSION): $health" >&2
-    exit 1
-  }
+  for path in /_microstack/health /_localstack/health /health; do
+    if [ "$path" != "/_microstack/health" ]; then
+      health="$(curl --fail --silent --show-error "$api$path")"
+    fi
+    printf '%s' "$health" | jq -e --arg expected "$MICROSTACK_EXPECTED_VERSION" '.version == $expected' >/dev/null || {
+      echo "$path reported an unexpected version (expected $MICROSTACK_EXPECTED_VERSION): $health" >&2
+      exit 1
+    }
+  done
 fi
 curl --fail --silent --show-error --retry 20 --retry-connrefused --retry-delay 1 "$api/ui/" >/dev/null
 curl --fail --silent --show-error "$api/_microstack/admin/v1/services" >/dev/null
