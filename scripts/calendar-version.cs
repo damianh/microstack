@@ -3,19 +3,66 @@ using System.Net.Http.Headers;
 using System.Diagnostics;
 using System.Globalization;
 using System.Numerics;
+using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
 using System.Text.Json;
 
 if (args is ["--test"])
 {
     CalendarVersionTests.Run();
-    CalendarVersionTests.ContainerSmokeTests.Run();
+    await CalendarVersionTests.ContainerSmokeTests.RunAsync();
     return;
 }
 
 if (args.Length > 0 && args[0] == "--smoke-container")
 {
-    Environment.ExitCode = await ContainerSmokeCli.RunAsync(args[1..], Console.Out, Console.Error);
+    using var cancellation = new CancellationTokenSource();
+    var signalExitCode = 0;
+    void Interrupt(int exitCode)
+    {
+        Interlocked.CompareExchange(ref signalExitCode, exitCode, 0);
+        cancellation.Cancel();
+    }
+
+    using var interruptSignal = OperatingSystem.IsWindows()
+        ? null
+        : PosixSignalRegistration.Create(PosixSignal.SIGINT, context =>
+        {
+            context.Cancel = true;
+            Interrupt(130);
+        });
+    using var terminationSignal = OperatingSystem.IsWindows()
+        ? null
+        : PosixSignalRegistration.Create(PosixSignal.SIGTERM, context =>
+        {
+            context.Cancel = true;
+            Interrupt(143);
+        });
+    ConsoleCancelEventHandler? cancelHandler = null;
+    if (OperatingSystem.IsWindows())
+    {
+        cancelHandler = (_, context) =>
+        {
+            context.Cancel = true;
+            Interrupt(130);
+        };
+        Console.CancelKeyPress += cancelHandler;
+    }
+
+    try
+    {
+        var exitCode = await ContainerSmokeCli.RunAsync(args[1..], Console.Out, Console.Error, cancellation.Token);
+        var interrupted = Volatile.Read(ref signalExitCode);
+        Environment.ExitCode = interrupted != 0 ? interrupted : exitCode;
+    }
+    finally
+    {
+        if (cancelHandler is not null)
+        {
+            Console.CancelKeyPress -= cancelHandler;
+        }
+    }
+
     return;
 }
 
@@ -104,34 +151,49 @@ internal sealed record ContainerSmokeOptions(string Image, string? ExpectedVersi
 
 internal static class ContainerSmokeCli
 {
-    public static async Task<int> RunAsync(string[] args, TextWriter output, TextWriter error)
+    public static async Task<int> RunAsync(
+        string[] args,
+        TextWriter output,
+        TextWriter error,
+        CancellationToken cancellationToken,
+        Func<string[], Task<string>>? runDocker = null,
+        Func<ContainerSmokeOptions, CancellationToken, Task>? runSmoke = null)
     {
+        var docker = runDocker ?? Docker.RunAsync;
+        var smoke = runSmoke ?? ((options, token) => ContainerSmoke.RunAsync(options, token));
         string? containerId = null;
-        var passed = false;
+        string? containerName = null;
+        var exitCode = 1;
         try
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var options = ContainerSmokeOptions.Parse(args);
-            containerId = await Docker.RunAsync(
-                ["run", "--rm", "-d", "-p", $"127.0.0.1:{options.HostPort}:4566", options.Image]);
-            await ContainerSmoke.RunAsync(options);
-            output.WriteLine("API, same-port UI, deep links, framework, icons, and browser redirect passed.");
-            passed = true;
-            return 0;
+            containerName = $"microstack-smoke-{Guid.NewGuid():N}";
+            containerId = await docker(
+                ["run", "--rm", "-d", "--name", containerName, "-p", $"127.0.0.1:{options.HostPort}:4566", options.Image]);
+            cancellationToken.ThrowIfCancellationRequested();
+            await smoke(options, cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+            exitCode = 0;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            error.WriteLine("container-smoke: interrupted");
         }
         catch (Exception exception) when (exception is ArgumentException or IOException or InvalidOperationException or HttpRequestException or JsonException or TaskCanceledException)
         {
             error.WriteLine($"container-smoke: {exception.Message}");
-            return 1;
         }
         finally
         {
-            if (containerId is not null)
+            var cleanupTarget = containerId ?? (cancellationToken.IsCancellationRequested ? containerName : null);
+            if (cleanupTarget is not null)
             {
-                if (!passed)
+                if (exitCode != 0)
                 {
                     try
                     {
-                        error.WriteLine(await Docker.RunAsync(["logs", containerId]));
+                        error.WriteLine(await docker(["logs", cleanupTarget]));
                     }
                     catch (Exception exception) when (exception is IOException or InvalidOperationException)
                     {
@@ -141,14 +203,28 @@ internal static class ContainerSmokeCli
 
                 try
                 {
-                    await Docker.RunAsync(["rm", "-f", containerId]);
+                    await docker(["rm", "-f", cleanupTarget]);
                 }
                 catch (Exception exception) when (exception is IOException or InvalidOperationException)
                 {
                     error.WriteLine($"container-smoke: could not remove container: {exception.Message}");
+                    exitCode = 1;
                 }
             }
         }
+
+        if (exitCode == 0 && cancellationToken.IsCancellationRequested)
+        {
+            error.WriteLine("container-smoke: interrupted");
+            exitCode = 1;
+        }
+
+        if (exitCode == 0)
+        {
+            output.WriteLine("API, same-port UI, deep links, framework, icons, and browser redirect passed.");
+        }
+
+        return exitCode;
     }
 }
 
@@ -201,32 +277,40 @@ internal static class ContainerSmoke
 {
     private static readonly string[] HealthPaths = ["/_microstack/health", "/_localstack/health", "/health"];
 
-    public static async Task RunAsync(ContainerSmokeOptions options)
+    public static async Task RunAsync(
+        ContainerSmokeOptions options,
+        CancellationToken cancellationToken,
+        HttpMessageHandler? handler = null)
     {
-        using var handler = new HttpClientHandler { AllowAutoRedirect = false };
-        using var client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(5) };
+        using var client = new HttpClient(handler ?? new HttpClientHandler { AllowAutoRedirect = false })
+        {
+            Timeout = TimeSpan.FromSeconds(5),
+        };
         var baseAddress = new Uri($"http://localhost:{options.HostPort}");
 
-        var health = await GetWithRetryAsync(client, new Uri(baseAddress, HealthPaths[0]));
+        var health = await GetWithRetryAsync(client, new Uri(baseAddress, HealthPaths[0]), cancellationToken);
         if (options.ExpectedVersion is not null)
         {
             ValidateHealthVersion(HealthPaths[0], health, options.ExpectedVersion);
             foreach (var path in HealthPaths.Skip(1))
             {
-                ValidateHealthVersion(path, await GetAsync(client, new Uri(baseAddress, path)), options.ExpectedVersion);
+                ValidateHealthVersion(
+                    path,
+                    await GetAsync(client, new Uri(baseAddress, path), cancellationToken),
+                    options.ExpectedVersion);
             }
         }
 
-        var ui = await GetAsync(client, new Uri(baseAddress, "/ui/"));
-        _ = await GetAsync(client, new Uri(baseAddress, "/_microstack/admin/v1/services"));
+        var ui = await GetAsync(client, new Uri(baseAddress, "/ui/"), cancellationToken);
+        _ = await GetAsync(client, new Uri(baseAddress, "/_microstack/admin/v1/services"), cancellationToken);
 
-        var deepLink = await GetAsync(client, new Uri(baseAddress, "/ui/services/s3"));
+        var deepLink = await GetAsync(client, new Uri(baseAddress, "/ui/services/s3"), cancellationToken);
         if (!deepLink.Contains("<html", StringComparison.OrdinalIgnoreCase))
         {
             throw new InvalidOperationException("deep link /ui/services/s3 did not return HTML");
         }
 
-        var icon = await GetAsync(client, new Uri(baseAddress, "/ui/icons/s3.svg"));
+        var icon = await GetAsync(client, new Uri(baseAddress, "/ui/icons/s3.svg"), cancellationToken);
         if (!icon.Contains("<svg", StringComparison.Ordinal))
         {
             throw new InvalidOperationException("UI icon /ui/icons/s3.svg did not return SVG");
@@ -239,7 +323,8 @@ internal static class ContainerSmoke
         }
 
         using (var frameworkResponse = await client.GetAsync(
-                   new Uri(baseAddress, $"/ui/{frameworkMatch.Groups["path"].Value}")))
+                   new Uri(baseAddress, $"/ui/{frameworkMatch.Groups["path"].Value}"),
+                   cancellationToken))
         {
             frameworkResponse.EnsureSuccessStatusCode();
             var contentType = frameworkResponse.Content.Headers.ContentType?.MediaType ?? "";
@@ -251,7 +336,7 @@ internal static class ContainerSmoke
 
         using var redirectRequest = new HttpRequestMessage(HttpMethod.Get, baseAddress);
         redirectRequest.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("text/html"));
-        using var redirectResponse = await client.SendAsync(redirectRequest);
+        using var redirectResponse = await client.SendAsync(redirectRequest, cancellationToken);
         if (redirectResponse.StatusCode != HttpStatusCode.Found ||
             redirectResponse.Headers.Location?.OriginalString != "/ui/")
         {
@@ -274,27 +359,33 @@ internal static class ContainerSmoke
         }
     }
 
-    private static async Task<string> GetAsync(HttpClient client, Uri uri)
+    private static async Task<string> GetAsync(HttpClient client, Uri uri, CancellationToken cancellationToken)
     {
-        using var response = await client.GetAsync(uri);
+        using var response = await client.GetAsync(uri, cancellationToken);
         response.EnsureSuccessStatusCode();
-        return await response.Content.ReadAsStringAsync();
+        return await response.Content.ReadAsStringAsync(cancellationToken);
     }
 
-    private static async Task<string> GetWithRetryAsync(HttpClient client, Uri uri)
+    private static async Task<string> GetWithRetryAsync(
+        HttpClient client,
+        Uri uri,
+        CancellationToken cancellationToken)
     {
         var deadline = DateTime.UtcNow.AddSeconds(30);
         Exception? lastError = null;
         while (DateTime.UtcNow < deadline)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             try
             {
-                return await GetAsync(client, uri);
+                return await GetAsync(client, uri, cancellationToken);
             }
-            catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException)
+            catch (Exception exception) when (
+                !cancellationToken.IsCancellationRequested &&
+                (exception is HttpRequestException or TaskCanceledException))
             {
                 lastError = exception;
-                await Task.Delay(TimeSpan.FromSeconds(1));
+                await Task.Delay(TimeSpan.FromSeconds(1), cancellationToken);
             }
         }
 
@@ -610,7 +701,7 @@ internal static class CalendarVersionTests
 
     internal static class ContainerSmokeTests
     {
-        public static void Run()
+        public static async Task RunAsync()
         {
             ExpectHealthVersion(
                 "matching health version passes",
@@ -651,7 +742,247 @@ internal static class CalendarVersionTests
             {
                 Environment.SetEnvironmentVariable("MICROSTACK_SMOKE_API_PORT", originalPort);
             }
+
+            await ExpectSmokeRequestsAsync();
+            await ExpectInterruptedCleanupAsync();
+            await ExpectInterruptedStartupAfterIdAsync();
+            await ExpectInterruptedStartupCleanupAsync();
+            await ExpectCancelledHttpRequestAsync();
+            await ExpectCleanupFailureAsync();
             Console.WriteLine("All container-smoke tests passed.");
+        }
+
+        private static async Task ExpectSmokeRequestsAsync()
+        {
+            var options = new ContainerSmokeOptions("image", "2026.1101.7", 4566);
+            var handler = new SmokeResponseHandler();
+            await ContainerSmoke.RunAsync(options, CancellationToken.None, handler);
+            string[] expectedPaths =
+            [
+                "/_microstack/health",
+                "/_localstack/health",
+                "/health",
+                "/ui/",
+                "/_microstack/admin/v1/services",
+                "/ui/services/s3",
+                "/ui/icons/s3.svg",
+                "/ui/_framework/blazor.web.js",
+                "/",
+            ];
+            if (!handler.Requests.SequenceEqual(expectedPaths))
+            {
+                throw new InvalidOperationException("smoke checks did not request every expected endpoint");
+            }
+
+            Console.WriteLine("ok   - smoke checks exercise health aliases, UI assets, and redirect");
+            foreach (var path in expectedPaths.Take(3))
+            {
+                try
+                {
+                    await ContainerSmoke.RunAsync(options, CancellationToken.None, new SmokeResponseHandler(path));
+                    throw new InvalidOperationException($"{path}: expected a health version failure");
+                }
+                catch (InvalidOperationException exception) when (
+                    exception.Message.Contains("reported an unexpected version", StringComparison.Ordinal) &&
+                    exception.Message.Contains(path, StringComparison.Ordinal))
+                {
+                    Console.WriteLine($"ok   - smoke check rejects a version mismatch at {path}");
+                }
+            }
+        }
+
+        private static async Task ExpectInterruptedCleanupAsync()
+        {
+            using var cancellation = new CancellationTokenSource();
+            using var output = new StringWriter(CultureInfo.InvariantCulture);
+            using var error = new StringWriter(CultureInfo.InvariantCulture);
+            var commands = new List<string[]>();
+
+            Task<string> RunDocker(string[] args)
+            {
+                commands.Add(args);
+                return Task.FromResult(args[0] == "run" ? "container-id" : "");
+            }
+
+            Task RunSmoke(ContainerSmokeOptions _, CancellationToken token)
+            {
+                cancellation.Cancel();
+                return Task.Delay(Timeout.InfiniteTimeSpan, token);
+            }
+
+            var result = await ContainerSmokeCli.RunAsync(
+                ["image"], output, error, cancellation.Token, RunDocker, RunSmoke);
+            if (result != 1 || output.ToString().Length != 0 ||
+                !error.ToString().Contains("interrupted", StringComparison.Ordinal) ||
+                commands.Count != 3 || commands[1][0] != "logs" ||
+                !commands[2].SequenceEqual(["rm", "-f", "container-id"]))
+            {
+                throw new InvalidOperationException("interrupted smoke check did not remove the container");
+            }
+
+            Console.WriteLine("ok   - interrupted smoke checks remove the container");
+        }
+
+        private static async Task ExpectInterruptedStartupAfterIdAsync()
+        {
+            using var cancellation = new CancellationTokenSource();
+            using var output = new StringWriter(CultureInfo.InvariantCulture);
+            using var error = new StringWriter(CultureInfo.InvariantCulture);
+            var commands = new List<string[]>();
+            var smokeStarted = false;
+
+            Task<string> RunDocker(string[] args)
+            {
+                commands.Add(args);
+                if (args[0] == "run")
+                {
+                    cancellation.Cancel();
+                    return Task.FromResult("container-id");
+                }
+
+                return Task.FromResult("");
+            }
+
+            Task RunSmoke(ContainerSmokeOptions _, CancellationToken token)
+            {
+                smokeStarted = true;
+                return Task.CompletedTask;
+            }
+
+            var result = await ContainerSmokeCli.RunAsync(
+                ["image"], output, error, cancellation.Token, RunDocker, RunSmoke);
+            if (result != 1 || smokeStarted || commands.Count != 3 ||
+                !commands[2].SequenceEqual(["rm", "-f", "container-id"]))
+            {
+                throw new InvalidOperationException("interrupted startup did not remove the returned container");
+            }
+
+            Console.WriteLine("ok   - interrupted startup removes the returned container before smoke checks");
+        }
+
+        private static async Task ExpectInterruptedStartupCleanupAsync()
+        {
+            using var cancellation = new CancellationTokenSource();
+            using var output = new StringWriter(CultureInfo.InvariantCulture);
+            using var error = new StringWriter(CultureInfo.InvariantCulture);
+            var commands = new List<string[]>();
+            string? containerName = null;
+
+            Task<string> RunDocker(string[] args)
+            {
+                commands.Add(args);
+                if (args[0] == "run")
+                {
+                    containerName = args[Array.IndexOf(args, "--name") + 1];
+                    cancellation.Cancel();
+                    throw new InvalidOperationException("container launch interrupted");
+                }
+
+                return Task.FromResult("");
+            }
+
+            var result = await ContainerSmokeCli.RunAsync(
+                ["image"], output, error, cancellation.Token, RunDocker, (_, _) => Task.CompletedTask);
+            if (result != 1 || containerName is null || commands.Count != 3 ||
+                !commands[2].SequenceEqual(["rm", "-f", containerName]))
+            {
+                throw new InvalidOperationException("interrupted launch did not remove the named container");
+            }
+
+            Console.WriteLine("ok   - interrupted container launch removes the named container");
+        }
+
+        private static async Task ExpectCancelledHttpRequestAsync()
+        {
+            using var cancellation = new CancellationTokenSource();
+            try
+            {
+                await ContainerSmoke.RunAsync(
+                    new ContainerSmokeOptions("image", null, 4566),
+                    cancellation.Token,
+                    new CancelledHealthHandler(cancellation));
+            }
+            catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+            {
+                Console.WriteLine("ok   - cancellation stops health retries");
+                return;
+            }
+
+            throw new InvalidOperationException("cancelled health request should have stopped the smoke checks");
+        }
+
+        private static async Task ExpectCleanupFailureAsync()
+        {
+            using var output = new StringWriter(CultureInfo.InvariantCulture);
+            using var error = new StringWriter(CultureInfo.InvariantCulture);
+            Task<string> RunDocker(string[] args) =>
+                args[0] == "rm"
+                    ? Task.FromException<string>(new InvalidOperationException("removal failed"))
+                    : Task.FromResult("container-id");
+
+            var result = await ContainerSmokeCli.RunAsync(
+                ["image"], output, error, CancellationToken.None, RunDocker, (_, _) => Task.CompletedTask);
+            if (result != 1 || output.ToString().Length != 0 ||
+                !error.ToString().Contains("could not remove container", StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException("container removal failure should fail the smoke check");
+            }
+
+            Console.WriteLine("ok   - container removal failures fail the smoke check");
+        }
+
+        private sealed class SmokeResponseHandler(string? mismatchedPath = null) : HttpMessageHandler
+        {
+            public List<string> Requests { get; } = [];
+
+            protected override Task<HttpResponseMessage> SendAsync(
+                HttpRequestMessage request,
+                CancellationToken cancellationToken)
+            {
+                var path = request.RequestUri?.AbsolutePath ?? throw new InvalidOperationException("missing request URI");
+                Requests.Add(path);
+                if (path == "/")
+                {
+                    if (!request.Headers.Accept.Any(value => value.MediaType == "text/html"))
+                    {
+                        throw new InvalidOperationException("browser redirect request must accept HTML");
+                    }
+
+                    var redirect = new HttpResponseMessage(HttpStatusCode.Found);
+                    redirect.Headers.Location = new Uri("/ui/", UriKind.Relative);
+                    return Task.FromResult(redirect);
+                }
+
+                var content = path switch
+                {
+                    "/_microstack/health" or "/_localstack/health" or "/health" =>
+                        $$"""{"version":"{{(path == mismatchedPath ? "2026.1101.8" : "2026.1101.7")}}"}""",
+                    "/ui/" => """<html><script src="_framework/blazor.web.js"></script></html>""",
+                    "/_microstack/admin/v1/services" => "{}",
+                    "/ui/services/s3" => "<html></html>",
+                    "/ui/icons/s3.svg" => "<svg></svg>",
+                    "/ui/_framework/blazor.web.js" => "javascript",
+                    _ => throw new InvalidOperationException($"unexpected smoke request: {path}"),
+                };
+                var response = new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(content) };
+                if (path == "/ui/_framework/blazor.web.js")
+                {
+                    response.Content.Headers.ContentType = new MediaTypeHeaderValue("text/javascript");
+                }
+
+                return Task.FromResult(response);
+            }
+        }
+
+        private sealed class CancelledHealthHandler(CancellationTokenSource cancellation) : HttpMessageHandler
+        {
+            protected override Task<HttpResponseMessage> SendAsync(
+                HttpRequestMessage request,
+                CancellationToken cancellationToken)
+            {
+                cancellation.Cancel();
+                return Task.FromCanceled<HttpResponseMessage>(cancellationToken);
+            }
         }
 
         private static void ExpectHealthVersion(
