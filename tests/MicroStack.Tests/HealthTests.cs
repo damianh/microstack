@@ -1,3 +1,5 @@
+using System.Reflection;
+
 namespace MicroStack.Tests;
 
 public sealed class HealthTests(MicroStackFixture fixture) : IClassFixture<MicroStackFixture>
@@ -17,8 +19,23 @@ public sealed class HealthTests(MicroStackFixture fixture) : IClassFixture<Micro
         var response = await _client.GetAsync("/_microstack/health");
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
 
+        var expected = typeof(Program).Assembly
+            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()!.InformationalVersion.Split('+')[0];
+
         body.GetProperty("edition").GetString().ShouldBe("light");
-        body.GetProperty("version").GetString().ShouldBe("0.1.0");
+        body.GetProperty("version").GetString().ShouldBe(expected);
+        expected.ShouldNotBe("0.1.0");
+    }
+
+    [Theory]
+    [InlineData("/health")]
+    [InlineData("/_localstack/health")]
+    public async Task HealthAliasesReportSameVersion(string path)
+    {
+        var primary = await _client.GetFromJsonAsync<JsonElement>("/_microstack/health");
+        var alias = await _client.GetFromJsonAsync<JsonElement>(path);
+
+        alias.GetProperty("version").GetString().ShouldBe(primary.GetProperty("version").GetString());
     }
 
     [Fact]

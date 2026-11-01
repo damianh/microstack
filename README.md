@@ -195,6 +195,24 @@ MicroStack also supports generic
 port mappings. Runnable .NET, Java, Go, Python, and TypeScript examples are included
 under `examples/testcontainers`.
 
+## Versioning
+
+MicroStack uses calendar versions of the form `YYYY.MMDD.N`, based on the UTC release date:
+
+- `YYYY` is the year and `MMDD` is the numeric value of month × 100 + day, so 1 November 2026 is
+  `2026.1101.1` and 5 January 2027 is `2027.105.1` (no leading zero).
+- `N` starts at 1 for each release day and increments for further releases on the same day
+  (`2026.1101.2`, ...).
+
+Versions compare numerically field by field, so newer releases always sort higher in NuGet and other
+version-aware tools — including above the earlier `0.x` releases. The fields carry no compatibility
+meaning: breaking changes are called out in the release notes instead.
+
+The NuGet package, the `ghcr.io/damianh/microstack:<version>` container tag, and the `version` field of
+the health endpoint all report the same number. Releases are created by the `Release` workflow, which
+calculates the next version automatically from existing `vYYYY.MMDD.N` tags. Images built locally from
+source report `0.0.0-dev`.
+
 ## Using with AWS CLI
 
 ```bash

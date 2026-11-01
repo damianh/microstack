@@ -54,6 +54,9 @@ jobs:
           cache: pip
           cache-dependency-path: examples/testcontainers/python/requirements.lock
 
+      - name: Test calendar versioning
+        run: sh scripts/calendar-version.test.sh
+
       - name: Restore
         run: dotnet restore MicroStack.slnx
 
