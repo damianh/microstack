@@ -617,9 +617,22 @@ public sealed class KmsTests(MicroStackFixture fixture) : IClassFixture<MicroSta
         var keyId = key.KeyMetadata.KeyId;
 
         var resp = await _kms.GetPublicKeyAsync(new GetPublicKeyRequest { KeyId = keyId });
-        resp.KeyId.ShouldBe(keyId);
+        resp.KeyId.ShouldBe(key.KeyMetadata.Arn);
         resp.KeySpec.ShouldBe(KeySpec.RSA_2048);
         (resp.PublicKey.Length > 0).ShouldBe(true);
+    }
+
+    [Fact]
+    public async Task GetPublicKeyByArnReturnsArn()
+    {
+        var key = await _kms.CreateKeyAsync(new CreateKeyRequest
+        {
+            KeySpec = KeySpec.RSA_2048,
+            KeyUsage = KeyUsageType.SIGN_VERIFY,
+        });
+
+        var resp = await _kms.GetPublicKeyAsync(new GetPublicKeyRequest { KeyId = key.KeyMetadata.Arn });
+        resp.KeyId.ShouldBe(key.KeyMetadata.Arn);
     }
 
     // -- EncryptionContext ------------------------------------------------------

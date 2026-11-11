@@ -474,7 +474,7 @@ internal sealed partial class KmsServiceHandler : IServiceHandler, Internal.Admi
 
             return AwsResponseHelpers.JsonResponse(new Dictionary<string, object?>
             {
-                ["KeyId"] = rec.KeyId,
+                ["KeyId"] = rec.Arn,
                 ["KeyUsage"] = rec.KeyUsage,
                 ["KeySpec"] = rec.KeySpec,
                 ["PublicKey"] = Convert.ToBase64String(rec.PublicKeyDer),
