@@ -11,7 +11,7 @@
 
 A lightweight local AWS service emulator. Runs **39 AWS services** on a single port, allowing you to build and test AWS integrations without connecting to the cloud.
 
-Ported from [MiniStack](https://github.com/damianh/ministack) (Python) to .NET 10 / C#.
+Ported from [MiniStack](https://github.com/damianh/ministack) (Python) to .NET 11 / C#.
 
 ## Why MicroStack?
 

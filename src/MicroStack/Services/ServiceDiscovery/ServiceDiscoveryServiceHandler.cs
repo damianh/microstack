@@ -8,7 +8,8 @@ using MicroStack.Services.Route53;
 namespace MicroStack.Services.ServiceDiscovery;
 
 /// <summary>
-/// AWS Cloud Map (Service Discovery) service handler -- JSON protocol via X-Amz-Target.
+/// AWS Cloud Map (Service Discovery) service handler -- JSON protocol via X-Amz-Target,
+/// plus Smithy RPC v2 CBOR (used by AWS SDK for .NET 4.0.102+).
 ///
 /// Port of ministack/services/servicediscovery.py.
 ///
@@ -51,7 +52,15 @@ internal sealed partial class ServiceDiscoveryServiceHandler : IServiceHandler, 
     public IEnumerable<string> GetKnownAccountIds() =>
         _namespaces.GetAccountIds().Concat(_services.GetAccountIds()).Concat(_operations.GetAccountIds());
 
-    public async Task<ServiceResponse> HandleAsync(ServiceRequest request)
+    private static readonly IReadOnlySet<string> CborTimestampFields =
+        new HashSet<string>(["CreateDate", "UpdateDate"], StringComparer.Ordinal);
+
+    public Task<ServiceResponse> HandleAsync(ServiceRequest request) =>
+        SmithyRpcV2Cbor.IsCborRequest(request)
+            ? SmithyRpcV2Cbor.InvokeAsJsonAsync(request, "Route53AutoNaming_v20170314", HandleJsonAsync, CborTimestampFields)
+            : HandleJsonAsync(request);
+
+    private async Task<ServiceResponse> HandleJsonAsync(ServiceRequest request)
     {
         var target = request.GetHeader("x-amz-target") ?? "";
         var action = target.Contains('.', StringComparison.Ordinal)

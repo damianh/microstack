@@ -61,7 +61,7 @@ curl http://localhost:4566/_microstack/health
 
 ## Quick Start with .NET
 
-If you have .NET 10 installed, clone and run directly:
+If you have .NET 11 installed, clone and run directly:
 
 ```bash
 git clone https://github.com/damianh/microstack.git

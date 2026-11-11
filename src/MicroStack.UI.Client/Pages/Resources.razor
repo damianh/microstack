@@ -119,10 +119,9 @@ else if (_service is not null)
                         @if (_path.Length > 1)
                         {
                             <nav class="return-link" aria-label="Resource hierarchy">
-                                @for (var index = 0; index < _path.Length - 1; index++)
+                                @foreach (var (index, ancestor) in _path[..^1].Index())
                                 {
-                                    var ancestor = index;
-                                    <a href="@AncestorUrl(ancestor)">@_path[ancestor].Id</a><span aria-hidden="true">/</span>
+                                    <a href="@AncestorUrl(index)">@ancestor.Id</a><span aria-hidden="true">/</span>
                                 }
                             </nav>
                         }

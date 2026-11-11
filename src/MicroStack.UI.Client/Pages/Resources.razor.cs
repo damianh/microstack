@@ -131,12 +131,16 @@ public partial class Resources
     {
         if (_busy || _restoredGeneration == _generation) return;
         _restoredGeneration = _generation;
-        await JS.InvokeVoidAsync("microstack.restore", Navigation.Uri);
-        if (_focusTab is not null && _detail is not null)
+        try
         {
-            await JS.InvokeVoidAsync("microstack.focus", $"tab-{_focusTab}");
-            _focusTab = null;
+            await JS.InvokeVoidAsync("microstack.restore", Navigation.Uri);
+            if (_focusTab is not null && _detail is not null)
+            {
+                await JS.InvokeVoidAsync("microstack.focus", $"tab-{_focusTab}");
+                _focusTab = null;
+            }
         }
+        catch (JSException) { }
     }
 
     private async Task LoadAsync()
@@ -384,7 +388,8 @@ public partial class Resources
     private async Task ToggleBrowse()
     {
         _browsing = !_browsing;
-        await JS.InvokeVoidAsync("microstack.focus", _browsing ? "resource-index" : "resource-title");
+        try { await JS.InvokeVoidAsync("microstack.focus", _browsing ? "resource-index" : "resource-title"); }
+        catch (JSException) { }
     }
     public async ValueTask DisposeAsync()
     {

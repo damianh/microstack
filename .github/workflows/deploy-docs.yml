@@ -18,16 +18,17 @@ jobs:
   build-docs:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
-      - name: Setup .NET 10
-        uses: actions/setup-dotnet@v5
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: '10.0.x'
-          dotnet-quality: 'preview'
+          dotnet-version: |
+            10.0.x
+            11.0.x
 
       - name: Install Atoll CLI
-        run: dotnet tool install --global Atoll.Cli --version 0.12.1
+        run: dotnet tool install --global Atoll.Cli --version 0.13.1
 
       - name: Restore docs
         run: dotnet restore docs/Docs/Docs.csproj
@@ -39,7 +40,7 @@ jobs:
         run: atoll build --root docs/Docs
 
       - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v5
         with:
           path: docs/Docs/dist
 
@@ -52,4 +53,4 @@ jobs:
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5

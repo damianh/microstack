@@ -1,4 +1,4 @@
-FROM mcr.microsoft.com/dotnet/sdk:10.0-alpine AS build
+FROM mcr.microsoft.com/dotnet/sdk:11.0-alpine AS build
 RUN apk add --no-cache clang binutils musl-dev build-base zlib-dev zlib-static
 WORKDIR /src
 
@@ -20,7 +20,7 @@ COPY src/ src/
 RUN dotnet publish src/MicroStack/MicroStack.csproj -c Release -r linux-musl-x64 -o /out/microstack \
     -p:MinVerVersionOverride="$MICROSTACK_VERSION"
 
-FROM mcr.microsoft.com/dotnet/runtime-deps:10.0-alpine
+FROM mcr.microsoft.com/dotnet/runtime-deps:11.0-alpine
 WORKDIR /app
 COPY --from=build /out/microstack/ /app/
 

@@ -3,11 +3,13 @@
     <OutputType>Exe</OutputType>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
+    <!-- BL0016 flags the fake IJSRuntime overload forwarding used by tests. -->
+    <NoWarn>$(NoWarn);BL0016</NoWarn>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="bunit" Version="2.10.3" />
-    <PackageReference Include="xunit.v3.core.mtp-v2" Version="4.0.0" />
-    <PackageReference Include="xunit.v3.assert" Version="4.0.0" />
+    <PackageReference Include="bunit" Version="2.15.2" />
+    <PackageReference Include="xunit.v3.core.mtp-v2" Version="4.0.3" />
+    <PackageReference Include="xunit.v3.assert" Version="4.0.3" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\MicroStack.UI.Client\MicroStack.UI.Client.csproj" />

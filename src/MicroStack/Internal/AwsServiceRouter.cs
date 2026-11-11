@@ -452,6 +452,8 @@ internal sealed partial class AwsServiceRouter
             && (pathLower.Contains("granite", StringComparison.Ordinal)
                 || pathLower.Contains("cloudwatch", StringComparison.Ordinal)))
             return "monitoring";
+        if (pathLower.StartsWith("/service/route53autonaming_v20170314/operation/", StringComparison.Ordinal))
+            return "servicediscovery";
 
         // 5. Host header patterns
         foreach (var (pattern, service) in HostPatterns)
