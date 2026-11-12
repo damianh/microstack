@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using System.Web;
 using MicroStack.Internal;
+using MicroStack.Services.Lambda;
 using MicroStack.Services.Sqs;
 
 namespace MicroStack.Services.Sns;
@@ -18,11 +19,12 @@ namespace MicroStack.Services.Sns;
 ///           Publish, PublishBatch,
 ///           ListTagsForResource, TagResource, UntagResource,
 ///           CreatePlatformApplication, CreatePlatformEndpoint.
-/// SNS -> SQS fanout delivers synchronously into the SQS handler's queues.
+/// SNS -> SQS and SNS -> Lambda fanout deliver synchronously into their handlers.
 /// </summary>
 internal sealed partial class SnsServiceHandler : IServiceHandler
 {
     private readonly SqsServiceHandler _sqs;
+    private readonly LambdaServiceHandler _lambda;
 
     private readonly AccountScopedDictionary<string, SnsTopic> _topics = new();
     private readonly AccountScopedDictionary<string, string> _subArnToTopic = new();
@@ -34,9 +36,10 @@ internal sealed partial class SnsServiceHandler : IServiceHandler
 
     private const string SnsXmlNs = "http://sns.amazonaws.com/doc/2010-03-31/";
 
-    internal SnsServiceHandler(SqsServiceHandler sqsHandler)
+    internal SnsServiceHandler(SqsServiceHandler sqsHandler, LambdaServiceHandler lambdaHandler)
     {
         _sqs = sqsHandler;
+        _lambda = lambdaHandler;
     }
 
     // ── IServiceHandler ─────────────────────────────────────────────────────────
@@ -660,7 +663,8 @@ internal sealed partial class SnsServiceHandler : IServiceHandler
                         messageGroupId, messageDeduplicationId);
                     break;
                 case "lambda":
-                    // Lambda fanout will be implemented when Lambda handler is ported.
+                    _lambda.InvokeForEsm(sub.Endpoint, BuildLambdaEvent(
+                        topic, sub, msgId, effectiveMessage, subject, messageAttributes));
                     break;
                 case "http" or "https":
                     // HTTP delivery is a stub — real AWS would POST asynchronously.
@@ -670,6 +674,60 @@ internal sealed partial class SnsServiceHandler : IServiceHandler
                     break;
             }
         }
+    }
+
+    private static Dictionary<string, object?> BuildLambdaEvent(
+        SnsTopic topic,
+        SnsSubscription sub,
+        string msgId,
+        string message,
+        string subject,
+        Dictionary<string, SnsMessageAttribute> messageAttributes)
+    {
+        var snsRecord = new Dictionary<string, object?>(StringComparer.Ordinal)
+        {
+            ["Type"] = "Notification",
+            ["MessageId"] = msgId,
+            ["TopicArn"] = topic.Arn,
+            ["Subject"] = string.IsNullOrEmpty(subject) ? null : subject,
+            ["Message"] = message,
+            ["Timestamp"] = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+            ["SignatureVersion"] = "1",
+            ["Signature"] = "FAKE",
+            ["SigningCertUrl"] = $"https://sns.{Region}.amazonaws.com/SimpleNotificationService-fake.pem",
+            ["UnsubscribeUrl"] = $"http://localhost:4566/?Action=Unsubscribe&SubscriptionArn={Uri.EscapeDataString(sub.Arn)}",
+        };
+
+        if (messageAttributes.Count > 0)
+        {
+            var formatted = new Dictionary<string, object?>(StringComparer.Ordinal);
+            foreach (var (name, attr) in messageAttributes)
+            {
+                formatted[name] = new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["Type"] = attr.DataType ?? "String",
+                    ["Value"] = attr.StringValue ?? "",
+                };
+            }
+            snsRecord["MessageAttributes"] = formatted;
+        }
+
+        if (snsRecord["Subject"] is null)
+            snsRecord.Remove("Subject");
+
+        return new Dictionary<string, object?>(StringComparer.Ordinal)
+        {
+            ["Records"] = new object[]
+            {
+                new Dictionary<string, object?>(StringComparer.Ordinal)
+                {
+                    ["EventSource"] = "aws:sns",
+                    ["EventVersion"] = "1.0",
+                    ["EventSubscriptionArn"] = sub.Arn,
+                    ["Sns"] = snsRecord,
+                },
+            },
+        };
     }
 
     private void DeliverToSqs(

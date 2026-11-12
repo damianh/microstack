@@ -1,4 +1,6 @@
+using System.IO.Compression;
 using Amazon;
+using Amazon.Lambda;
 using Amazon.Runtime;
 using Amazon.SimpleNotificationService;
 using Amazon.SimpleNotificationService.Model;
@@ -12,12 +14,14 @@ namespace MicroStack.Tests;
 /// Uses the AWS SDK for .NET v4 pointed at the in-process MicroStack server.
 ///
 /// Mirrors coverage from ministack/tests/test_sns.py.
-/// Lambda-dependent tests are skipped until the Lambda handler is ported.
 /// </summary>
 public sealed class SnsTests(MicroStackFixture fixture) : IClassFixture<MicroStackFixture>, IAsyncLifetime
 {
     private readonly AmazonSimpleNotificationServiceClient _sns = CreateSnsClient(fixture);
     private readonly AmazonSQSClient _sqs = CreateSqsClient(fixture);
+    private readonly AmazonLambdaClient _lambda = CreateLambdaClient(fixture);
+
+    private const string LambdaRole = "arn:aws:iam::000000000000:role/lambda-role";
 
     private static AmazonSimpleNotificationServiceClient CreateSnsClient(MicroStackFixture fixture)
     {
@@ -56,6 +60,24 @@ public sealed class SnsTests(MicroStackFixture fixture) : IClassFixture<MicroSta
         return new AmazonSQSClient(new BasicAWSCredentials("test", "test"), config);
     }
 
+    private static AmazonLambdaClient CreateLambdaClient(MicroStackFixture fixture)
+    {
+        var innerHandler = fixture.CreateHandler();
+        var httpClient = new HttpClient(new CanonicalizeUriHandler(innerHandler))
+        {
+            BaseAddress = new Uri("http://localhost/"),
+        };
+
+        var config = new AmazonLambdaConfig
+        {
+            RegionEndpoint = RegionEndpoint.USEast1,
+            ServiceURL = "http://localhost/",
+            HttpClientFactory = new FixedHttpClientFactory(httpClient),
+        };
+
+        return new AmazonLambdaClient(new BasicAWSCredentials("test", "test"), config);
+    }
+
     public async ValueTask InitializeAsync()
     {
         await fixture.HttpClient.PostAsync("/_microstack/reset", null);
@@ -65,7 +87,45 @@ public sealed class SnsTests(MicroStackFixture fixture) : IClassFixture<MicroSta
     {
         _sns.Dispose();
         _sqs.Dispose();
+        _lambda.Dispose();
         return ValueTask.CompletedTask;
+    }
+
+    private static MemoryStream MakeZip(string filename, string content)
+    {
+        var stream = new MemoryStream();
+        using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            var entry = archive.CreateEntry(filename);
+            using var writer = new StreamWriter(entry.Open());
+            writer.Write(content);
+        }
+
+        stream.Position = 0;
+        return stream;
+    }
+
+    private async Task<string> CreateEventRecordingFunction(string name, string eventPath)
+    {
+        const string code =
+            "import json, os\n"
+            + "def handler(event, context):\n"
+            + "    with open(os.environ['SNS_EVENT_PATH'], 'a', encoding='utf-8') as output:\n"
+            + "        output.write(json.dumps(event) + '\\n')\n";
+        using var zip = MakeZip("index.py", code);
+        var function = await _lambda.CreateFunctionAsync(new Amazon.Lambda.Model.CreateFunctionRequest
+        {
+            FunctionName = name,
+            Runtime = Amazon.Lambda.Runtime.Python39,
+            Role = LambdaRole,
+            Handler = "index.handler",
+            Code = new Amazon.Lambda.Model.FunctionCode { ZipFile = zip },
+            Environment = new Amazon.Lambda.Model.Environment
+            {
+                Variables = new Dictionary<string, string> { ["SNS_EVENT_PATH"] = eventPath },
+            },
+        });
+        return function.FunctionArn;
     }
 
     // ── Topic CRUD ──────────────────────────────────────────────────────────────
@@ -214,6 +274,76 @@ public sealed class SnsTests(MicroStackFixture fixture) : IClassFixture<MicroSta
         var body = JsonDocument.Parse(msgs.Messages[0].Body).RootElement;
         body.GetProperty("Message").GetString().ShouldBe("fanout msg");
         body.GetProperty("TopicArn").GetString().ShouldBe(topicArn);
+    }
+
+    [Fact]
+    public async Task SnsLambdaFanout_InvokesFunctionWithSnsEvent()
+    {
+        var topicArn = (await _sns.CreateTopicAsync("intg-sns-lambda-fanout")).TopicArn;
+        var eventPath = Path.Combine(Path.GetTempPath(), $"microstack-sns-{Guid.NewGuid():N}.jsonl");
+        try
+        {
+            var functionArn = await CreateEventRecordingFunction("sns-event-recorder", eventPath);
+            var subscription = await _sns.SubscribeAsync(topicArn, "lambda", functionArn);
+            var published = await _sns.PublishAsync(new PublishRequest
+            {
+                TopicArn = topicArn,
+                Message = "lambda fanout message",
+                Subject = "Lambda test",
+                MessageAttributes = new Dictionary<string, Amazon.SimpleNotificationService.Model.MessageAttributeValue>
+                {
+                    ["color"] = new() { DataType = "String", StringValue = "blue" },
+                },
+            });
+
+            var lines = await File.ReadAllLinesAsync(eventPath);
+            lines.ShouldHaveSingleItem();
+            using var eventDocument = JsonDocument.Parse(lines[0]);
+            var records = eventDocument.RootElement.GetProperty("Records");
+            records.GetArrayLength().ShouldBe(1);
+            var record = records[0];
+            record.GetProperty("EventSource").GetString().ShouldBe("aws:sns");
+            record.GetProperty("EventVersion").GetString().ShouldBe("1.0");
+            record.GetProperty("EventSubscriptionArn").GetString().ShouldBe(subscription.SubscriptionArn);
+
+            var snsEvent = record.GetProperty("Sns");
+            snsEvent.GetProperty("Type").GetString().ShouldBe("Notification");
+            snsEvent.GetProperty("MessageId").GetString().ShouldBe(published.MessageId);
+            snsEvent.GetProperty("TopicArn").GetString().ShouldBe(topicArn);
+            snsEvent.GetProperty("Subject").GetString().ShouldBe("Lambda test");
+            snsEvent.GetProperty("Message").GetString().ShouldBe("lambda fanout message");
+            snsEvent.GetProperty("MessageAttributes").GetProperty("color").GetProperty("Type")
+                .GetString().ShouldBe("String");
+            snsEvent.GetProperty("MessageAttributes").GetProperty("color").GetProperty("Value")
+                .GetString().ShouldBe("blue");
+        }
+        finally
+        {
+            if (File.Exists(eventPath))
+                File.Delete(eventPath);
+        }
+    }
+
+    [Fact]
+    public async Task SnsLambdaFanout_DoesNotInvokeUnsubscribedFunction()
+    {
+        var topicArn = (await _sns.CreateTopicAsync("intg-sns-lambda-unsubscribed")).TopicArn;
+        var eventPath = Path.Combine(Path.GetTempPath(), $"microstack-sns-{Guid.NewGuid():N}.jsonl");
+        try
+        {
+            var functionArn = await CreateEventRecordingFunction("sns-unsubscribed-recorder", eventPath);
+            var subscription = await _sns.SubscribeAsync(topicArn, "lambda", functionArn);
+            await _sns.UnsubscribeAsync(subscription.SubscriptionArn);
+
+            await _sns.PublishAsync(topicArn, "must not invoke");
+
+            File.Exists(eventPath).ShouldBe(false);
+        }
+        finally
+        {
+            if (File.Exists(eventPath))
+                File.Delete(eventPath);
+        }
     }
 
     [Fact]

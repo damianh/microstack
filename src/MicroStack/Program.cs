@@ -94,7 +94,6 @@ registry.Register(sqsHandler);
 var ddbHandler = new DynamoDbServiceHandler();
 registry.Register(ddbHandler);
 registry.Register(new S3ServiceHandler());
-registry.Register(new SnsServiceHandler(sqsHandler));
 var iamHandler = new IamServiceHandler();
 registry.Register(iamHandler);
 registry.Register(new StsServiceHandler(iamHandler));
@@ -104,6 +103,7 @@ registry.Register(new KmsServiceHandler());
 var lambdaHandler = new LambdaServiceHandler(sqsHandler, ddbHandler,
     app.Services.GetRequiredService<AdminChangeHub>());
 registry.Register(lambdaHandler);
+registry.Register(new SnsServiceHandler(sqsHandler, lambdaHandler));
 registry.Register(new ApiGatewayV2ServiceHandler(lambdaHandler));
 var sfnHandler = new StepFunctionsServiceHandler(lambdaHandler, registry);
 registry.Register(sfnHandler);
