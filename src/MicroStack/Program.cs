@@ -119,7 +119,7 @@ registry.Register(new RdsServiceHandler());
 registry.Register(new ElastiCacheServiceHandler());
 registry.Register(new EcrServiceHandler());
 registry.Register(new RdsDataServiceHandler());
-registry.Register(new EventBridgeServiceHandler());
+registry.Register(new EventBridgeServiceHandler(registry));
 registry.Register(new KinesisServiceHandler());
 registry.Register(new FirehoseServiceHandler());
 registry.Register(new GlueServiceHandler());

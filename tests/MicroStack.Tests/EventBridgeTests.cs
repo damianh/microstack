@@ -1,7 +1,13 @@
+using System.IO.Compression;
 using Amazon;
 using Amazon.EventBridge;
 using Amazon.EventBridge.Model;
+using Amazon.Lambda;
 using Amazon.Runtime;
+using Amazon.SimpleNotificationService;
+using Amazon.SQS;
+using LambdaCreateFunctionRequest = Amazon.Lambda.Model.CreateFunctionRequest;
+using LambdaFunctionCode = Amazon.Lambda.Model.FunctionCode;
 
 namespace MicroStack.Tests;
 
@@ -14,6 +20,9 @@ namespace MicroStack.Tests;
 public sealed class EventBridgeTests(MicroStackFixture fixture) : IClassFixture<MicroStackFixture>, IAsyncLifetime
 {
     private readonly AmazonEventBridgeClient _eb = CreateEventBridgeClient(fixture);
+    private readonly AmazonLambdaClient _lambda = CreateLambdaClient(fixture);
+    private readonly AmazonSimpleNotificationServiceClient _sns = CreateSnsClient(fixture);
+    private readonly AmazonSQSClient _sqs = CreateSqsClient(fixture);
 
     private static AmazonEventBridgeClient CreateEventBridgeClient(MicroStackFixture fixture)
     {
@@ -33,6 +42,60 @@ public sealed class EventBridgeTests(MicroStackFixture fixture) : IClassFixture<
         return new AmazonEventBridgeClient(new BasicAWSCredentials("test", "test"), config);
     }
 
+    private static AmazonSQSClient CreateSqsClient(MicroStackFixture fixture)
+    {
+        var innerHandler = fixture.CreateHandler();
+        var httpClient = new HttpClient(new CanonicalizeUriHandler(innerHandler))
+        {
+            BaseAddress = new Uri("http://localhost/"),
+        };
+
+        var config = new AmazonSQSConfig
+        {
+            RegionEndpoint = RegionEndpoint.USEast1,
+            ServiceURL = "http://localhost/",
+            HttpClientFactory = new FixedHttpClientFactory(httpClient),
+        };
+
+        return new AmazonSQSClient(new BasicAWSCredentials("test", "test"), config);
+    }
+
+    private static AmazonLambdaClient CreateLambdaClient(MicroStackFixture fixture)
+    {
+        var innerHandler = fixture.CreateHandler();
+        var httpClient = new HttpClient(new CanonicalizeUriHandler(innerHandler))
+        {
+            BaseAddress = new Uri("http://localhost/"),
+        };
+
+        var config = new AmazonLambdaConfig
+        {
+            RegionEndpoint = RegionEndpoint.USEast1,
+            ServiceURL = "http://localhost/",
+            HttpClientFactory = new FixedHttpClientFactory(httpClient),
+        };
+
+        return new AmazonLambdaClient(new BasicAWSCredentials("test", "test"), config);
+    }
+
+    private static AmazonSimpleNotificationServiceClient CreateSnsClient(MicroStackFixture fixture)
+    {
+        var innerHandler = fixture.CreateHandler();
+        var httpClient = new HttpClient(new CanonicalizeUriHandler(innerHandler))
+        {
+            BaseAddress = new Uri("http://localhost/"),
+        };
+
+        var config = new AmazonSimpleNotificationServiceConfig
+        {
+            RegionEndpoint = RegionEndpoint.USEast1,
+            ServiceURL = "http://localhost/",
+            HttpClientFactory = new FixedHttpClientFactory(httpClient),
+        };
+
+        return new AmazonSimpleNotificationServiceClient(new BasicAWSCredentials("test", "test"), config);
+    }
+
     public async ValueTask InitializeAsync()
     {
         await fixture.HttpClient.PostAsync("/_microstack/reset", null);
@@ -41,7 +104,49 @@ public sealed class EventBridgeTests(MicroStackFixture fixture) : IClassFixture<
     public ValueTask DisposeAsync()
     {
         _eb.Dispose();
+        _lambda.Dispose();
+        _sns.Dispose();
+        _sqs.Dispose();
         return ValueTask.CompletedTask;
+    }
+
+    private static MemoryStream CreateLambdaCodeZip()
+    {
+        var stream = new MemoryStream();
+        using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            var entry = archive.CreateEntry("index.py");
+            using var writer = new StreamWriter(entry.Open());
+            writer.Write("def handler(event, context):\n    return {}\n");
+        }
+
+        stream.Position = 0;
+        return stream;
+    }
+
+    private async Task<string> CreateSqsTarget()
+    {
+        var queue = await _sqs.CreateQueueAsync($"eb-target-{Guid.NewGuid():N}");
+        var queueAttributes = await _sqs.GetQueueAttributesAsync(new Amazon.SQS.Model.GetQueueAttributesRequest
+        {
+            QueueUrl = queue.QueueUrl,
+            AttributeNames = ["QueueArn"],
+        });
+        var ruleName = $"eb-deliver-{Guid.NewGuid():N}"[..30];
+
+        await _eb.PutRuleAsync(new PutRuleRequest
+        {
+            Name = ruleName,
+            EventPattern = """{"source":["myapp"]}""",
+            State = RuleState.ENABLED,
+        });
+        await _eb.PutTargetsAsync(new PutTargetsRequest
+        {
+            Rule = ruleName,
+            Targets = [new Target { Id = "queue-target", Arn = queueAttributes.Attributes["QueueArn"] }],
+        });
+
+        return queue.QueueUrl;
     }
 
     // ── Event bus lifecycle ─────────────────────────────────────────────────────
@@ -389,6 +494,250 @@ public sealed class EventBridgeTests(MicroStackFixture fixture) : IClassFixture<
         resp.FailedEntryCount.ShouldBe(0);
         resp.Entries.Count.ShouldBe(3);
         resp.Entries.ShouldAllBe(e => !string.IsNullOrEmpty(e.EventId));
+    }
+
+    [Fact]
+    public async Task PutEvents_MatchingRule_DeliversEventToSqsTarget()
+    {
+        var queueUrl = await CreateSqsTarget();
+
+        var response = await _eb.PutEventsAsync(new PutEventsRequest
+        {
+            Entries =
+            [
+                new PutEventsRequestEntry
+                {
+                    Source = "myapp",
+                    DetailType = "OrderPlaced",
+                    Detail = """{"orderId":"42"}""",
+                },
+            ],
+        });
+
+        response.FailedEntryCount.ShouldBe(0);
+        response.Entries.ShouldHaveSingleItem();
+        response.Entries[0].EventId.ShouldNotBeNullOrEmpty();
+
+        var received = await _sqs.ReceiveMessageAsync(new Amazon.SQS.Model.ReceiveMessageRequest
+        {
+            QueueUrl = queueUrl,
+            MaxNumberOfMessages = 1,
+        });
+        received.Messages.ShouldHaveSingleItem();
+        using var eventDocument = JsonDocument.Parse(received.Messages[0].Body);
+        eventDocument.RootElement.GetProperty("source").GetString().ShouldBe("myapp");
+        eventDocument.RootElement.GetProperty("detail-type").GetString().ShouldBe("OrderPlaced");
+        eventDocument.RootElement.GetProperty("detail").GetProperty("orderId").GetString().ShouldBe("42");
+    }
+
+    [Fact]
+    public async Task PutEvents_NonMatchingRule_DoesNotDeliverToSqsTarget()
+    {
+        var queueUrl = await CreateSqsTarget();
+
+        var response = await _eb.PutEventsAsync(new PutEventsRequest
+        {
+            Entries =
+            [
+                new PutEventsRequestEntry
+                {
+                    Source = "another-app",
+                    DetailType = "OrderPlaced",
+                    Detail = """{"orderId":"42"}""",
+                },
+            ],
+        });
+
+        response.FailedEntryCount.ShouldBe(0);
+        response.Entries.ShouldHaveSingleItem();
+        response.Entries[0].EventId.ShouldNotBeNullOrEmpty();
+
+        var received = await _sqs.ReceiveMessageAsync(new Amazon.SQS.Model.ReceiveMessageRequest
+        {
+            QueueUrl = queueUrl,
+            MaxNumberOfMessages = 1,
+        });
+        received.Messages.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task PutEvents_MatchingRule_DeliversEventToSnsTarget()
+    {
+        var topicArn = (await _sns.CreateTopicAsync($"eb-target-{Guid.NewGuid():N}")).TopicArn;
+        var queueUrl = (await _sqs.CreateQueueAsync($"eb-sns-target-{Guid.NewGuid():N}")).QueueUrl;
+        var queueArn = (await _sqs.GetQueueAttributesAsync(new Amazon.SQS.Model.GetQueueAttributesRequest
+        {
+            QueueUrl = queueUrl,
+            AttributeNames = ["QueueArn"],
+        })).Attributes["QueueArn"];
+        await _sns.SubscribeAsync(topicArn, "sqs", queueArn);
+
+        var ruleName = $"eb-sns-deliver-{Guid.NewGuid():N}"[..30];
+        await _eb.PutRuleAsync(new PutRuleRequest
+        {
+            Name = ruleName,
+            EventPattern = """{"source":["myapp"]}""",
+            State = RuleState.ENABLED,
+        });
+        await _eb.PutTargetsAsync(new PutTargetsRequest
+        {
+            Rule = ruleName,
+            Targets = [new Target { Id = "sns-target", Arn = topicArn }],
+        });
+
+        var response = await _eb.PutEventsAsync(new PutEventsRequest
+        {
+            Entries =
+            [
+                new PutEventsRequestEntry
+                {
+                    Source = "myapp",
+                    DetailType = "OrderPlaced",
+                    Detail = """{"orderId":"42"}""",
+                },
+            ],
+        });
+
+        response.FailedEntryCount.ShouldBe(0);
+        var received = await _sqs.ReceiveMessageAsync(new Amazon.SQS.Model.ReceiveMessageRequest
+        {
+            QueueUrl = queueUrl,
+            MaxNumberOfMessages = 1,
+        });
+        received.Messages.ShouldHaveSingleItem();
+        using var snsNotification = JsonDocument.Parse(received.Messages[0].Body);
+        using var eventDocument = JsonDocument.Parse(snsNotification.RootElement.GetProperty("Message").GetString()!);
+        eventDocument.RootElement.GetProperty("source").GetString().ShouldBe("myapp");
+        eventDocument.RootElement.GetProperty("detail").GetProperty("orderId").GetString().ShouldBe("42");
+    }
+
+    [Fact]
+    public async Task PutEvents_MatchingRule_InvokesLambdaTarget()
+    {
+        var functionName = $"eb-target-{Guid.NewGuid():N}";
+        using var codeZip = CreateLambdaCodeZip();
+        var function =         await _lambda.CreateFunctionAsync(new LambdaCreateFunctionRequest
+        {
+            FunctionName = functionName,
+            Runtime = Runtime.Python39,
+            Role = "arn:aws:iam::000000000000:role/lambda-role",
+            Handler = "index.handler",
+            Code = new LambdaFunctionCode { ZipFile = codeZip },
+        });
+
+        var ruleName = $"eb-lambda-deliver-{Guid.NewGuid():N}"[..30];
+        await _eb.PutRuleAsync(new PutRuleRequest
+        {
+            Name = ruleName,
+            EventPattern = """{"source":["myapp"]}""",
+            State = RuleState.ENABLED,
+        });
+        await _eb.PutTargetsAsync(new PutTargetsRequest
+        {
+            Rule = ruleName,
+            Targets = [new Target { Id = "lambda-target", Arn = function.FunctionArn }],
+        });
+
+        var response = await _eb.PutEventsAsync(new PutEventsRequest
+        {
+            Entries =
+            [
+                new PutEventsRequestEntry
+                {
+                    Source = "myapp",
+                    DetailType = "OrderPlaced",
+                    Detail = """{"orderId":"42"}""",
+                },
+            ],
+        });
+
+        response.FailedEntryCount.ShouldBe(0);
+        response.Entries.ShouldHaveSingleItem();
+        response.Entries[0].EventId.ShouldNotBeNullOrEmpty();
+    }
+
+    [Fact]
+    public async Task PutEvents_UnsupportedTarget_ReturnsFailedEntry()
+    {
+        var ruleName = $"eb-unsupported-{Guid.NewGuid():N}"[..30];
+        await _eb.PutRuleAsync(new PutRuleRequest
+        {
+            Name = ruleName,
+            EventPattern = """{"source":["myapp"]}""",
+            State = RuleState.ENABLED,
+        });
+        await _eb.PutTargetsAsync(new PutTargetsRequest
+        {
+            Rule = ruleName,
+            Targets =
+            [
+                new Target
+                {
+                    Id = "unsupported-target",
+                    Arn = "arn:aws:firehose:us-east-1:000000000000:deliverystream/not-supported",
+                },
+            ],
+        });
+
+        var response = await _eb.PutEventsAsync(new PutEventsRequest
+        {
+            Entries =
+            [
+                new PutEventsRequestEntry
+                {
+                    Source = "myapp",
+                    DetailType = "OrderPlaced",
+                    Detail = """{"orderId":"42"}""",
+                },
+            ],
+        });
+
+        response.FailedEntryCount.ShouldBe(1);
+        response.Entries.ShouldHaveSingleItem();
+        response.Entries[0].ErrorCode.ShouldBe("UnsupportedTarget");
+        response.Entries[0].ErrorMessage.ShouldContain("not supported");
+    }
+
+    [Fact]
+    public async Task PutEvents_TargetDeliveryFailure_ReturnsFailedEntry()
+    {
+        var ruleName = $"eb-missing-queue-{Guid.NewGuid():N}"[..30];
+        await _eb.PutRuleAsync(new PutRuleRequest
+        {
+            Name = ruleName,
+            EventPattern = """{"source":["myapp"]}""",
+            State = RuleState.ENABLED,
+        });
+        await _eb.PutTargetsAsync(new PutTargetsRequest
+        {
+            Rule = ruleName,
+            Targets =
+            [
+                new Target
+                {
+                    Id = "missing-queue",
+                    Arn = $"arn:aws:sqs:us-east-1:000000000000:missing-{Guid.NewGuid():N}",
+                },
+            ],
+        });
+
+        var response = await _eb.PutEventsAsync(new PutEventsRequest
+        {
+            Entries =
+            [
+                new PutEventsRequestEntry
+                {
+                    Source = "myapp",
+                    DetailType = "OrderPlaced",
+                    Detail = """{"orderId":"42"}""",
+                },
+            ],
+        });
+
+        response.FailedEntryCount.ShouldBe(1);
+        response.Entries.ShouldHaveSingleItem();
+        response.Entries[0].ErrorCode.ShouldBe("QueueDoesNotExist");
+        response.Entries[0].ErrorMessage.ShouldContain("queue does not exist");
     }
 
     // ── TestEventPattern ────────────────────────────────────────────────────────
