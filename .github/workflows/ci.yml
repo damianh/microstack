@@ -64,9 +64,9 @@ jobs:
       - name: Test SDK container version tags
         run: |
           dotnet msbuild src/MicroStack/MicroStack.csproj \
-            -target:ComputeContainerConfig -p:MinVerVersionOverride=2026.1101.7 \
+            -target:ComputeContainerConfig -p:MinVerVersionOverride=26.1101.7 \
             -getItem:ContainerImageTags -v:q |
-            jq -e '[.Items.ContainerImageTags[].Identity] == ["2026.1101.7", "latest"]'
+            jq -e '[.Items.ContainerImageTags[].Identity] == ["26.1101.7", "latest"]'
           dotnet msbuild src/MicroStack/MicroStack.csproj \
             -target:ComputeContainerConfig -p:PublishImageTag=custom \
             -getItem:ContainerImageTags -v:q |

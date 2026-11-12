@@ -197,25 +197,26 @@ under `examples/testcontainers`.
 
 ## Versioning
 
-MicroStack uses calendar versions of the form `YYYY.MMDD.N`, based on the UTC release date:
+MicroStack uses calendar versions of the form `YY.MMDD.N`, based on the UTC release date:
 
-- `YYYY` is the year and `MMDD` is the numeric value of month × 100 + day, so 1 November 2026 is
-  `2026.1101.1` and 5 January 2027 is `2027.105.1` (no leading zero).
+- `YY` is the last two digits of the year (for release dates from 2000 through 2099), and `MMDD` is
+  the numeric value of month × 100 + day, so 1 November 2026 is `26.1101.1` and 5 January 2027 is
+  `27.105.1` (no leading zero in `MMDD`).
 - `N` starts at 1 for each release day and increments for further releases on the same day
-  (`2026.1101.2`, ...).
+  (`26.1101.2`, ...).
 
-Versions compare numerically field by field, so newer releases always sort higher in NuGet and other
-version-aware tools — including above the earlier `0.x` releases. Plain string sorting does not guarantee
-release order. The fields carry no compatibility meaning: breaking changes are called out in the release
-notes instead.
+Versions compare numerically field by field; plain string sorting does not guarantee release order.
+The switch from a four-digit year to a two-digit year means new releases sort below already-published
+`YYYY.MMDD.N` package versions in NuGet. The fields carry no compatibility meaning: breaking changes
+are called out in the release notes instead.
 
 The NuGet package, the `ghcr.io/damianh/microstack:<version>` container tag, and the `version` field of
 the health endpoint all report the same number. Releases are created by the `Release` workflow, which
-calculates the next version automatically from existing `vYYYY.MMDD.N` tags. Only stable calendar
-versions are published. Dockerfile builds without a supplied version report `0.0.0-dev`; other untagged
-source builds use MinVer development suffixes, which need not reflect the build date. A failed publication
-can leave artifacts without a Git tag, so check GHCR and NuGet before retrying; existing NuGet versions
-are not silently reused.
+calculates the next version automatically from existing `vYY.MMDD.N` and legacy `vYYYY.MMDD.N` tags.
+Only stable calendar versions are published. Dockerfile builds without a supplied version report
+`0.0.0-dev`; other untagged source builds use MinVer development suffixes, which need not reflect the
+build date. A failed publication can leave artifacts without a Git tag, so check GHCR and NuGet before
+retrying; existing NuGet versions are not silently reused.
 
 ## Using with AWS CLI
 
