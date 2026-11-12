@@ -2,7 +2,9 @@ using System.Text;
 using System.Text.Json;
 using System.Web;
 using MicroStack.Internal;
+using MicroStack.Services.Lambda;
 using MicroStack.Services.Sqs;
+using Microsoft.Extensions.Logging;
 
 namespace MicroStack.Services.Sns;
 
@@ -18,11 +20,13 @@ namespace MicroStack.Services.Sns;
 ///           Publish, PublishBatch,
 ///           ListTagsForResource, TagResource, UntagResource,
 ///           CreatePlatformApplication, CreatePlatformEndpoint.
-/// SNS -> SQS fanout delivers synchronously into the SQS handler's queues.
+/// SNS -> SQS and SNS -> Lambda fanout deliver synchronously into their handlers.
 /// </summary>
 internal sealed partial class SnsServiceHandler : IServiceHandler
 {
     private readonly SqsServiceHandler _sqs;
+    private readonly LambdaServiceHandler _lambda;
+    private readonly ILogger<SnsServiceHandler> _logger;
 
     private readonly AccountScopedDictionary<string, SnsTopic> _topics = new();
     private readonly AccountScopedDictionary<string, string> _subArnToTopic = new();
@@ -34,9 +38,14 @@ internal sealed partial class SnsServiceHandler : IServiceHandler
 
     private const string SnsXmlNs = "http://sns.amazonaws.com/doc/2010-03-31/";
 
-    internal SnsServiceHandler(SqsServiceHandler sqsHandler)
+    internal SnsServiceHandler(
+        SqsServiceHandler sqsHandler,
+        LambdaServiceHandler lambdaHandler,
+        ILogger<SnsServiceHandler> logger)
     {
         _sqs = sqsHandler;
+        _lambda = lambdaHandler;
+        _logger = logger;
     }
 
     // ── IServiceHandler ─────────────────────────────────────────────────────────
@@ -539,13 +548,18 @@ internal sealed partial class SnsServiceHandler : IServiceHandler
             return XmlError("InvalidParameterException",
                 "TopicArn, TargetArn, or PhoneNumber is required", 400);
 
+        Dictionary<string, SnsMessageAttribute> msgAttrs;
+        string msgId;
+        string groupId;
+        string dedupId;
+        SnsSubscription[] subscriptions;
         lock (_lock)
         {
             if (!_topics.TryGetValue(topicArn, out var topic))
                 return XmlError("NotFoundException", $"Topic does not exist: {topicArn}", 404);
 
-            var msgAttrs = ParseMessageAttributes(p);
-            var msgId = HashHelpers.NewUuid();
+            msgAttrs = ParseMessageAttributes(p);
+            msgId = HashHelpers.NewUuid();
 
             topic.Messages.Add(new SnsMessage
             {
@@ -557,15 +571,16 @@ internal sealed partial class SnsServiceHandler : IServiceHandler
                 Timestamp = TimeHelpers.NowEpoch(),
             });
 
-            var groupId = P(p, "MessageGroupId");
-            var dedupId = P(p, "MessageDeduplicationId");
-
-            Fanout(topic, msgId, message, subject, messageStructure, msgAttrs,
-                groupId, dedupId);
-
-            return XmlOk("PublishResponse",
-                $"<PublishResult><MessageId>{msgId}</MessageId></PublishResult>");
+            groupId = P(p, "MessageGroupId");
+            dedupId = P(p, "MessageDeduplicationId");
+            subscriptions = SnapshotSubscriptions(topic);
         }
+
+        Fanout(topicArn, subscriptions, msgId, message, subject, messageStructure,
+            msgAttrs, groupId, dedupId);
+
+        return XmlOk("PublishResponse",
+            $"<PublishResult><MessageId>{msgId}</MessageId></PublishResult>");
     }
 
     private ServiceResponse ActPublishBatch(Dictionary<string, string> p)
@@ -574,12 +589,14 @@ internal sealed partial class SnsServiceHandler : IServiceHandler
         if (string.IsNullOrEmpty(topicArn))
             return XmlError("InvalidParameterException", "TopicArn is required", 400);
 
+        var entries = ParseBatchEntries(p);
+        var publishedEntries = new List<(SnsBatchEntry Entry, string MessageId)>(entries.Count);
+        SnsSubscription[] subscriptions;
         lock (_lock)
         {
             if (!_topics.TryGetValue(topicArn, out var topic))
                 return XmlError("NotFoundException", $"Topic does not exist: {topicArn}", 404);
 
-            var entries = ParseBatchEntries(p);
             if (entries.Count == 0)
                 return XmlError("InvalidParameterException",
                     "PublishBatchRequestEntries is required", 400);
@@ -595,7 +612,6 @@ internal sealed partial class SnsServiceHandler : IServiceHandler
                         "Batch entry ids must be distinct", 400);
             }
 
-            var successful = new StringBuilder();
             foreach (var entry in entries)
             {
                 var msgId = HashHelpers.NewUuid();
@@ -608,31 +624,36 @@ internal sealed partial class SnsServiceHandler : IServiceHandler
                     MessageAttributes = entry.MessageAttributes,
                     Timestamp = TimeHelpers.NowEpoch(),
                 });
-
-                Fanout(topic, msgId, entry.Message, entry.Subject, entry.MessageStructure,
-                    entry.MessageAttributes, "", "");
-
-                successful.Append(
-                    "<member>"
-                    + $"<Id>{XmlEsc(entry.Id)}</Id>"
-                    + $"<MessageId>{msgId}</MessageId>"
-                    + "</member>");
+                publishedEntries.Add((entry, msgId));
             }
-
-            return XmlOk("PublishBatchResponse",
-                $"<PublishBatchResult>"
-                + $"<Successful>{successful}</Successful>"
-                + "<Failed></Failed>"
-                + "</PublishBatchResult>");
+            subscriptions = SnapshotSubscriptions(topic);
         }
+
+        var successful = new StringBuilder();
+        foreach (var (entry, msgId) in publishedEntries)
+        {
+            Fanout(topicArn, subscriptions, msgId, entry.Message, entry.Subject,
+                entry.MessageStructure, entry.MessageAttributes, "", "");
+            successful.Append(
+                "<member>"
+                + $"<Id>{XmlEsc(entry.Id)}</Id>"
+                + $"<MessageId>{msgId}</MessageId>"
+                + "</member>");
+        }
+
+        return XmlOk("PublishBatchResponse",
+            $"<PublishBatchResult>"
+            + $"<Successful>{successful}</Successful>"
+            + "<Failed></Failed>"
+            + "</PublishBatchResult>");
     }
 
     // ── Fanout ──────────────────────────────────────────────────────────────────
 
     /// <summary>Deliver published message to all confirmed subscribers that match filters.</summary>
-    /// <remarks>Must be called while holding <see cref="_lock"/>.</remarks>
     private void Fanout(
-        SnsTopic topic,
+        string topicArn,
+        IReadOnlyList<SnsSubscription> subscriptions,
         string msgId,
         string message,
         string subject,
@@ -641,7 +662,7 @@ internal sealed partial class SnsServiceHandler : IServiceHandler
         string messageGroupId,
         string messageDeduplicationId)
     {
-        foreach (var sub in topic.Subscriptions)
+        foreach (var sub in subscriptions)
         {
             if (!sub.Confirmed) continue;
 
@@ -650,7 +671,7 @@ internal sealed partial class SnsServiceHandler : IServiceHandler
 
             var effectiveMessage = ResolveMessageForProtocol(message, messageStructure, sub.Protocol);
             var raw = sub.Attributes.GetValueOrDefault("RawMessageDelivery", "false") == "true";
-            var envelope = BuildEnvelope(topic.Arn, msgId, effectiveMessage, subject,
+            var envelope = BuildEnvelope(topicArn, msgId, effectiveMessage, subject,
                 messageAttributes, raw);
 
             switch (sub.Protocol)
@@ -660,7 +681,13 @@ internal sealed partial class SnsServiceHandler : IServiceHandler
                         messageGroupId, messageDeduplicationId);
                     break;
                 case "lambda":
-                    // Lambda fanout will be implemented when Lambda handler is ported.
+                    if (!_lambda.InvokeForEsm(sub.Endpoint, BuildLambdaEvent(
+                            topicArn, sub, msgId, effectiveMessage, subject, messageAttributes)))
+                    {
+                        _logger.LogError(
+                            "Failed to deliver SNS message {MessageId} from topic {TopicArn} to Lambda subscription {SubscriptionArn} ({Endpoint})",
+                            msgId, topicArn, sub.Arn, sub.Endpoint);
+                    }
                     break;
                 case "http" or "https":
                     // HTTP delivery is a stub — real AWS would POST asynchronously.
@@ -670,6 +697,73 @@ internal sealed partial class SnsServiceHandler : IServiceHandler
                     break;
             }
         }
+    }
+
+    private static SnsSubscription[] SnapshotSubscriptions(SnsTopic topic) =>
+        topic.Subscriptions.Select(sub => new SnsSubscription
+        {
+            Arn = sub.Arn,
+            Protocol = sub.Protocol,
+            Endpoint = sub.Endpoint,
+            Confirmed = sub.Confirmed,
+            TopicArn = sub.TopicArn,
+            Owner = sub.Owner,
+            Token = sub.Token,
+            Attributes = new Dictionary<string, string>(sub.Attributes, StringComparer.Ordinal),
+        }).ToArray();
+
+    private static Dictionary<string, object?> BuildLambdaEvent(
+        string topicArn,
+        SnsSubscription sub,
+        string msgId,
+        string message,
+        string subject,
+        Dictionary<string, SnsMessageAttribute> messageAttributes)
+    {
+        var snsRecord = new Dictionary<string, object?>(StringComparer.Ordinal)
+        {
+            ["Type"] = "Notification",
+            ["MessageId"] = msgId,
+            ["TopicArn"] = topicArn,
+            ["Subject"] = string.IsNullOrEmpty(subject) ? null : subject,
+            ["Message"] = message,
+            ["Timestamp"] = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+            ["SignatureVersion"] = "1",
+            ["Signature"] = "FAKE",
+            ["SigningCertUrl"] = $"https://sns.{Region}.amazonaws.com/SimpleNotificationService-fake.pem",
+            ["UnsubscribeUrl"] = $"http://localhost:4566/?Action=Unsubscribe&SubscriptionArn={Uri.EscapeDataString(sub.Arn)}",
+        };
+
+        if (messageAttributes.Count > 0)
+        {
+            var formatted = new Dictionary<string, object?>(StringComparer.Ordinal);
+            foreach (var (name, attr) in messageAttributes)
+            {
+                formatted[name] = new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["Type"] = attr.DataType ?? "String",
+                    ["Value"] = attr.StringValue ?? attr.BinaryValue ?? "",
+                };
+            }
+            snsRecord["MessageAttributes"] = formatted;
+        }
+
+        if (snsRecord["Subject"] is null)
+            snsRecord.Remove("Subject");
+
+        return new Dictionary<string, object?>(StringComparer.Ordinal)
+        {
+            ["Records"] = new object[]
+            {
+                new Dictionary<string, object?>(StringComparer.Ordinal)
+                {
+                    ["EventSource"] = "aws:sns",
+                    ["EventVersion"] = "1.0",
+                    ["EventSubscriptionArn"] = sub.Arn,
+                    ["Sns"] = snsRecord,
+                },
+            },
+        };
     }
 
     private void DeliverToSqs(
