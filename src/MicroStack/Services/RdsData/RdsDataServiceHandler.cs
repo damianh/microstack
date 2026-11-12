@@ -82,7 +82,7 @@ internal sealed class RdsDataServiceHandler : IServiceHandler, IAdminResourceSou
     public IEnumerable<AdminNode> GetAdminResources(string serviceId) => [];
 
     public string? GetAdminNotice(string serviceId) =>
-        "RDS Data API SQL uses an in-memory SQLite database per RDS cluster. Data is cleared when the cluster is deleted, MicroStack is reset, or MicroStack restarts.";
+        "RDS Data API retains no database resources or SQL results beyond each cluster's in-memory SQLite database. Data is cleared when the cluster is deleted, MicroStack is reset, or MicroStack restarts.";
 
     private ServiceResponse ExecuteStatement(JsonElement data)
     {
@@ -461,6 +461,17 @@ internal sealed class RdsDataServiceHandler : IServiceHandler, IAdminResourceSou
         out RdsClusterDatabase? database,
         out ServiceResponse? error)
     {
+        var arnParts = resourceArn.Split(':');
+        if (arnParts.Length != 7 ||
+            !string.Equals(arnParts[0], "arn", StringComparison.Ordinal) ||
+            !string.Equals(arnParts[2], "rds", StringComparison.Ordinal) ||
+            !string.Equals(arnParts[4], AccountContext.GetAccountId(), StringComparison.Ordinal))
+        {
+            database = null;
+            error = ErrorJson("BadRequestException", $"Database cluster not found for ARN: {resourceArn}");
+            return false;
+        }
+
         if (_databaseStore.TryGet(resourceArn, out database) && database is not null)
         {
             error = null;

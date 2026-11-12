@@ -47,9 +47,9 @@ public sealed class RdsDataTests(MicroStackFixture fixture) : IClassFixture<Micr
         return (response.StatusCode, doc.RootElement.Clone());
     }
 
-    private async Task<string> CreateEmulatedCluster(string clusterIdentifier)
+    private async Task<string> CreateEmulatedCluster(string clusterIdentifier, string accessKeyId = "test")
     {
-        var (rdsClient, sdkHttpClient) = CreateRdsClient();
+        var (rdsClient, sdkHttpClient) = CreateRdsClient(accessKeyId);
         using (sdkHttpClient)
         using (rdsClient)
         {
@@ -64,7 +64,7 @@ public sealed class RdsDataTests(MicroStackFixture fixture) : IClassFixture<Micr
         }
     }
 
-    private (AmazonRDSClient Client, HttpClient HttpClient) CreateRdsClient()
+    private (AmazonRDSClient Client, HttpClient HttpClient) CreateRdsClient(string accessKeyId = "test")
     {
         var sdkHttpClient = new HttpClient(new CanonicalizeUriHandler(fixture.CreateHandler()))
         {
@@ -76,7 +76,7 @@ public sealed class RdsDataTests(MicroStackFixture fixture) : IClassFixture<Micr
             ServiceURL = "http://localhost/",
             HttpClientFactory = new FixedHttpClientFactory(sdkHttpClient),
         };
-        return (new AmazonRDSClient(new BasicAWSCredentials("test", "test"), config), sdkHttpClient);
+        return (new AmazonRDSClient(new BasicAWSCredentials(accessKeyId, "test"), config), sdkHttpClient);
     }
 
     private Task<(HttpStatusCode StatusCode, JsonElement Body)> ExecuteStatement(
@@ -96,6 +96,30 @@ public sealed class RdsDataTests(MicroStackFixture fixture) : IClassFixture<Micr
         if (transactionId is not null)
             request["transactionId"] = transactionId;
         return RawPost("/Execute", request);
+    }
+
+    private async Task<(HttpStatusCode StatusCode, JsonElement Body)> ExecuteStatementAsAccount(
+        string accountId,
+        string resourceArn,
+        string sql)
+    {
+        var body = JsonSerializer.Serialize(new
+        {
+            resourceArn,
+            secretArn = FakeSecretArn,
+            sql,
+        });
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/Execute")
+        {
+            Content = new StringContent(body, Encoding.UTF8, "application/json"),
+        };
+        request.Headers.TryAddWithoutValidation(
+            "Authorization",
+            $"AWS4-HMAC-SHA256 Credential={accountId}/20261112/us-east-1/rds-data/aws4_request, SignedHeaders=host, Signature=test");
+        using var response = await fixture.HttpClient.SendAsync(request);
+        var responseBody = await response.Content.ReadAsStringAsync();
+        using var doc = JsonDocument.Parse(responseBody);
+        return (response.StatusCode, doc.RootElement.Clone());
     }
 
     // ── Routing tests ─────────────────────────────────────────────────────────
@@ -397,6 +421,27 @@ public sealed class RdsDataTests(MicroStackFixture fixture) : IClassFixture<Micr
             transactionId: transactionId);
 
         status.ShouldBe(HttpStatusCode.NotFound);
+        GetMessage(body).ShouldContain("not found", Case.Insensitive);
+    }
+
+    [Fact]
+    public async Task ExecuteStatement_RejectsClusterArnFromAnotherAccount()
+    {
+        const string owningAccount = "111111111111";
+        const string requestingAccount = "222222222222";
+        var resourceArn = await CreateEmulatedCluster("rds-data-account-scope", owningAccount);
+        var (createStatus, _) = await ExecuteStatementAsAccount(
+            owningAccount,
+            resourceArn,
+            "CREATE TABLE private_entries (entry_id INTEGER PRIMARY KEY)");
+        createStatus.ShouldBe(HttpStatusCode.OK);
+
+        var (status, body) = await ExecuteStatementAsAccount(
+            requestingAccount,
+            resourceArn,
+            "SELECT * FROM private_entries");
+
+        status.ShouldBe(HttpStatusCode.BadRequest);
         GetMessage(body).ShouldContain("not found", Case.Insensitive);
     }
 
