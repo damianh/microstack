@@ -474,7 +474,7 @@ internal sealed partial class KmsServiceHandler : IServiceHandler, Internal.Admi
 
             return AwsResponseHelpers.JsonResponse(new Dictionary<string, object?>
             {
-                ["KeyId"] = rec.KeyId,
+                ["KeyId"] = rec.Arn,
                 ["KeyUsage"] = rec.KeyUsage,
                 ["KeySpec"] = rec.KeySpec,
                 ["PublicKey"] = Convert.ToBase64String(rec.PublicKeyDer),
@@ -533,7 +533,7 @@ internal sealed partial class KmsServiceHandler : IServiceHandler, Internal.Admi
 
             return AwsResponseHelpers.JsonResponse(new Dictionary<string, object?>
             {
-                ["KeyId"] = rec.KeyId,
+                ["KeyId"] = rec.Arn,
                 ["Signature"] = Convert.ToBase64String(signature),
                 ["SigningAlgorithm"] = algorithm,
             });
@@ -592,7 +592,7 @@ internal sealed partial class KmsServiceHandler : IServiceHandler, Internal.Admi
 
             return AwsResponseHelpers.JsonResponse(new Dictionary<string, object?>
             {
-                ["KeyId"] = rec.KeyId,
+                ["KeyId"] = rec.Arn,
                 ["SignatureValid"] = valid,
                 ["SigningAlgorithm"] = algorithm,
             });
@@ -662,7 +662,7 @@ internal sealed partial class KmsServiceHandler : IServiceHandler, Internal.Admi
 
             return AwsResponseHelpers.JsonResponse(new Dictionary<string, object?>
             {
-                ["KeyId"] = rec.KeyId,
+                ["KeyId"] = rec.Arn,
                 ["CiphertextBlob"] = Convert.ToBase64String(ciphertext),
                 ["EncryptionAlgorithm"] = GetString(data, "EncryptionAlgorithm") ?? "SYMMETRIC_DEFAULT",
             });
@@ -768,7 +768,7 @@ internal sealed partial class KmsServiceHandler : IServiceHandler, Internal.Admi
 
             return AwsResponseHelpers.JsonResponse(new Dictionary<string, object?>
             {
-                ["KeyId"] = rec.KeyId,
+                ["KeyId"] = rec.Arn,
                 ["Plaintext"] = Convert.ToBase64String(plaintext),
                 ["EncryptionAlgorithm"] = GetString(data, "EncryptionAlgorithm") ?? "SYMMETRIC_DEFAULT",
             });
@@ -841,7 +841,7 @@ internal sealed partial class KmsServiceHandler : IServiceHandler, Internal.Admi
 
             return AwsResponseHelpers.JsonResponse(new Dictionary<string, object?>
             {
-                ["KeyId"] = rec.KeyId,
+                ["KeyId"] = rec.Arn,
                 ["Plaintext"] = Convert.ToBase64String(dataKey!),
                 ["CiphertextBlob"] = Convert.ToBase64String(ciphertext),
             });
@@ -862,7 +862,7 @@ internal sealed partial class KmsServiceHandler : IServiceHandler, Internal.Admi
 
             return AwsResponseHelpers.JsonResponse(new Dictionary<string, object?>
             {
-                ["KeyId"] = rec.KeyId,
+                ["KeyId"] = rec.Arn,
                 ["CiphertextBlob"] = Convert.ToBase64String(ciphertext),
             });
         }
@@ -1158,7 +1158,7 @@ internal sealed partial class KmsServiceHandler : IServiceHandler, Internal.Admi
 
             return AwsResponseHelpers.JsonResponse(new Dictionary<string, object?>
             {
-                ["KeyId"] = rec.KeyId,
+                ["KeyId"] = rec.Arn,
                 ["KeyState"] = "PendingDeletion",
                 ["DeletionDate"] = rec.DeletionDate,
             });
@@ -1181,7 +1181,7 @@ internal sealed partial class KmsServiceHandler : IServiceHandler, Internal.Admi
 
             return AwsResponseHelpers.JsonResponse(new Dictionary<string, object?>
             {
-                ["KeyId"] = rec.KeyId,
+                ["KeyId"] = rec.Arn,
             });
         }
     }

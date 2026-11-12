@@ -233,7 +233,7 @@ public sealed class KmsTests(MicroStackFixture fixture) : IClassFixture<MicroSta
             SigningAlgorithm = SigningAlgorithmSpec.RSASSA_PKCS1_V1_5_SHA_256,
         });
 
-        signResp.KeyId.ShouldBe(keyId);
+        signResp.KeyId.ShouldBe(key.KeyMetadata.Arn);
         signResp.SigningAlgorithm.ShouldBe(SigningAlgorithmSpec.RSASSA_PKCS1_V1_5_SHA_256);
         (signResp.Signature.Length > 0).ShouldBe(true);
 
@@ -483,7 +483,7 @@ public sealed class KmsTests(MicroStackFixture fixture) : IClassFixture<MicroSta
             KeyId = keyId,
             Plaintext = new MemoryStream(plaintext),
         });
-        encResp.KeyId.ShouldBe(keyId);
+        encResp.KeyId.ShouldBe(key.KeyMetadata.Arn);
 
         var decResp = await _kms.DecryptAsync(new DecryptRequest
         {
@@ -535,7 +535,7 @@ public sealed class KmsTests(MicroStackFixture fixture) : IClassFixture<MicroSta
             KeySpec = DataKeySpec.AES_256,
         });
 
-        resp.KeyId.ShouldBe(keyId);
+        resp.KeyId.ShouldBe(key.KeyMetadata.Arn);
         resp.Plaintext.Length.ShouldBe(32);
         (resp.CiphertextBlob.Length > 0).ShouldBe(true);
     }
@@ -600,7 +600,7 @@ public sealed class KmsTests(MicroStackFixture fixture) : IClassFixture<MicroSta
                 KeySpec = DataKeySpec.AES_256,
             });
 
-        resp.KeyId.ShouldBe(keyId);
+        resp.KeyId.ShouldBe(key.KeyMetadata.Arn);
         (resp.CiphertextBlob.Length > 0).ShouldBe(true);
     }
 
@@ -617,9 +617,22 @@ public sealed class KmsTests(MicroStackFixture fixture) : IClassFixture<MicroSta
         var keyId = key.KeyMetadata.KeyId;
 
         var resp = await _kms.GetPublicKeyAsync(new GetPublicKeyRequest { KeyId = keyId });
-        resp.KeyId.ShouldBe(keyId);
+        resp.KeyId.ShouldBe(key.KeyMetadata.Arn);
         resp.KeySpec.ShouldBe(KeySpec.RSA_2048);
         (resp.PublicKey.Length > 0).ShouldBe(true);
+    }
+
+    [Fact]
+    public async Task GetPublicKeyByArnReturnsArn()
+    {
+        var key = await _kms.CreateKeyAsync(new CreateKeyRequest
+        {
+            KeySpec = KeySpec.RSA_2048,
+            KeyUsage = KeyUsageType.SIGN_VERIFY,
+        });
+
+        var resp = await _kms.GetPublicKeyAsync(new GetPublicKeyRequest { KeyId = key.KeyMetadata.Arn });
+        resp.KeyId.ShouldBe(key.KeyMetadata.Arn);
     }
 
     // -- EncryptionContext ------------------------------------------------------
@@ -949,8 +962,10 @@ public sealed class KmsTests(MicroStackFixture fixture) : IClassFixture<MicroSta
             PendingWindowInDays = 7,
         });
         resp.KeyState.ShouldBe(KeyState.PendingDeletion);
+        resp.KeyId.ShouldBe(key.KeyMetadata.Arn);
 
-        await _kms.CancelKeyDeletionAsync(new CancelKeyDeletionRequest { KeyId = keyId });
+        var cancel = await _kms.CancelKeyDeletionAsync(new CancelKeyDeletionRequest { KeyId = keyId });
+        cancel.KeyId.ShouldBe(key.KeyMetadata.Arn);
 
         var desc = await _kms.DescribeKeyAsync(new DescribeKeyRequest { KeyId = keyId });
         desc.KeyMetadata.KeyState.ShouldBe(KeyState.Disabled);
