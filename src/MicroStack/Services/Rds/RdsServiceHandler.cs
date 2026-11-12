@@ -41,6 +41,12 @@ internal sealed class RdsServiceHandler : IServiceHandler, IAdminResourceSource
     private readonly AccountScopedDictionary<string, Dictionary<string, object?>> _globalClusters = new();
 
     private readonly Lock _lock = new();
+    private readonly RdsDatabaseStore _databaseStore;
+
+    internal RdsServiceHandler() : this(new RdsDatabaseStore()) { }
+
+    internal RdsServiceHandler(RdsDatabaseStore databaseStore) =>
+        _databaseStore = databaseStore;
 
     // ── IServiceHandler ───────────────────────────────────────────────────────
 
@@ -71,6 +77,7 @@ internal sealed class RdsServiceHandler : IServiceHandler, IAdminResourceSource
             _dbProxies.Clear();
             _optionGroups.Clear();
             _globalClusters.Clear();
+            _databaseStore.Reset();
         }
     }
 
@@ -620,6 +627,7 @@ internal sealed class RdsServiceHandler : IServiceHandler, IAdminResourceSource
             ["ActivityStreamStatus"] = "stopped",
         };
 
+        _databaseStore.Create(arn);
         _clusters[clusterId] = cluster;
 
         var reqTags = ParseTags(p);
@@ -732,6 +740,7 @@ internal sealed class RdsServiceHandler : IServiceHandler, IAdminResourceSource
 
         cluster["Status"] = "deleting";
         var arn = (string)(cluster["DBClusterArn"] ?? "");
+        _databaseStore.Delete(arn);
         _tags.TryRemove(arn, out _);
         _clusters.TryRemove(clusterId, out _);
 
