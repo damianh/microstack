@@ -6,7 +6,7 @@ the AWS SDK for .NET.
 
 ## Run
 
-Prerequisites: .NET 10 SDK and a Docker-compatible container runtime.
+Prerequisites: .NET 11 SDK and a Docker-compatible container runtime.
 
 Build the current repository image and run the test from the repository root:
 

@@ -4,7 +4,7 @@ This integration test starts the image named by `MICROSTACK_TEST_IMAGE` on a
 random host port, waits for MicroStack's HTTP health endpoint, and exercises SQS
 and path-style S3 with `boto3`.
 
-Requirements: Python 3.9+ and a running Docker daemon.
+Requirements: Python 3.10+ and a running Docker daemon.
 
 ```sh
 cd examples/testcontainers/python

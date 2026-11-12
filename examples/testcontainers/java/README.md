@@ -1,7 +1,7 @@
 # MicroStack with Testcontainers Java
 
 This Maven project runs an integration test against a MicroStack image using
-generic Testcontainers and AWS SDK for Java v2. It requires Java 17+, Maven,
+generic Testcontainers and AWS SDK for Java v2. It requires Java 25+, Maven,
 Docker, and an image named by `MICROSTACK_TEST_IMAGE`.
 
 PowerShell:
