@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -955,7 +956,7 @@ internal sealed partial class EventBridgeServiceHandler : IServiceHandler
                         ["DetailType"] = GetString(entryEl, "DetailType") ?? "",
                         ["Detail"] = GetString(entryEl, "Detail") ?? "{}",
                         ["EventBusName"] = busName,
-                        ["Time"] = GetString(entryEl, "Time") ?? TimeHelpers.NowIso(),
+                        ["Time"] = GetEventTime(entryEl),
                         ["Account"] = AccountContext.GetAccountId(),
                         ["Region"] = Region,
                     };
@@ -1013,6 +1014,37 @@ internal sealed partial class EventBridgeServiceHandler : IServiceHandler
         }
 
         return name;
+    }
+
+    private static string GetEventTime(JsonElement entry)
+    {
+        if (!entry.TryGetProperty("Time", out var time))
+        {
+            return TimeHelpers.NowIso();
+        }
+
+        DateTimeOffset timestamp;
+        if (time.ValueKind == JsonValueKind.Number && time.TryGetDouble(out var epochSeconds))
+        {
+            timestamp = DateTimeOffset.FromUnixTimeMilliseconds((long)(epochSeconds * 1000));
+        }
+        else if (time.ValueKind == JsonValueKind.String)
+        {
+            if (!DateTimeOffset.TryParse(
+                    time.GetString(),
+                    CultureInfo.InvariantCulture,
+                    DateTimeStyles.AssumeUniversal,
+                    out timestamp))
+            {
+                return TimeHelpers.NowIso();
+            }
+        }
+        else
+        {
+            return TimeHelpers.NowIso();
+        }
+
+        return timestamp.UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.fff'Z'", CultureInfo.InvariantCulture);
     }
 
     private List<(string ErrorCode, string Message)> DispatchEvent(Dictionary<string, object?> eventRecord)
@@ -1163,7 +1195,7 @@ internal sealed partial class EventBridgeServiceHandler : IServiceHandler
                 request = new ServiceRequest(
                     "POST",
                     $"/2015-03-31/functions/{functionName}/invocations",
-                    TargetHeaders(serviceName, "", "application/json", ("x-amz-invocation-type", "Event")),
+                    TargetHeaders(serviceName, "", "application/json"),
                     eventPayload,
                     EmptyQuery);
                 break;
@@ -1173,7 +1205,18 @@ internal sealed partial class EventBridgeServiceHandler : IServiceHandler
         }
 
         var response = handler.HandleAsync(request).GetAwaiter().GetResult();
-        return response.StatusCode >= 400 ? GetTargetDeliveryError(response) : null;
+        if (response.StatusCode >= 400)
+        {
+            return GetTargetDeliveryError(response);
+        }
+
+        if (serviceName == "lambda"
+            && response.Headers.TryGetValue("X-Amz-Function-Error", out var functionError))
+        {
+            return ("LambdaFunctionError", $"Lambda invocation failed ({functionError}): {Encoding.UTF8.GetString(response.Body)}");
+        }
+
+        return null;
     }
 
     private static Dictionary<string, string> TargetHeaders(

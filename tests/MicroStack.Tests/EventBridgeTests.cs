@@ -7,6 +7,7 @@ using Amazon.Runtime;
 using Amazon.SimpleNotificationService;
 using Amazon.SQS;
 using LambdaCreateFunctionRequest = Amazon.Lambda.Model.CreateFunctionRequest;
+using LambdaEnvironment = Amazon.Lambda.Model.Environment;
 using LambdaFunctionCode = Amazon.Lambda.Model.FunctionCode;
 
 namespace MicroStack.Tests;
@@ -110,14 +111,14 @@ public sealed class EventBridgeTests(MicroStackFixture fixture) : IClassFixture<
         return ValueTask.CompletedTask;
     }
 
-    private static MemoryStream CreateLambdaCodeZip()
+    private static MemoryStream CreateLambdaCodeZip(string handlerSource)
     {
         var stream = new MemoryStream();
         using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true))
         {
             var entry = archive.CreateEntry("index.py");
             using var writer = new StreamWriter(entry.Open());
-            writer.Write("def handler(event, context):\n    return {}\n");
+            writer.Write(handlerSource);
         }
 
         stream.Position = 0;
@@ -615,28 +616,73 @@ public sealed class EventBridgeTests(MicroStackFixture fixture) : IClassFixture<
     public async Task PutEvents_MatchingRule_InvokesLambdaTarget()
     {
         var functionName = $"eb-target-{Guid.NewGuid():N}";
-        using var codeZip = CreateLambdaCodeZip();
-        var function =         await _lambda.CreateFunctionAsync(new LambdaCreateFunctionRequest
+        var markerPath = Path.Combine(Path.GetTempPath(), $"eventbridge-{Guid.NewGuid():N}.txt");
+        using var codeZip = CreateLambdaCodeZip(
+            "import os\n" +
+            "def handler(event, context):\n" +
+            "    with open(os.environ['EVENTBRIDGE_MARKER'], 'w') as marker:\n" +
+            "        marker.write(event['source'])\n" +
+            "    return {}\n");
+        try
         {
-            FunctionName = functionName,
-            Runtime = Runtime.Python39,
-            Role = "arn:aws:iam::000000000000:role/lambda-role",
-            Handler = "index.handler",
-            Code = new LambdaFunctionCode { ZipFile = codeZip },
-        });
+            var function = await _lambda.CreateFunctionAsync(new LambdaCreateFunctionRequest
+            {
+                FunctionName = functionName,
+                Runtime = Runtime.Python39,
+                Role = "arn:aws:iam::000000000000:role/lambda-role",
+                Handler = "index.handler",
+                Code = new LambdaFunctionCode { ZipFile = codeZip },
+                Environment = new LambdaEnvironment
+                {
+                    Variables = new Dictionary<string, string> { ["EVENTBRIDGE_MARKER"] = markerPath },
+                },
+            });
 
-        var ruleName = $"eb-lambda-deliver-{Guid.NewGuid():N}"[..30];
-        await _eb.PutRuleAsync(new PutRuleRequest
+            var ruleName = $"eb-lambda-deliver-{Guid.NewGuid():N}"[..30];
+            await _eb.PutRuleAsync(new PutRuleRequest
+            {
+                Name = ruleName,
+                EventPattern = """{"source":["myapp"]}""",
+                State = RuleState.ENABLED,
+            });
+            await _eb.PutTargetsAsync(new PutTargetsRequest
+            {
+                Rule = ruleName,
+                Targets = [new Target { Id = "lambda-target", Arn = function.FunctionArn }],
+            });
+
+            var response = await _eb.PutEventsAsync(new PutEventsRequest
+            {
+                Entries =
+                [
+                    new PutEventsRequestEntry
+                    {
+                        Source = "myapp",
+                        DetailType = "OrderPlaced",
+                        Detail = """{"orderId":"42"}""",
+                    },
+                ],
+            });
+
+            response.FailedEntryCount.ShouldBe(0);
+            response.Entries.ShouldHaveSingleItem();
+            response.Entries[0].EventId.ShouldNotBeNullOrEmpty();
+            File.ReadAllText(markerPath).ShouldBe("myapp");
+        }
+        finally
         {
-            Name = ruleName,
-            EventPattern = """{"source":["myapp"]}""",
-            State = RuleState.ENABLED,
-        });
-        await _eb.PutTargetsAsync(new PutTargetsRequest
-        {
-            Rule = ruleName,
-            Targets = [new Target { Id = "lambda-target", Arn = function.FunctionArn }],
-        });
+            if (File.Exists(markerPath))
+            {
+                File.Delete(markerPath);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task PutEvents_NumericTime_PreservesTimeInTargetEnvelope()
+    {
+        var queueUrl = await CreateSqsTarget();
+        var eventTime = new DateTime(2024, 3, 5, 6, 7, 8, DateTimeKind.Utc);
 
         var response = await _eb.PutEventsAsync(new PutEventsRequest
         {
@@ -647,13 +693,20 @@ public sealed class EventBridgeTests(MicroStackFixture fixture) : IClassFixture<
                     Source = "myapp",
                     DetailType = "OrderPlaced",
                     Detail = """{"orderId":"42"}""",
+                    Time = eventTime,
                 },
             ],
         });
 
         response.FailedEntryCount.ShouldBe(0);
-        response.Entries.ShouldHaveSingleItem();
-        response.Entries[0].EventId.ShouldNotBeNullOrEmpty();
+        var received = await _sqs.ReceiveMessageAsync(new Amazon.SQS.Model.ReceiveMessageRequest
+        {
+            QueueUrl = queueUrl,
+            MaxNumberOfMessages = 1,
+        });
+        received.Messages.ShouldHaveSingleItem();
+        using var eventDocument = JsonDocument.Parse(received.Messages[0].Body);
+        eventDocument.RootElement.GetProperty("time").GetString().ShouldBe("2024-03-05T06:07:08.000Z");
     }
 
     [Fact]
