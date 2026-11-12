@@ -287,7 +287,7 @@ Returns JSON with service availability, edition, and version:
     "dynamodb": "available"
   },
   "edition": "light",
-  "version": "2026.1101.1"
+  "version": "26.1101.1"
 }
 ```
 

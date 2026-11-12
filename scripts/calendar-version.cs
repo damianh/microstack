@@ -417,9 +417,10 @@ internal sealed record CalendarVersionOptions(DateOnly? Date, string? TagsFile)
                             $"invalid date '{args[index]}'; expected a valid date in YYYY-MM-DD format");
                     }
 
-                    if (parsedDate.Year < 1000)
+                    if (parsedDate.Year is < CalendarVersion.MinimumYear or > CalendarVersion.MaximumYear)
                     {
-                        throw new ArgumentException("release year must be a four-digit version component");
+                        throw new ArgumentException(
+                            "release year must be between 2000 and 2099 for a two-digit version component");
                     }
 
                     date = parsedDate;
@@ -446,16 +447,19 @@ internal sealed record CalendarVersionOptions(DateOnly? Date, string? TagsFile)
 internal static partial class CalendarVersion
 {
     private const int MaximumComponent = 65534;
+    internal const int MinimumYear = 2000;
+    internal const int MaximumYear = 2099;
 
-    [GeneratedRegex(@"^v(?<year>[1-9][0-9]{3})\.(?<monthDay>[1-9][0-9]{2,3})\.(?<counter>[1-9][0-9]*)$",
+    [GeneratedRegex(@"^v(?<year>[0-9]{2}|[1-9][0-9]{3})\.(?<monthDay>[1-9][0-9]{2,3})\.(?<counter>[1-9][0-9]*)$",
         RegexOptions.CultureInvariant)]
     private static partial Regex CalendarTagPattern();
 
     public static string Next(DateOnly releaseDate, string tags)
     {
-        if (releaseDate.Year < 1000)
+        if (releaseDate.Year is < MinimumYear or > MaximumYear)
         {
-            throw new ArgumentException("release year must be a four-digit version component");
+            throw new ArgumentException(
+                "release year must be between 2000 and 2099 for a two-digit version component");
         }
 
         var releases = ParseTags(tags);
@@ -483,7 +487,7 @@ internal static partial class CalendarVersion
         }
 
         var monthDay = releaseDate.Month * 100 + releaseDate.Day;
-        return string.Create(CultureInfo.InvariantCulture, $"{releaseDate.Year}.{monthDay}.{counter}");
+        return string.Create(CultureInfo.InvariantCulture, $"{releaseDate.Year % 100:D2}.{monthDay}.{counter}");
     }
 
     public static string ReadRemoteTags(string remote = "origin")
@@ -542,8 +546,9 @@ internal static partial class CalendarVersion
             }
 
             var match = CalendarTagPattern().Match(tag);
+            var yearText = match.Groups["year"].Value;
             if (!match.Success ||
-                !int.TryParse(match.Groups["year"].Value, NumberStyles.None, CultureInfo.InvariantCulture,
+                !int.TryParse(yearText, NumberStyles.None, CultureInfo.InvariantCulture,
                     out var year) ||
                 !int.TryParse(match.Groups["monthDay"].Value, NumberStyles.None, CultureInfo.InvariantCulture,
                     out var monthDay) ||
@@ -553,9 +558,14 @@ internal static partial class CalendarVersion
                 continue;
             }
 
+            if (yearText.Length == 2)
+            {
+                year += 2000;
+            }
+
             var month = monthDay / 100;
             var day = monthDay % 100;
-            if (year < 1000 || month is < 1 or > 12 || day < 1 ||
+            if (month is < 1 or > 12 || day < 1 ||
                 !DateOnly.TryParseExact(
                     $"{year:D4}-{month:D2}-{day:D2}",
                     "yyyy-MM-dd",
@@ -581,75 +591,89 @@ internal static class CalendarVersionTests
 
     public static void Run()
     {
-        Expect("first release with no tags", "2026-11-01", "", "2026.1101.1");
-        Expect("legacy tags are ignored", "2026-11-01", "v0.1.0\nv0.4.0\nv0.5.0-beta.1", "2026.1101.1");
-        Expect("second release on the same day", "2026-11-01", "v0.4.0\nv2026.1101.1", "2026.1101.2");
+        Expect("first release with no tags", "2026-11-01", "", "26.1101.1");
+        Expect("legacy tags are ignored", "2026-11-01", "v0.1.0\nv0.4.0\nv0.5.0-beta.1", "26.1101.1");
+        Expect("four-digit tags continue same-day numbering",
+            "2026-11-01",
+            "v2026.1101.1",
+            "26.1101.2");
+        Expect("two-digit tags continue same-day numbering", "2026-11-01", "v26.1101.1", "26.1101.2");
+        Expect("legacy and two-digit counters continue together",
+            "2026-11-01",
+            "v2026.1101.1\nv26.1101.2",
+            "26.1101.3");
         Expect("counter uses numeric ordering",
             "2026-11-01",
-            "v2026.1101.1\nv2026.1101.2\nv2026.1101.10\nv2026.1101.9",
-            "2026.1101.11");
-        Expect("counter resets on a new day", "2026-11-02", "v2026.1101.3", "2026.1102.1");
-        Expect("year rollover with January date", "2027-01-05", "v2026.1231.2", "2027.105.1");
+            "v26.1101.1\nv26.1101.2\nv26.1101.10\nv26.1101.9",
+            "26.1101.11");
+        Expect("counter resets on a new day", "2026-11-02", "v26.1101.3", "26.1102.1");
+        Expect("year rollover with January date", "2027-01-05", "v26.1231.2", "27.105.1");
         Expect("January after December of the previous year",
             "2028-01-01",
-            "v2027.105.1\nv2027.1231.1",
-            "2028.101.1");
-        Expect("January counter", "2027-01-05", "v2027.105.4", "2027.105.5");
+            "v27.105.1\nv27.1231.1",
+            "28.101.1");
+        Expect("January counter", "2027-01-05", "v27.105.4", "27.105.5");
         Expect("month-day uses numeric rather than lexical ordering",
             "2027-10-01",
-            "v2027.105.3\nv2027.1001.1",
-            "2027.1001.2");
+            "v27.105.3\nv27.1001.1",
+            "27.1001.2");
         ExpectFailure("month-day ordering prevents backdating",
             "2027-09-30",
-            "v2027.105.3\nv2027.1001.1",
+            "v27.105.3\nv27.1001.1",
             "earlier than the latest release");
-        Expect("leap day", "2028-02-29", "", "2028.229.1");
-        Expect("leap-day release tag is recognized", "2028-02-29", "v2028.229.1", "2028.229.2");
+        Expect("leap day", "2028-02-29", "", "28.229.1");
+        Expect("leap-day release tag is recognized", "2028-02-29", "v28.229.1", "28.229.2");
+        Expect("two-digit year zero padding", "2000-01-01", "", "00.101.1");
+        Expect("last supported year", "2099-12-31", "", "99.1231.1");
         Expect("git ls-remote output",
             "2026-11-01",
             "abc123\trefs/tags/v2026.1101.1\ndef456\trefs/tags/v2026.1101.1^{}\nfed789\trefs/tags/v0.4.0",
-            "2026.1101.2");
+            "26.1101.2");
         Expect("non-canonical and prerelease tags are ignored",
             "2026-11-01",
-            "v2026.1101.1-beta.1\nv2026.01101.5\nv2026.1101.01\nv2026.99.1\nv0001.101.1",
-            "2026.1101.1");
+            "v26.1101.1-beta.1\nv26.01101.5\nv26.1101.01\nv26.99.1\nv0001.101.1",
+            "26.1101.1");
         Expect("nested refs do not masquerade as release tags",
             "2026-11-01",
-            "abc123\trefs/tags/archive/refs/tags/v2026.1101.99",
-            "2026.1101.1");
-        Expect("bare refs are recognized", "2026-11-01", "refs/tags/v2026.1101.2", "2026.1101.3");
-        ExpectFailure("invalid tag dates are rejected", "2026-11-30", "v2026.1131.1", "invalid date in release tag");
-        ExpectFailure("non-leap-year tag dates are rejected", "2027-03-01", "v2027.229.1", "invalid date in release tag");
-        ExpectFailure("non-leap century tag dates are rejected", "2100-03-01", "v2100.229.1", "invalid date in release tag");
+            "abc123\trefs/tags/archive/refs/tags/v26.1101.99",
+            "26.1101.1");
+        Expect("bare refs are recognized", "2026-11-01", "refs/tags/v26.1101.2", "26.1101.3");
+        ExpectFailure("invalid tag dates are rejected", "2026-11-30", "v26.1131.1", "invalid date in release tag");
+        ExpectFailure("non-leap-year tag dates are rejected", "2027-03-01", "v27.229.1", "invalid date in release tag");
+        ExpectFailure("non-leap century tag dates are rejected", "2099-03-01", "v2100.229.1", "invalid date in release tag");
         ExpectFailure("backdated release is rejected", "2026-11-01", "v2026.1102.1", "earlier than the latest release");
         ExpectFailure("backdated release across years is rejected",
             "2026-12-31",
-            "v2027.105.1",
+            "v27.105.1",
             "earlier than the latest release");
         ExpectFailure("counter overflow is rejected",
             "2026-11-01",
-            "v2026.1101.65534",
+            "v26.1101.65534",
             "exceeds the .NET version component limit");
-        Expect("largest supported counter", "2026-11-01", "v2026.1101.65533", "2026.1101.65534");
+        Expect("largest supported counter", "2026-11-01", "v26.1101.65533", "26.1101.65534");
         ExpectFailure("oversized counter cannot wrap around",
             "2026-11-01",
-            "v2026.1101.65533\nv2026.1101.18446744073709551615",
+            "v26.1101.65533\nv26.1101.18446744073709551615",
             "exceeds the .NET version component limit");
         ExpectFailure("arbitrarily large counter is rejected",
             "2026-11-01",
-            "v2026.1101.184467440737095516160000000000000000000",
+            "v26.1101.184467440737095516160000000000000000000",
             "exceeds the .NET version component limit");
         ExpectFailure("invalid date is rejected", "2027-02-29", "", "invalid date");
         ExpectFailure("malformed date is rejected", "2026-1-1", "", "invalid date");
         ExpectFailure("zero month is rejected explicitly", "2026-00-01", "", "invalid date");
         ExpectFailure("zero day is rejected explicitly", "2026-11-00", "", "invalid date");
-        ExpectFailure("year must remain a four-digit component", "0001-01-01", "", "four-digit version component");
+        ExpectFailure("year before two-digit range is rejected", "1999-12-31", "", "between 2000 and 2099");
+        ExpectFailure("year after two-digit range is rejected", "2100-01-01", "", "between 2000 and 2099");
         ExpectOptionFailure("empty date fails explicitly", ["--date", ""], "--date requires a value");
         ExpectOptionFailure("empty tags file fails explicitly", ["--tags-file", ""], "--tags-file requires a value");
         ExpectOptionFailure("invalid CLI date is rejected", ["--date", "2027-02-29"], "invalid date");
-        ExpectOptionFailure("CLI year must be a four-digit component",
-            ["--date", "0001-01-01"],
-            "four-digit version component");
+        ExpectOptionFailure("CLI rejects years before two-digit range",
+            ["--date", "1999-12-31"],
+            "between 2000 and 2099");
+        ExpectOptionFailure("CLI rejects years after two-digit range",
+            ["--date", "2100-01-01"],
+            "between 2000 and 2099");
         var missingTags = Path.Combine(Path.GetTempPath(), $"microstack-missing-tags-{Guid.NewGuid():N}");
         ExpectCliFailure("missing tag file fails cleanly", ["--tags-file", missingTags]);
         ExpectCliFailure("directory tag file fails cleanly", ["--tags-file", Path.GetTempPath()]);
@@ -706,26 +730,26 @@ internal static class CalendarVersionTests
             ExpectHealthVersion(
                 "matching health version passes",
                 "/_microstack/health",
-                """{"edition":"light","version":"2026.1101.7"}""",
-                "2026.1101.7",
+                """{"edition":"light","version":"26.1101.7"}""",
+                "26.1101.7",
                 shouldPass: true);
             ExpectHealthVersion(
                 "nested or regex-like version cannot mask a mismatch",
                 "/_microstack/health",
-                """{"services":{"version":"2026.1101.7"},"version":"2026X1101X7"}""",
-                "2026.1101.7",
+                """{"services":{"version":"26.1101.7"},"version":"26X1101X7"}""",
+                "26.1101.7",
                 shouldPass: false);
             ExpectHealthVersion(
                 "health alias version mismatch fails",
                 "/_localstack/health",
-                """{"version":"2026.1101.8"}""",
-                "2026.1101.7",
+                """{"version":"26.1101.8"}""",
+                "26.1101.7",
                 shouldPass: false);
             ExpectHealthVersion(
                 "missing health version fails",
                 "/health",
                 """{"edition":"light"}""",
-                "2026.1101.7",
+                "26.1101.7",
                 shouldPass: false);
             ExpectOptionFailure("smoke command requires an image", [], "usage:");
             ExpectOptionFailure("invalid smoke port is rejected", ["image", "--port", "0"], "--port requires");
@@ -754,7 +778,7 @@ internal static class CalendarVersionTests
 
         private static async Task ExpectSmokeRequestsAsync()
         {
-            var options = new ContainerSmokeOptions("image", "2026.1101.7", 4566);
+            var options = new ContainerSmokeOptions("image", "26.1101.7", 4566);
             var handler = new SmokeResponseHandler();
             await ContainerSmoke.RunAsync(options, CancellationToken.None, handler);
             string[] expectedPaths =
@@ -956,7 +980,7 @@ internal static class CalendarVersionTests
                 var content = path switch
                 {
                     "/_microstack/health" or "/_localstack/health" or "/health" =>
-                        $$"""{"version":"{{(path == mismatchedPath ? "2026.1101.8" : "2026.1101.7")}}"}""",
+                        $$"""{"version":"{{(path == mismatchedPath ? "26.1101.8" : "26.1101.7")}}"}""",
                     "/ui/" => """<html><script src="_framework/blazor.web.js"></script></html>""",
                     "/_microstack/admin/v1/services" => "{}",
                     "/ui/services/s3" => "<html></html>",

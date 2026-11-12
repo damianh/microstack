@@ -3,7 +3,7 @@ using System.Reflection;
 namespace MicroStack.Internal;
 
 /// <summary>
-/// The MicroStack release version (YYYY.MMDD.N for releases), as stamped into the server assembly at build time.
+/// The MicroStack release version (YY.MMDD.N for releases), as stamped into the server assembly at build time.
 /// </summary>
 internal static class MicroStackVersion
 {

@@ -9,7 +9,7 @@ on:
         type: boolean
         default: false
 
-# Releases allocate the next YYYY.MMDD.N version from existing tags, so they must run one at a time.
+# Releases allocate the next YY.MMDD.N version from existing tags, so they must run one at a time.
 # Never cancel a release that is already publishing.
 concurrency:
   group: release

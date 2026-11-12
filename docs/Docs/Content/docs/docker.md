@@ -73,7 +73,7 @@ Returns JSON with all available services:
     ...
   },
   "edition": "light",
-  "version": "2026.1101.1"
+  "version": "26.1101.1"
 }
 ```
 
