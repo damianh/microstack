@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using MicroStack.Internal;
@@ -28,9 +30,16 @@ namespace MicroStack.Services.EventBridge;
 /// </summary>
 internal sealed partial class EventBridgeServiceHandler : IServiceHandler
 {
+    private static readonly IReadOnlyDictionary<string, string[]> EmptyQuery = new Dictionary<string, string[]>();
+    private readonly ServiceRegistry _registry;
     private readonly Lock _lock = new();
 
     private static string Region => MicroStackOptions.Instance.Region;
+
+    internal EventBridgeServiceHandler(ServiceRegistry registry)
+    {
+        _registry = registry;
+    }
 
     // In-memory state
     private Dictionary<string, Dictionary<string, object?>> _eventBuses = CreateDefaultBuses();
@@ -931,6 +940,7 @@ internal sealed partial class EventBridgeServiceHandler : IServiceHandler
         lock (_lock)
         {
             var results = new List<Dictionary<string, object?>>();
+            var failedEntryCount = 0;
             if (data.TryGetProperty("Entries", out var entriesEl) && entriesEl.ValueKind == JsonValueKind.Array)
             {
                 foreach (var entryEl in entriesEl.EnumerateArray())
@@ -946,7 +956,7 @@ internal sealed partial class EventBridgeServiceHandler : IServiceHandler
                         ["DetailType"] = GetString(entryEl, "DetailType") ?? "",
                         ["Detail"] = GetString(entryEl, "Detail") ?? "{}",
                         ["EventBusName"] = busName,
-                        ["Time"] = TimeHelpers.NowEpoch(),
+                        ["Time"] = GetEventTime(entryEl),
                         ["Account"] = AccountContext.GetAccountId(),
                         ["Region"] = Region,
                     };
@@ -967,16 +977,26 @@ internal sealed partial class EventBridgeServiceHandler : IServiceHandler
                         eventRecord["Resources"] = new List<object?>();
                     }
 
-                    results.Add(new Dictionary<string, object?> { ["EventId"] = eventId });
-
-                    // Dispatch event (in-process, no SQS/Lambda integration in C# port)
-                    DispatchEvent(eventRecord);
+                    var deliveryErrors = DispatchEvent(eventRecord);
+                    if (deliveryErrors.Count == 0)
+                    {
+                        results.Add(new Dictionary<string, object?> { ["EventId"] = eventId });
+                    }
+                    else
+                    {
+                        failedEntryCount++;
+                        results.Add(new Dictionary<string, object?>
+                        {
+                            ["ErrorCode"] = deliveryErrors[0].ErrorCode,
+                            ["ErrorMessage"] = string.Join("; ", deliveryErrors.Select(error => error.Message)),
+                        });
+                    }
                 }
             }
 
             return AwsResponseHelpers.JsonResponse(new Dictionary<string, object?>
             {
-                ["FailedEntryCount"] = 0,
+                ["FailedEntryCount"] = failedEntryCount,
                 ["Entries"] = results,
             });
         }
@@ -996,9 +1016,42 @@ internal sealed partial class EventBridgeServiceHandler : IServiceHandler
         return name;
     }
 
-    private void DispatchEvent(Dictionary<string, object?> eventRecord)
+    private static string GetEventTime(JsonElement entry)
     {
+        if (!entry.TryGetProperty("Time", out var time))
+        {
+            return TimeHelpers.NowIso();
+        }
+
+        DateTimeOffset timestamp;
+        if (time.ValueKind == JsonValueKind.Number && time.TryGetDouble(out var epochSeconds))
+        {
+            timestamp = DateTimeOffset.FromUnixTimeMilliseconds((long)(epochSeconds * 1000));
+        }
+        else if (time.ValueKind == JsonValueKind.String)
+        {
+            if (!DateTimeOffset.TryParse(
+                    time.GetString(),
+                    CultureInfo.InvariantCulture,
+                    DateTimeStyles.AssumeUniversal,
+                    out timestamp))
+            {
+                return TimeHelpers.NowIso();
+            }
+        }
+        else
+        {
+            return TimeHelpers.NowIso();
+        }
+
+        return timestamp.UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.fff'Z'", CultureInfo.InvariantCulture);
+    }
+
+    private List<(string ErrorCode, string Message)> DispatchEvent(Dictionary<string, object?> eventRecord)
+    {
+        var errors = new List<(string ErrorCode, string Message)>();
         var busName = eventRecord.GetValueOrDefault("EventBusName")?.ToString() ?? "default";
+        var eventPayload = BuildEventEnvelope(eventRecord);
 
         foreach (var (key, rule) in _rules.Items)
         {
@@ -1022,9 +1075,197 @@ internal sealed partial class EventBridgeServiceHandler : IServiceHandler
 
             if (MatchesPattern(pattern, eventRecord))
             {
-                // For now, dispatch is a no-op in the C# port.
-                // The Python version dispatches to Lambda/SQS/SNS.
+                if (!_targets.TryGetValue(key, out var targets))
+                {
+                    continue;
+                }
+
+                foreach (var target in targets)
+                {
+                    var error = DeliverToTarget(target, eventPayload);
+                    if (error is not null)
+                    {
+                        errors.Add(error.Value);
+                    }
+                }
             }
+        }
+
+        return errors;
+    }
+
+    private static byte[] BuildEventEnvelope(Dictionary<string, object?> eventRecord)
+    {
+        object detail;
+        var detailJson = eventRecord.GetValueOrDefault("Detail")?.ToString() ?? "{}";
+        try
+        {
+            using var detailDocument = JsonDocument.Parse(detailJson);
+            detail = detailDocument.RootElement.Clone();
+        }
+        catch (JsonException)
+        {
+            detail = detailJson;
+        }
+
+        var envelope = new Dictionary<string, object?>(StringComparer.Ordinal)
+        {
+            ["version"] = "0",
+            ["id"] = eventRecord.GetValueOrDefault("EventId"),
+            ["detail-type"] = eventRecord.GetValueOrDefault("DetailType"),
+            ["source"] = eventRecord.GetValueOrDefault("Source"),
+            ["account"] = eventRecord.GetValueOrDefault("Account"),
+            ["time"] = eventRecord.GetValueOrDefault("Time"),
+            ["region"] = eventRecord.GetValueOrDefault("Region"),
+            ["resources"] = eventRecord.GetValueOrDefault("Resources"),
+            ["detail"] = detail,
+        };
+        return DictionaryObjectJsonConverter.SerializeObject(envelope);
+    }
+
+    private (string ErrorCode, string Message)? DeliverToTarget(
+        Dictionary<string, object?> target,
+        byte[] eventPayload)
+    {
+        var targetArn = target.GetValueOrDefault("Arn")?.ToString() ?? "";
+        var arnParts = targetArn.Split(':', 6);
+        if (arnParts.Length != 6 || arnParts[0] != "arn")
+        {
+            return ("UnsupportedTarget", $"Target ARN is invalid: {targetArn}");
+        }
+
+        var serviceName = arnParts[2];
+        var handler = _registry.Resolve(serviceName);
+        if (handler is null)
+        {
+            return ("ServiceUnavailable", $"Target service '{serviceName}' is not available.");
+        }
+
+        ServiceRequest request;
+        switch (serviceName)
+        {
+            case "sqs":
+            {
+                var queueName = arnParts[5];
+                if (string.IsNullOrEmpty(queueName))
+                {
+                    return ("UnsupportedTarget", $"SQS target ARN has no queue name: {targetArn}");
+                }
+
+                var body = new Dictionary<string, object?>(StringComparer.Ordinal)
+                {
+                    ["QueueUrl"] = queueName,
+                    ["MessageBody"] = Encoding.UTF8.GetString(eventPayload),
+                };
+                if (target.GetValueOrDefault("SqsParameters") is Dictionary<string, object?> sqsParameters
+                    && sqsParameters.TryGetValue("MessageGroupId", out var messageGroupId))
+                {
+                    body["MessageGroupId"] = messageGroupId;
+                }
+
+                request = new ServiceRequest(
+                    "POST",
+                    "/",
+                    TargetHeaders(serviceName, "AmazonSQS.SendMessage", "application/x-amz-json-1.0"),
+                    DictionaryObjectJsonConverter.SerializeObject(body),
+                    EmptyQuery);
+                break;
+            }
+            case "sns":
+            {
+                var form = $"Action=Publish&TopicArn={Uri.EscapeDataString(targetArn)}" +
+                    $"&Message={Uri.EscapeDataString(Encoding.UTF8.GetString(eventPayload))}";
+                request = new ServiceRequest(
+                    "POST",
+                    "/",
+                    TargetHeaders(serviceName, "", "application/x-www-form-urlencoded"),
+                    Encoding.UTF8.GetBytes(form),
+                    EmptyQuery);
+                break;
+            }
+            case "lambda":
+            {
+                const string functionPrefix = "function:";
+                if (!arnParts[5].StartsWith(functionPrefix, StringComparison.Ordinal))
+                {
+                    return ("UnsupportedTarget", $"Lambda target ARN is invalid: {targetArn}");
+                }
+
+                var functionName = arnParts[5][functionPrefix.Length..];
+                request = new ServiceRequest(
+                    "POST",
+                    $"/2015-03-31/functions/{functionName}/invocations",
+                    TargetHeaders(serviceName, "", "application/json"),
+                    eventPayload,
+                    EmptyQuery);
+                break;
+            }
+            default:
+                return ("UnsupportedTarget", $"Target service '{serviceName}' is not supported.");
+        }
+
+        var response = handler.HandleAsync(request).GetAwaiter().GetResult();
+        if (response.StatusCode >= 400)
+        {
+            return GetTargetDeliveryError(response);
+        }
+
+        if (serviceName == "lambda"
+            && response.Headers.TryGetValue("X-Amz-Function-Error", out var functionError))
+        {
+            return ("LambdaFunctionError", $"Lambda invocation failed ({functionError}): {Encoding.UTF8.GetString(response.Body)}");
+        }
+
+        return null;
+    }
+
+    private static Dictionary<string, string> TargetHeaders(
+        string serviceName,
+        string target,
+        string contentType,
+        (string Name, string Value)? additionalHeader = null)
+    {
+        var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["content-type"] = contentType,
+            ["host"] = $"{serviceName}.{Region}.amazonaws.com",
+        };
+        if (!string.IsNullOrEmpty(target))
+        {
+            headers["x-amz-target"] = target;
+        }
+        if (additionalHeader is { } header)
+        {
+            headers[header.Name] = header.Value;
+        }
+
+        return headers;
+    }
+
+    private static (string ErrorCode, string Message) GetTargetDeliveryError(ServiceResponse response)
+    {
+        var body = Encoding.UTF8.GetString(response.Body);
+        try
+        {
+            using var document = JsonDocument.Parse(response.Body);
+            var root = document.RootElement;
+            var errorCode = root.TryGetProperty("__type", out var type)
+                ? type.GetString() ?? "TargetDeliveryFailure"
+                : "TargetDeliveryFailure";
+            var separator = errorCode.LastIndexOf('#');
+            if (separator >= 0)
+            {
+                errorCode = errorCode[(separator + 1)..];
+            }
+
+            var message = root.TryGetProperty("message", out var messageElement)
+                ? messageElement.GetString() ?? body
+                : body;
+            return (errorCode, $"Target handler returned HTTP {response.StatusCode}: {message}");
+        }
+        catch (JsonException)
+        {
+            return ("TargetDeliveryFailure", $"Target handler returned HTTP {response.StatusCode}: {body}");
         }
     }
 
