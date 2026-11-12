@@ -1,21 +1,25 @@
 ---
 title: RDS Data API
-description: RDS Data API emulation — validates request parameters and routing for ExecuteStatement, BatchExecuteStatement, BeginTransaction, CommitTransaction, and RollbackTransaction.
+description: RDS Data API emulation backed by per-cluster in-memory SQLite for ExecuteStatement, BatchExecuteStatement, and transactions.
 order: 38
 section: Services
 ---
 
 # RDS Data API
 
-MicroStack emulates the RDS Data API (Aurora Serverless Data API) for parameter validation and request routing. The handler accepts the five standard REST/JSON endpoints and validates required fields, returning appropriate error responses. Because there is no live database engine behind the stub, statements directed at a cluster ARN that has not been provisioned return a "cluster not found" error.
+MicroStack emulates the RDS Data API (Aurora Serverless Data API) with an in-memory SQLite database for each emulated RDS DB cluster. Create a cluster with the RDS API first, then use its `DBClusterArn` as `resourceArn`. Each cluster has an isolated database, and its contents are cleared when the cluster is deleted, MicroStack is reset, or the MicroStack process restarts. Stopping and starting an RDS cluster does not clear its data.
 
 ## Supported Operations
 
-ExecuteStatement, BatchExecuteStatement, BeginTransaction, CommitTransaction, RollbackTransaction
+`ExecuteStatement`, `BatchExecuteStatement`, `BeginTransaction`, `CommitTransaction`, and `RollbackTransaction` are supported. Use one SQLite SQL statement per `ExecuteStatement` call. Query results are returned in Data API `records`; write statements return `numberOfRecordsUpdated`. Batch execution accepts one non-query SQL statement and a non-empty `parameterSets` array, runs the sets atomically in its own transaction, and returns one `updateResults` entry per set. Batch requests with `transactionId` are not supported.
+
+The local SQL dialect is SQLite regardless of the emulated cluster's AWS `Engine` value. This is not a PostgreSQL or MySQL server: engine-specific syntax and behavior are not emulated. The `database` request field is ignored because each cluster has one SQLite database. `secretArn` is required but is not resolved or used for database authentication.
+
+Named parameters use SQLite `:name` placeholders with alphanumeric or underscore names. `parameters` values support `stringValue`, `longValue`, `doubleValue`, `booleanValue`, `isNull: true`, and base64-encoded `blobValue`. Result values map to Data API string, long, double, null, and blob fields; SQLite booleans are stored as integers and returned as `longValue` 0 or 1. SQLite's own type conversion and SQL semantics apply.
 
 ## Usage
 
-The RDS Data API uses a REST/JSON protocol (not the standard AWS Query protocol), so all requests are plain JSON `POST` calls to path-based endpoints. In production you would use `AmazonRDSDataServiceClient`; MicroStack validates the same required fields.
+The RDS Data API uses a REST/JSON protocol (not the standard AWS Query protocol), so all requests are plain JSON `POST` calls to path-based endpoints. Use `AmazonRDSDataServiceClient` as you would with AWS; MicroStack executes statements locally using the SQLite compatibility described above.
 
 ```csharp
 using Amazon.Runtime;
@@ -30,7 +34,7 @@ var config = new AmazonRDSDataServiceConfig
 using var rdsData = new AmazonRDSDataServiceClient(
     new BasicAWSCredentials("test", "test"), config);
 
-// ExecuteStatement — requires resourceArn, secretArn, and sql
+// ExecuteStatement — the DB cluster must first be provisioned through the RDS API.
 var result = await rdsData.ExecuteStatementAsync(new ExecuteStatementRequest
 {
     ResourceArn = "arn:aws:rds:us-east-1:000000000000:cluster:my-cluster",
@@ -85,6 +89,6 @@ await rdsData.CommitTransactionAsync(new CommitTransactionRequest
 });
 ```
 
-:::aside{type="note" title="Validation-only stub"}
-MicroStack's RDS Data handler validates all required fields (`resourceArn`, `secretArn`, `sql`) and returns `400 BadRequest` for missing parameters. Requests targeting a cluster ARN that does not exist return `400 BadRequest` with a "cluster not found" message — real SQL execution is not performed. `CommitTransaction` and `RollbackTransaction` require a valid `transactionId` and return `404 Not Found` if the transaction does not exist.
+:::aside{type="note" title="SQLite compatibility and limits"}
+MicroStack executes SQL locally with SQLite; it does not connect to Aurora or any external database. Statements use SQLite syntax and type behavior, with one database per cluster held in memory. SQL errors and malformed or unsupported parameter values return `400 BadRequest`; a cluster ARN that has not been provisioned returns `400 BadRequest`. `CommitTransaction` and `RollbackTransaction` require a valid transaction ID and return `404 Not Found` if the transaction does not exist. Batch statements must not return rows.
 :::

@@ -64,6 +64,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="MicroStack.Tests" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="11.0.0" />
     <ProjectReference Include="..\MicroStack.Admin.Contracts\MicroStack.Admin.Contracts.csproj" />
     <!-- Local builds need the static asset manifest; native publishes build the browser client separately. -->
     <ProjectReference Include="..\MicroStack.UI.Client\MicroStack.UI.Client.csproj"
