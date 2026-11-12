@@ -103,7 +103,8 @@ registry.Register(new KmsServiceHandler());
 var lambdaHandler = new LambdaServiceHandler(sqsHandler, ddbHandler,
     app.Services.GetRequiredService<AdminChangeHub>());
 registry.Register(lambdaHandler);
-registry.Register(new SnsServiceHandler(sqsHandler, lambdaHandler));
+registry.Register(new SnsServiceHandler(sqsHandler, lambdaHandler,
+    app.Services.GetRequiredService<ILogger<SnsServiceHandler>>()));
 registry.Register(new ApiGatewayV2ServiceHandler(lambdaHandler));
 var sfnHandler = new StepFunctionsServiceHandler(lambdaHandler, registry);
 registry.Register(sfnHandler);

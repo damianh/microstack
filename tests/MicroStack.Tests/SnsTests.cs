@@ -105,14 +105,32 @@ public sealed class SnsTests(MicroStackFixture fixture) : IClassFixture<MicroSta
         return stream;
     }
 
-    private async Task<string> CreateEventRecordingFunction(string name, string eventPath)
+    private async Task<string> CreateEventRecordingFunction(
+        string name,
+        string eventPath,
+        IReadOnlyDictionary<string, string>? additionalEnvironment = null)
     {
         const string code =
-            "import json, os\n"
+            "import json, os, urllib.parse, urllib.request\n"
             + "def handler(event, context):\n"
+            + "    if 'SNS_REENTRY_TOPIC' in os.environ:\n"
+            + "        data = urllib.parse.urlencode({'Action': 'CreateTopic', 'Name': os.environ['SNS_REENTRY_TOPIC']}).encode()\n"
+            + "        request = urllib.request.Request(os.environ['SNS_ENDPOINT'], data=data)\n"
+            + "        with urllib.request.urlopen(request, timeout=5) as response:\n"
+            + "            response.read()\n"
             + "    with open(os.environ['SNS_EVENT_PATH'], 'a', encoding='utf-8') as output:\n"
             + "        output.write(json.dumps(event) + '\\n')\n";
         using var zip = MakeZip("index.py", code);
+        var variables = new Dictionary<string, string>
+        {
+            ["SNS_EVENT_PATH"] = eventPath,
+        };
+        if (additionalEnvironment is not null)
+        {
+            foreach (var (key, value) in additionalEnvironment)
+                variables[key] = value;
+        }
+
         var function = await _lambda.CreateFunctionAsync(new Amazon.Lambda.Model.CreateFunctionRequest
         {
             FunctionName = name,
@@ -122,7 +140,7 @@ public sealed class SnsTests(MicroStackFixture fixture) : IClassFixture<MicroSta
             Code = new Amazon.Lambda.Model.FunctionCode { ZipFile = zip },
             Environment = new Amazon.Lambda.Model.Environment
             {
-                Variables = new Dictionary<string, string> { ["SNS_EVENT_PATH"] = eventPath },
+                Variables = variables,
             },
         });
         return function.FunctionArn;
@@ -293,6 +311,11 @@ public sealed class SnsTests(MicroStackFixture fixture) : IClassFixture<MicroSta
                 MessageAttributes = new Dictionary<string, Amazon.SimpleNotificationService.Model.MessageAttributeValue>
                 {
                     ["color"] = new() { DataType = "String", StringValue = "blue" },
+                    ["binary"] = new()
+                    {
+                        DataType = "Binary",
+                        BinaryValue = new MemoryStream([0x00, 0x01, 0x02, 0x03]),
+                    },
                 },
             });
 
@@ -316,6 +339,41 @@ public sealed class SnsTests(MicroStackFixture fixture) : IClassFixture<MicroSta
                 .GetString().ShouldBe("String");
             snsEvent.GetProperty("MessageAttributes").GetProperty("color").GetProperty("Value")
                 .GetString().ShouldBe("blue");
+            snsEvent.GetProperty("MessageAttributes").GetProperty("binary").GetProperty("Type")
+                .GetString().ShouldBe("Binary");
+            snsEvent.GetProperty("MessageAttributes").GetProperty("binary").GetProperty("Value")
+                .GetString().ShouldBe("AAECAw==");
+        }
+        finally
+        {
+            if (File.Exists(eventPath))
+                File.Delete(eventPath);
+        }
+    }
+
+    [Fact]
+    public async Task SnsLambdaFanout_InvokesOutsideSnsLock()
+    {
+        var topicArn = (await _sns.CreateTopicAsync("intg-sns-lambda-reentrant")).TopicArn;
+        var nestedTopicName = "intg-sns-lambda-reentrant-created";
+        var eventPath = Path.Combine(Path.GetTempPath(), $"microstack-sns-{Guid.NewGuid():N}.jsonl");
+        try
+        {
+            var functionArn = await CreateEventRecordingFunction(
+                "sns-reentrant-recorder",
+                eventPath,
+                new Dictionary<string, string>
+                {
+                    ["SNS_ENDPOINT"] = fixture.ServerAddress.ToString(),
+                    ["SNS_REENTRY_TOPIC"] = nestedTopicName,
+                });
+            await _sns.SubscribeAsync(topicArn, "lambda", functionArn);
+
+            await _sns.PublishAsync(topicArn, "create a topic from the Lambda invocation");
+
+            var topics = (await _sns.ListTopicsAsync()).Topics ?? [];
+            topics.ShouldContain(t => t.TopicArn.EndsWith($":{nestedTopicName}", StringComparison.Ordinal));
+            File.ReadAllLines(eventPath).ShouldHaveSingleItem();
         }
         finally
         {
